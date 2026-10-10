@@ -1,0 +1,47 @@
+# Node dependencies
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Databases & local runtime data
+*.db
+*.sqlite
+*.sqlite3
+freshguard.db
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Build and output
+dist/
+build/
+*.dist
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Uploads & local runtime caches
+uploads/*
+!uploads/.gitkeep
+static/uploads/*
+!static/uploads/.gitkeep
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

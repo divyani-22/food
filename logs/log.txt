@@ -1,0 +1,38 @@
+=== FreshGuard EfficientNet-B0 Multitask Training ===
+
+Dataset
+- Total raw files scanned: 71322
+- Valid images used: 69105
+
+Class Distribution (Fresh/Rotten):
+apple         3431/4437
+banana        3473/4038
+bell_pepper   1045/1492
+carrot        9899/2419
+cucumber      1104/1014
+mango          605/593
+orange       10831/3292
+potato        1151/1387
+strawberry     603/596
+tomato       13681/4014
+
+Fruit2Idx:
+{'apple': 0, 'banana': 1, ... 'tomato': 9}
+Fresh2Idx:
+{'fresh': 0, 'rotten': 1}
+
+Best Epoch Summary
+- Epoch 01: sum=1.9542
+- Epoch 02: sum=1.9686
+- Epoch 03: sum=1.9708
+- Epoch 04: sum=1.9691
+- Epoch 05: sum=1.9652
+- Epoch 06: sum=1.9746  <-- BEST
+- Epoch 07: sum=1.9696
+
+Best Model Path:
+efficientnet_b0_freshguard_multitask.pt
+
+[Figure] Train/Val curves saved at:
+  - logs/train_loss.jpeg
+  - logs/val_f1_fruit_fresh.jpeg

@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreshGuard - 식재료 신선도 판별 AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Pretendard', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              200: '#a7f3d0',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+              800: '#065f46',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; }
+    .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); border: 1px solid rgba(226, 232, 240, 0.8); }
+    .badge-fresh { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+    .badge-normal { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .badge-rotten { background: #ffe4e6; color: #9f1239; border: 1px solid #fecdd3; }
+    .pulse-glow { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
+  </style>
+</head>
+<body class="min-h-screen text-slate-800 flex flex-col selection:bg-emerald-200">
+
+  <!-- Header -->
+  <header class="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-md shadow-emerald-200">
+          <i class="fa-solid fa-leaf text-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+            FreshGuard
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">AI Service</span>
+          </h1>
+          <p class="text-xs text-slate-500">식재료 신선도 판별 & 스마트 보관 매니저</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex items-center gap-1 sm:gap-2 text-sm font-medium">
+        <button onclick="switchTab('scanner')" id="tab-scanner" class="px-3 sm:px-4 py-2 rounded-lg transition-all flex items-center gap-2 bg-emerald-50 text-emerald-700 font-semibold shadow-sm">
+          <i class="fa-solid fa-camera"></i>
+          <span>AI 판별기</span>
+        </button>
+        <button onclick="switchTab('inventory')" id="tab-inventory" class="px-3 sm:px-4 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all flex items-center gap-2">
+          <i class="fa-solid fa-box-archive"></i>
+          <span>내 식재료함</span>
+          <span id="nav-inv-count" class="text-xs px-1.5 py-0.2 bg-slate-200 rounded-full text-slate-700">0</span>
+        </button>
+        <button onclick="switchTab('history')" id="tab-history" class="px-3 sm:px-4 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all flex items-center gap-2">
+          <i class="fa-solid fa-clock-rotate-left"></i>
+          <span>검사 기록</span>
+        </button>
+        <button onclick="switchTab('about')" id="tab-about" class="px-3 sm:px-4 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all flex items-center gap-2">
+          <i class="fa-solid fa-circle-info"></i>
+          <span class="hidden sm:inline">모델 정보</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6">
+
+    <!-- ================= TAB 1: SCANNER ================= -->
+    <section id="view-scanner" class="space-y-6">
+      
+      <!-- Hero Banner -->
+      <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-900 text-white p-6 sm:p-8 shadow-lg shadow-emerald-900/10">
+        <div class="relative z-10 max-w-2xl">
+          <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/30 text-emerald-200 backdrop-blur mb-3 border border-emerald-400/20">
+            <i class="fa-solid fa-brain"></i> EfficientNet-B0 Multitask Model
+          </span>
+          <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">
+            과일·식재료 사진 한 장으로<br/>신선도와 남은 소비기한을 즉시 진단하세요
+          </h2>
+          <p class="text-emerald-100/90 text-sm sm:text-base leading-relaxed">
+            10종 과일/채소 인식 및 3단계 신선도(신선·보통·상함) 판별, 최적의 보관 가이드 및 맞춤형 요리 레시피를 제안합니다.
+          </p>
+        </div>
+        <div class="absolute -right-8 -bottom-10 opacity-20 text-white text-9xl pointer-events-none">
+          <i class="fa-solid fa-apple-whole"></i>
+        </div>
+      </div>
+
+      <!-- Input & Diagnostic Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left: Upload & Camera (5 cols) -->
+        <div class="lg:col-span-5 space-y-4">
+          <div class="glass-card rounded-2xl p-5 shadow-sm space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-camera-retro text-emerald-600"></i> 이미지 입력
+              </h3>
+              <div class="flex items-center gap-1 text-xs">
+                <button id="btn-mode-file" onclick="setMode('file')" class="px-2.5 py-1 rounded-md font-semibold bg-emerald-600 text-white shadow-sm">파일 업로드</button>
+                <button id="btn-mode-cam" onclick="setMode('cam')" class="px-2.5 py-1 rounded-md font-medium text-slate-600 hover:bg-slate-100">웹캠 촬영</button>
+              </div>
+            </div>
+
+            <!-- File Upload Area -->
+            <div id="area-file" class="space-y-3">
+              <label for="image-input" class="group relative flex flex-col items-center justify-center border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-xl p-8 cursor-pointer bg-slate-50 hover:bg-emerald-50/30 transition-all text-center">
+                <div class="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-2xl mb-3 group-hover:scale-110 transition-transform shadow-inner">
+                  <i class="fa-solid fa-cloud-arrow-up"></i>
+                </div>
+                <span class="text-sm font-semibold text-slate-700">이미지 클릭 또는 드래그 & 드롭</span>
+                <span class="text-xs text-slate-400 mt-1">JPG, PNG, WEBP 지원 (최대 16MB)</span>
+                <input id="image-input" type="file" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
+              </label>
+            </div>
+
+            <!-- Webcam Area -->
+            <div id="area-cam" class="hidden space-y-3">
+              <div class="relative bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center">
+                <video id="webcam-video" autoplay playsinline class="w-full h-full object-cover"></video>
+                <div id="cam-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-sm gap-2">
+                  <i class="fa-solid fa-video-slash text-2xl"></i>
+                  <span>카메라가 꺼져 있습니다</span>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button id="btn-start-cam" onclick="startCamera()" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold flex items-center justify-center gap-2 transition">
+                  <i class="fa-solid fa-video"></i> 카메라 시작
+                </button>
+                <button id="btn-snap-cam" onclick="captureCamera()" disabled class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center gap-2 transition">
+                  <i class="fa-solid fa-camera"></i> 사진 촬영 진단
+                </button>
+              </div>
+            </div>
+
+            <!-- Quick Samples -->
+            <div class="pt-2">
+              <div class="flex items-center justify-between text-xs text-slate-500 font-medium mb-2">
+                <span><i class="fa-solid fa-bolt text-amber-500 mr-1"></i> 원클릭 샘플로 바로 테스트:</span>
+              </div>
+              <div id="sample-buttons" class="grid grid-cols-5 gap-1.5">
+                <button onclick="runSample('apple.jpg')" class="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-center transition group">
+                  <img src="/static/samples/apple.jpg" class="w-full h-10 object-cover rounded mb-1" alt="Apple">
+                  <span class="text-[10px] font-semibold text-slate-700 block truncate">사과</span>
+                </button>
+                <button onclick="runSample('banana.jpg')" class="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-center transition group">
+                  <img src="/static/samples/banana.jpg" class="w-full h-10 object-cover rounded mb-1" alt="Banana">
+                  <span class="text-[10px] font-semibold text-slate-700 block truncate">바나나</span>
+                </button>
+                <button onclick="runSample('orange.jpg')" class="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-center transition group">
+                  <img src="/static/samples/orange.jpg" class="w-full h-10 object-cover rounded mb-1" alt="Orange">
+                  <span class="text-[10px] font-semibold text-slate-700 block truncate">오렌지</span>
+                </button>
+                <button onclick="runSample('strawberry.jpg')" class="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-center transition group">
+                  <img src="/static/samples/strawberry.jpg" class="w-full h-10 object-cover rounded mb-1" alt="Strawberry">
+                  <span class="text-[10px] font-semibold text-slate-700 block truncate">딸기</span>
+                </button>
+                <button onclick="runSample('tomato.jpg')" class="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-center transition group">
+                  <img src="/static/samples/tomato.jpg" class="w-full h-10 object-cover rounded mb-1" alt="Tomato">
+                  <span class="text-[10px] font-semibold text-slate-700 block truncate">토마토</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Right: Diagnostic Output (7 cols) -->
+        <div class="lg:col-span-7">
+          
+          <!-- Empty State -->
+          <div id="result-empty" class="glass-card rounded-2xl p-10 h-full flex flex-col items-center justify-center text-center shadow-sm border border-dashed border-slate-200">
+            <div class="w-20 h-20 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-3xl mb-4">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-800 mb-1">AI 신선도 판별 대기 중</h3>
+            <p class="text-sm text-slate-500 max-w-sm mb-4">
+              식재료 사진을 업로드하거나 좌측의 샘플을 클릭하면 과일 품종과 신선도 점수가 이곳에 표시됩니다.
+            </p>
+            <div class="flex items-center gap-2 text-xs font-medium text-slate-400">
+              <span>🍎 10종 과일 지원</span>
+              <span>•</span>
+              <span>🌡️ 3단계 신선도</span>
+              <span>•</span>
+              <span>💡 보관 가이드</span>
+            </div>
+          </div>
+
+          <!-- Loading State -->
+          <div id="result-loading" class="hidden glass-card rounded-2xl p-12 h-full flex flex-col items-center justify-center text-center shadow-sm">
+            <div class="w-16 h-16 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin mb-4"></div>
+            <h3 class="text-lg font-bold text-slate-800 mb-1">EfficientNet AI 모델 분석 중...</h3>
+            <p class="text-xs text-slate-500">과일 형태학적 특성 및 신선도 지표를 추출하고 있습니다.</p>
+          </div>
+
+          <!-- Diagnostic Results Card -->
+          <div id="result-card" class="hidden glass-card rounded-2xl p-6 shadow-sm space-y-6">
+
+            <!-- Top Row: Image & Primary Verdict -->
+            <div class="flex flex-col sm:flex-row items-center sm:items-start gap-5 pb-5 border-b border-slate-100">
+              <div class="relative w-32 h-32 sm:w-36 sm:h-36 rounded-2xl overflow-hidden shadow-md flex-shrink-0 bg-slate-100">
+                <img id="res-image" src="" alt="Fruit Image" class="w-full h-full object-cover">
+                <span id="res-badge-floating" class="absolute top-2 left-2 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-sm"></span>
+              </div>
+
+              <div class="flex-1 text-center sm:text-left space-y-2">
+                <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                  <span id="res-emoji" class="text-3xl"></span>
+                  <h3 id="res-fruit-kr" class="text-2xl font-black text-slate-900"></h3>
+                  <span id="res-fruit-en" class="text-sm font-semibold text-slate-400"></span>
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
+                    인식 신뢰도 <strong id="res-confidence"></strong>%
+                  </span>
+                </div>
+
+                <p id="res-status-msg" class="text-xs sm:text-sm text-slate-600 leading-relaxed"></p>
+
+                <!-- Freshness Metric Badge Bar -->
+                <div class="pt-2 flex flex-wrap items-center justify-center sm:justify-start gap-3">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-semibold text-slate-500">신선도 점수:</span>
+                    <span id="res-fresh-score" class="text-lg font-black text-emerald-600"></span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-semibold text-slate-500">예상 소비기한:</span>
+                    <span id="res-shelf-life" class="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Freshness Probability Progress Bar -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-xs font-semibold">
+                <span class="text-slate-600 flex items-center gap-1">
+                  <i class="fa-solid fa-gauge-high text-emerald-600"></i> 신선도 지수 (p_fresh)
+                </span>
+                <span id="res-fresh-percent" class="text-slate-900 font-bold"></span>
+              </div>
+              <div class="w-full h-3 rounded-full bg-slate-100 overflow-hidden relative shadow-inner">
+                <div id="res-progress-bar" class="h-full rounded-full transition-all duration-700 bg-gradient-to-r from-emerald-500 to-teal-400" style="width: 0%"></div>
+              </div>
+              <div class="flex justify-between text-[10px] text-slate-400 font-medium px-0.5">
+                <span>0% (상함 / 부패)</span>
+                <span>30% (보통 구간 진입)</span>
+                <span>70% (신선 구간 진입)</span>
+                <span>100% (최고 신선도)</span>
+              </div>
+            </div>
+
+            <!-- Storage & Cooking Advice Box -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+                <span class="font-bold text-slate-800 flex items-center gap-1.5">
+                  <i class="fa-solid fa-snowflake text-sky-500"></i> 올바른 보관 가이드
+                </span>
+                <p id="res-storage-tips" class="text-slate-600 leading-relaxed"></p>
+              </div>
+              <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+                <span class="font-bold text-slate-800 flex items-center gap-1.5">
+                  <i class="fa-solid fa-utensils text-amber-500"></i> 상태별 추천 활용법
+                </span>
+                <p id="res-cooking-tips" class="text-slate-600 leading-relaxed"></p>
+              </div>
+            </div>
+
+            <!-- Top Candidates Breakdown -->
+            <div class="space-y-2 pt-1">
+              <span class="text-xs font-bold text-slate-700 flex items-center gap-1">
+                <i class="fa-solid fa-chart-simple text-slate-400"></i> 품종별 예측 확률 상위 후보
+              </span>
+              <div id="res-candidates" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="pt-2 flex flex-col sm:flex-row gap-2">
+              <button id="btn-save-inv" onclick="saveToInventory()" class="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 transition">
+                <i class="fa-solid fa-plus-circle"></i> 내 냉장고 식재료함에 보관 등록
+              </button>
+              <button onclick="resetScanner()" class="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm flex items-center justify-center gap-2 transition">
+                <i class="fa-solid fa-rotate-right"></i> 다시 판별
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ================= TAB 2: INVENTORY ================= -->
+    <section id="view-inventory" class="hidden space-y-6">
+      
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-box-archive text-emerald-600"></i> 내 보관 식재료 관리
+          </h2>
+          <p class="text-xs text-slate-500 mt-0.5">AI로 판별하여 등록된 식재료의 신선도와 소비기한을 모니터링합니다.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="flex bg-slate-100 p-1 rounded-xl text-xs font-medium">
+            <button onclick="filterInventory('all')" id="filter-all" class="px-3 py-1.5 rounded-lg bg-white shadow-sm font-semibold text-slate-800">전체</button>
+            <button onclick="filterInventory('fresh')" id="filter-fresh" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900">신선</button>
+            <button onclick="filterInventory('normal')" id="filter-normal" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900">보통</button>
+            <button onclick="filterInventory('rotten')" id="filter-rotten" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900">폐기권장</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inventory Grid -->
+      <div id="inventory-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <!-- Dynamically injected -->
+      </div>
+
+      <!-- Inventory Empty State -->
+      <div id="inventory-empty" class="hidden glass-card rounded-2xl p-12 text-center">
+        <div class="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mx-auto mb-3">
+          <i class="fa-solid fa-basket-shopping"></i>
+        </div>
+        <h4 class="font-bold text-slate-700 text-base mb-1">보관 중인 식재료가 없습니다</h4>
+        <p class="text-xs text-slate-500 mb-4">AI 판별기에서 이미지를 진단한 후 '식재료함에 보관 등록'을 눌러보세요.</p>
+        <button onclick="switchTab('scanner')" class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold text-xs shadow-sm hover:bg-emerald-700 transition">
+          <i class="fa-solid fa-camera mr-1"></i> 신선도 판별하러 가기
+        </button>
+      </div>
+
+    </section>
+
+    <!-- ================= TAB 3: HISTORY ================= -->
+    <section id="view-history" class="hidden space-y-6">
+      
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-clock-rotate-left text-emerald-600"></i> 최근 검사 기록
+          </h2>
+          <p class="text-xs text-slate-500 mt-0.5">과거에 판별한 식재료 분석 히스토리 목록입니다.</p>
+        </div>
+        <button onclick="clearHistory()" class="px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 font-semibold transition flex items-center gap-1.5">
+          <i class="fa-solid fa-trash-can"></i> 기록 전체 삭제
+        </button>
+      </div>
+
+      <!-- History Table/List -->
+      <div class="glass-card rounded-2xl overflow-hidden shadow-sm">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold">
+              <tr>
+                <th class="py-3 px-4">사진</th>
+                <th class="py-3 px-4">식재료 종류</th>
+                <th class="py-3 px-4">신선도 판별 결과</th>
+                <th class="py-3 px-4">신선도 확률</th>
+                <th class="py-3 px-4">인식 신뢰도</th>
+                <th class="py-3 px-4">검사 일시</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body" class="divide-y divide-slate-100 text-slate-700">
+              <!-- Dynamically injected -->
+            </tbody>
+          </table>
+        </div>
+        <div id="history-empty" class="hidden p-8 text-center text-slate-400 text-xs">
+          검사 기록이 없습니다.
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ================= TAB 4: ABOUT ================= -->
+    <section id="view-about" class="hidden space-y-6">
+      
+      <div class="glass-card rounded-2xl p-6 sm:p-8 space-y-6 shadow-sm">
+        <div>
+          <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">System Architecture</span>
+          <h2 class="text-2xl font-black text-slate-900 mt-1">FreshGuard AI 모델 구조 및 원리</h2>
+          <p class="text-sm text-slate-600 mt-1">
+            카메라로 촬영한 과일 이미지를 기반으로 10종 과일 분류와 3단계 신선도를 한 번에 예측하는 멀티태스크 딥러닝 파이프라인
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <span class="text-xs font-bold text-slate-400">Backbone Network</span>
+            <h4 class="text-base font-bold text-slate-800 mt-1">EfficientNet-B0</h4>
+            <p class="text-xs text-slate-500 mt-1">ImageNet 사전학습 가중치를 활용하여 가볍고 빠른 연산속도와 높은 정확도를 보장합니다.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <span class="text-xs font-bold text-slate-400">Head 1: Fruit Classification</span>
+            <h4 class="text-base font-bold text-slate-800 mt-1">10-Class Classifier</h4>
+            <p class="text-xs text-slate-500 mt-1">사과, 바나나, 파프리카, 당근, 오이, 망고, 오렌지, 감자, 딸기, 토마토 분류 (F1: 0.993).</p>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <span class="text-xs font-bold text-slate-400">Head 2: Freshness Score</span>
+            <h4 class="text-base font-bold text-slate-800 mt-1">3-Stage Rule Engine</h4>
+            <p class="text-xs text-slate-500 mt-1">p_fresh ≥ 0.7 (신선), ≤ 0.3 (부패), 중간 구간은 보통(소비 적기)으로 매핑 (F1: 0.981).</p>
+          </div>
+        </div>
+
+        <!-- Flowchart diagram -->
+        <div class="p-5 rounded-xl bg-slate-900 text-white space-y-3 font-mono text-xs">
+          <div class="text-emerald-400 font-bold"># FreshGuard Multitask Inference Flow:</div>
+          <div class="pl-3 border-l-2 border-emerald-500/50 space-y-1.5 text-slate-300">
+            <div>1. [Input Image (224×224 RGB)] ➔ EfficientNet-B0 Backbone Feature Extractor</div>
+            <div>2. [Feature Vector (1280-dim)] ➔ Dropout(0.2)</div>
+            <div>3. ├─ Head_fruit(Linear) ➔ 10 Fruit Softmax ➔ argmax (과일 품종 판별)</div>
+            <div>4. └─ Head_fresh(Linear) ➔ 2-Class Softmax ➔ p_fresh 확률 산출</div>
+            <div>5. [Threshold Rule] ➔ fresh (≥0.7) / normal (0.3~0.7) / rotten (≤0.3)</div>
+          </div>
+        </div>
+
+        <div class="border-t border-slate-200 pt-4 flex flex-wrap items-center justify-between text-xs text-slate-500 gap-2">
+          <span>GitHub: <a href="https://github.com/Lova-clover/FreshGuard" target="_blank" class="text-emerald-600 underline font-semibold">Lova-clover/FreshGuard</a></span>
+          <span>Food Freshness Dataset: Kaggle ~69,105 images</span>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500">
+    <div class="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <i class="fa-solid fa-leaf text-emerald-600"></i>
+        <span class="font-semibold text-slate-700">FreshGuard (식재료 신선도 판별 AI)</span>
+      </div>
+      <div>Localhost Environment • PyTorch EfficientNet-B0 Multitask Engine</div>
+    </div>
+  </footer>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 text-xs font-semibold">
+    <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400"></i>
+    <span id="toast-msg">알림 메시지</span>
+  </div>
+
+  <!-- JavaScript Application Logic -->
+  <script>
+    let currentPrediction = null;
+    let webcamStream = null;
+    let inventoryData = [];
+
+    // --- Tab Navigation ---
+    function switchTab(tabId) {
+      ['scanner', 'inventory', 'history', 'about'].forEach(t => {
+        const view = document.getElementById(`view-${t}`);
+        const btn = document.getElementById(`tab-${t}`);
+        if (t === tabId) {
+          view.classList.remove('hidden');
+          btn.classList.add('bg-emerald-50', 'text-emerald-700', 'font-semibold', 'shadow-sm');
+          btn.classList.remove('text-slate-600');
+        } else {
+          view.classList.add('hidden');
+          btn.classList.remove('bg-emerald-50', 'text-emerald-700', 'font-semibold', 'shadow-sm');
+          btn.classList.add('text-slate-600');
+        }
+      });
+
+      if (tabId === 'inventory') loadInventory();
+      if (tabId === 'history') loadHistory();
+      if (tabId !== 'scanner' && webcamStream) stopCamera();
+    }
+
+    // --- Mode (File vs Camera) ---
+    function setMode(mode) {
+      const btnFile = document.getElementById('btn-mode-file');
+      const btnCam = document.getElementById('btn-mode-cam');
+      const areaFile = document.getElementById('area-file');
+      const areaCam = document.getElementById('area-cam');
+
+      if (mode === 'file') {
+        btnFile.className = 'px-2.5 py-1 rounded-md font-semibold bg-emerald-600 text-white shadow-sm';
+        btnCam.className = 'px-2.5 py-1 rounded-md font-medium text-slate-600 hover:bg-slate-100';
+        areaFile.classList.remove('hidden');
+        areaCam.classList.add('hidden');
+        stopCamera();
+      } else {
+        btnCam.className = 'px-2.5 py-1 rounded-md font-semibold bg-emerald-600 text-white shadow-sm';
+        btnFile.className = 'px-2.5 py-1 rounded-md font-medium text-slate-600 hover:bg-slate-100';
+        areaCam.classList.remove('hidden');
+        areaFile.classList.add('hidden');
+      }
+    }
+
+    // --- Webcam Handler ---
+    async function startCamera() {
+      try {
+        const video = document.getElementById('webcam-video');
+        const placeholder = document.getElementById('cam-placeholder');
+        const snapBtn = document.getElementById('btn-snap-cam');
+        const startBtn = document.getElementById('btn-start-cam');
+
+        webcamStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+        video.srcObject = webcamStream;
+        placeholder.classList.add('hidden');
+        snapBtn.disabled = false;
+        startBtn.innerHTML = '<i class="fa-solid fa-stop"></i> 카메라 정지';
+        startBtn.onclick = stopCamera;
+      } catch (err) {
+        showToast('웹캠을 실행할 수 없습니다: ' + err.message, 'error');
+      }
+    }
+
+    function stopCamera() {
+      if (webcamStream) {
+        webcamStream.getTracks().forEach(track => track.stop());
+        webcamStream = null;
+      }
+      const video = document.getElementById('webcam-video');
+      video.srcObject = null;
+      document.getElementById('cam-placeholder').classList.remove('hidden');
+      document.getElementById('btn-snap-cam').disabled = true;
+      const startBtn = document.getElementById('btn-start-cam');
+      startBtn.innerHTML = '<i class="fa-solid fa-video"></i> 카메라 시작';
+      startBtn.onclick = startCamera;
+    }
+
+    function captureCamera() {
+      const video = document.getElementById('webcam-video');
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+      sendPrediction({ image: dataUrl });
+    }
+
+    // --- File Select ---
+    function handleFileSelect(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('file', file);
+      sendPrediction(formData, true);
+    }
+
+    // --- Sample Runner ---
+    function runSample(filename) {
+      sendPrediction({ sample: filename });
+    }
+
+    // --- API Request ---
+    async function sendPrediction(payload, isFormData = false) {
+      showLoading(true);
+
+      try {
+        const options = {
+          method: 'POST',
+        };
+
+        if (isFormData) {
+          options.body = payload;
+        } else {
+          options.headers = { 'Content-Type': 'application/json' };
+          options.body = JSON.stringify(payload);
+        }
+
+        const res = await fetch('/api/predict', options);
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || '분석 중 오류 발생');
+
+        currentPrediction = data;
+        renderResult(data);
+        showToast(`${data.fruit_kr} 신선도 분석이 완료되었습니다!`, 'success');
+        updateBadgeCount();
+      } catch (err) {
+        showToast(err.message, 'error');
+        showLoading(false);
+      }
+    }
+
+    // --- Render Results ---
+    function renderResult(data) {
+      document.getElementById('result-empty').classList.add('hidden');
+      document.getElementById('result-loading').classList.add('hidden');
+      const card = document.getElementById('result-card');
+      card.classList.remove('hidden');
+
+      document.getElementById('res-image').src = data.image_url;
+      document.getElementById('res-emoji').innerText = data.emoji;
+      document.getElementById('res-fruit-kr').innerText = data.fruit_kr;
+      document.getElementById('res-fruit-en').innerText = `(${data.fruit})`;
+      document.getElementById('res-confidence').innerText = data.confidence;
+      document.getElementById('res-status-msg').innerText = data.status_message;
+
+      // Status Badge Floating
+      const badgeFloating = document.getElementById('res-badge-floating');
+      badgeFloating.innerText = data.freshness_kr;
+      if (data.freshness_status === 'fresh') {
+        badgeFloating.className = 'absolute top-2 left-2 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-sm badge-fresh';
+      } else if (data.freshness_status === 'normal') {
+        badgeFloating.className = 'absolute top-2 left-2 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-sm badge-normal';
+      } else {
+        badgeFloating.className = 'absolute top-2 left-2 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-sm badge-rotten';
+      }
+
+      // Fresh Score
+      const freshScoreEl = document.getElementById('res-fresh-score');
+      freshScoreEl.innerText = `${data.p_fresh}%`;
+      if (data.freshness_status === 'fresh') freshScoreEl.className = 'text-lg font-black text-emerald-600';
+      else if (data.freshness_status === 'normal') freshScoreEl.className = 'text-lg font-black text-amber-600';
+      else freshScoreEl.className = 'text-lg font-black text-rose-600';
+
+      // Shelf life
+      document.getElementById('res-shelf-life').innerText = data.shelf_life_days > 0 ? `약 ${data.shelf_life_days}일 남음` : '즉시 폐기 요망';
+
+      // Progress bar
+      const bar = document.getElementById('res-progress-bar');
+      bar.style.width = `${data.p_fresh}%`;
+      document.getElementById('res-fresh-percent').innerText = `${data.p_fresh}%`;
+      if (data.freshness_status === 'fresh') {
+        bar.className = 'h-full rounded-full transition-all duration-700 bg-gradient-to-r from-emerald-500 to-teal-400';
+      } else if (data.freshness_status === 'normal') {
+        bar.className = 'h-full rounded-full transition-all duration-700 bg-gradient-to-r from-amber-400 to-amber-500';
+      } else {
+        bar.className = 'h-full rounded-full transition-all duration-700 bg-gradient-to-r from-rose-500 to-red-600';
+      }
+
+      // Tips
+      document.getElementById('res-storage-tips').innerText = data.storage_tips;
+      document.getElementById('res-cooking-tips').innerText = data.cooking_tips;
+
+      // Candidates
+      const candContainer = document.getElementById('res-candidates');
+      candContainer.innerHTML = '';
+      (data.top_candidates || []).forEach(cand => {
+        const div = document.createElement('div');
+        div.className = 'p-2 rounded-lg bg-slate-50 border border-slate-100 text-center';
+        div.innerHTML = `
+          <div class="text-sm">${cand.emoji}</div>
+          <div class="font-bold text-[11px] text-slate-700 truncate">${cand.name_kr}</div>
+          <div class="text-[10px] font-semibold text-emerald-600">${cand.probability}%</div>
+        `;
+        candContainer.appendChild(div);
+      });
+    }
+
+    function showLoading(show) {
+      if (show) {
+        document.getElementById('result-empty').classList.add('hidden');
+        document.getElementById('result-card').classList.add('hidden');
+        document.getElementById('result-loading').classList.remove('hidden');
+      } else {
+        document.getElementById('result-loading').classList.add('hidden');
+        if (!currentPrediction) document.getElementById('result-empty').classList.remove('hidden');
+      }
+    }
+
+    function resetScanner() {
+      currentPrediction = null;
+      document.getElementById('result-card').classList.add('hidden');
+      document.getElementById('result-empty').classList.remove('hidden');
+      document.getElementById('image-input').value = '';
+    }
+
+    // --- Save to Fridge Inventory ---
+    async function saveToInventory() {
+      if (!currentPrediction) return;
+
+      try {
+        const res = await fetch('/api/inventory', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentPrediction)
+        });
+
+        if (res.ok) {
+          showToast(`'${currentPrediction.fruit_kr}'을(를) 내 식재료함에 보관 등록했습니다!`, 'success');
+          updateBadgeCount();
+        }
+      } catch (err) {
+        showToast('저장 중 오류 발생', 'error');
+      }
+    }
+
+    // --- Load Inventory ---
+    async function loadInventory() {
+      try {
+        const res = await fetch('/api/inventory');
+        inventoryData = await res.json();
+        renderInventoryList(inventoryData);
+        updateBadgeCount();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function filterInventory(filter) {
+      ['all', 'fresh', 'normal', 'rotten'].forEach(f => {
+        const btn = document.getElementById(`filter-${f}`);
+        if (f === filter) {
+          btn.className = 'px-3 py-1.5 rounded-lg bg-white shadow-sm font-semibold text-slate-800';
+        } else {
+          btn.className = 'px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900';
+        }
+      });
+
+      if (filter === 'all') {
+        renderInventoryList(inventoryData);
+      } else {
+        const filtered = inventoryData.filter(item => item.freshness === filter);
+        renderInventoryList(filtered);
+      }
+    }
+
+    function renderInventoryList(items) {
+      const grid = document.getElementById('inventory-grid');
+      const empty = document.getElementById('inventory-empty');
+
+      if (!items || items.length === 0) {
+        grid.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      empty.classList.add('hidden');
+      grid.innerHTML = '';
+
+      items.forEach(item => {
+        let badgeClass = 'badge-fresh';
+        let badgeText = '신선';
+        if (item.freshness === 'normal') { badgeClass = 'badge-normal'; badgeText = '보통'; }
+        else if (item.freshness === 'rotten') { badgeClass = 'badge-rotten'; badgeText = '폐기권장'; }
+
+        const card = document.createElement('div');
+        card.className = 'glass-card rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition flex flex-col justify-between';
+        card.innerHTML = `
+          <div>
+            <div class="relative h-36 bg-slate-100">
+              <img src="${item.image_url || '/static/samples/apple.jpg'}" class="w-full h-full object-cover">
+              <span class="absolute top-2.5 left-2.5 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm ${badgeClass}">
+                ${badgeText} (${item.p_fresh}%)
+              </span>
+              <button onclick="deleteInventoryItem(${item.id})" class="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-white/80 hover:bg-white text-slate-600 hover:text-rose-600 flex items-center justify-center text-xs shadow-sm transition">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+            <div class="p-4 space-y-2">
+              <div class="flex items-center justify-between">
+                <h4 class="font-bold text-slate-900 text-base">${item.name}</h4>
+                <span class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
+                  ${item.days_left > 0 ? `D-${item.days_left}` : '소비기한 만료'}
+                </span>
+              </div>
+              <p class="text-[11px] text-slate-500 line-clamp-2">${item.storage_tip || '서늘한 곳에 보관'}</p>
+            </div>
+          </div>
+          <div class="px-4 pb-4 pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+            <span>등록: ${item.created_at ? item.created_at.substring(0, 10) : '오늘'}</span>
+            <span class="font-semibold text-slate-600">신뢰도 ${item.confidence}%</span>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    async function deleteInventoryItem(id) {
+      if (!confirm('이 식재료를 식재료함에서 삭제하시겠습니까?')) return;
+      try {
+        const res = await fetch(`/api/inventory/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          showToast('식재료가 삭제되었습니다.', 'success');
+          loadInventory();
+        }
+      } catch (err) {
+        showToast('삭제 실패', 'error');
+      }
+    }
+
+    // --- Load History ---
+    async function loadHistory() {
+      try {
+        const res = await fetch('/api/history');
+        const list = await res.json();
+        const tbody = document.getElementById('history-table-body');
+        const empty = document.getElementById('history-empty');
+
+        if (!list || list.length === 0) {
+          tbody.innerHTML = '';
+          empty.classList.remove('hidden');
+          return;
+        }
+
+        empty.classList.add('hidden');
+        tbody.innerHTML = '';
+
+        list.forEach(item => {
+          let badgeClass = 'badge-fresh';
+          if (item.freshness === 'normal') badgeClass = 'badge-normal';
+          else if (item.freshness === 'rotten') badgeClass = 'badge-rotten';
+
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-slate-50/80 transition';
+          tr.innerHTML = `
+            <td class="py-2.5 px-4">
+              <img src="${item.image_url}" class="w-10 h-10 object-cover rounded-lg shadow-xs">
+            </td>
+            <td class="py-2.5 px-4 font-bold text-slate-800">${item.fruit_name_kr} <span class="text-slate-400 font-normal">(${item.fruit_type})</span></td>
+            <td class="py-2.5 px-4"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${badgeClass}">${item.freshness_kr}</span></td>
+            <td class="py-2.5 px-4 font-semibold text-emerald-600">${item.p_fresh}%</td>
+            <td class="py-2.5 px-4 text-slate-600">${item.confidence}%</td>
+            <td class="py-2.5 px-4 text-slate-400 text-[11px]">${item.created_at || '방금'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function clearHistory() {
+      if (!confirm('검사 기록을 모두 삭제하시겠습니까?')) return;
+      try {
+        const res = await fetch('/api/history', { method: 'DELETE' });
+        if (res.ok) {
+          showToast('모든 기록이 삭제되었습니다.', 'success');
+          loadHistory();
+        }
+      } catch (err) {
+        showToast('삭제 실패', 'error');
+      }
+    }
+
+    async function updateBadgeCount() {
+      try {
+        const res = await fetch('/api/inventory');
+        const list = await res.json();
+        document.getElementById('nav-inv-count').innerText = list.length;
+      } catch (err) {}
+    }
+
+    // --- Toast Handler ---
+    function showToast(msg, type = 'success') {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toast-msg');
+      const toastIcon = document.getElementById('toast-icon');
+
+      toastMsg.innerText = msg;
+      if (type === 'success') {
+        toastIcon.className = 'fa-solid fa-circle-check text-emerald-400';
+      } else {
+        toastIcon.className = 'fa-solid fa-circle-exclamation text-rose-400';
+      }
+
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+
+      setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 3000);
+    }
+
+    // Initial badge count
+    updateBadgeCount();
+  </script>
+</body>
+</html>
