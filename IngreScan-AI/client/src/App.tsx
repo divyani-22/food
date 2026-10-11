@@ -15,6 +15,8 @@ import ScanResult from "./pages/ScanResult";
 import History from "./pages/History";
 import Chat from "./pages/Chat";
 import ProduceScanner from "./pages/ProduceScanner";
+import FridgeTracker from "./pages/FridgeTracker";
+import OpenFoodFactsExplorer from "./pages/OpenFoodFactsExplorer";
 
 function Router() {
   return (
@@ -23,6 +25,10 @@ function Router() {
       <Route path={"/dashboard"} component={Dashboard} />
       <Route path={"/scanner"} component={Scanner} />
       <Route path={"/produce"} component={ProduceScanner} />
+      <Route path={"/fridge"} component={FridgeTracker} />
+      <Route path={"/expiry"} component={FridgeTracker} />
+      <Route path={"/openfoodfacts"} component={OpenFoodFactsExplorer} />
+      <Route path={"/barcode"} component={OpenFoodFactsExplorer} />
       <Route path={"/profile"} component={Profile} />
       <Route path={"/scan/:id"} component={ScanResult} />
       <Route path={"/history"} component={History} />

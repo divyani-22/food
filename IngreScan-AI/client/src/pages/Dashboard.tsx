@@ -2,19 +2,25 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
-import { ScanLine, History, MessageSquare, User, Sparkles } from "lucide-react";
+import { ScanLine, History, MessageSquare, User, Sparkles, Refrigerator, Barcode, AlertTriangle } from "lucide-react";
 import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 
 export default function Dashboard() {
   const { data: scans, isLoading: scansLoading } = trpc.scanner.getUserScans.useQuery({ limit: 5 });
+  const { data: inventory = [] } = trpc.inventory.list.useQuery();
   const { data: profile } = trpc.profile.get.useQuery();
 
+  const expiringItems = inventory.filter((i) => i.status === "expiring_soon" || i.status === "expired");
+
   const quickActions = [
-    { icon: Sparkles, title: "Fresh Produce AI", description: "Inspect fruit freshness & rot", href: "/produce", color: "bg-emerald-600 text-white" },
-    { icon: ScanLine, title: "Packaged Scan", description: "Analyze food ingredients", href: "/scanner", color: "bg-primary text-primary-foreground" },
-    { icon: History, title: "Scan History", description: "View past analyses", href: "/history", color: "bg-chart-2 text-white" },
-    { icon: MessageSquare, title: "Ask AI", description: "Chat about food safety", href: "/chat", color: "bg-chart-3 text-white" },
+    { icon: Refrigerator, title: "Expiry Tracker", description: "EcoFridge food expiry system", href: "/fridge", color: "bg-blue-600 text-white" },
+    { icon: Barcode, title: "Open Food Facts", description: "Global barcode & Nutri-Score", href: "/openfoodfacts", color: "bg-emerald-600 text-white" },
+    { icon: ScanLine, title: "Packaged Scanner", description: "Analyze food ingredients", href: "/scanner", color: "bg-primary text-primary-foreground" },
+    { icon: Sparkles, title: "Fresh Produce AI", description: "Inspect fruit freshness & rot", href: "/produce", color: "bg-purple-600 text-white" },
+    { icon: History, title: "Scan History", description: "View past analyses", href: "/history", color: "bg-amber-600 text-white" },
+    { icon: MessageSquare, title: "Ask AI", description: "Chat about food safety", href: "/chat", color: "bg-teal-600 text-white" },
   ];
 
   return (
@@ -25,9 +31,36 @@ export default function Dashboard() {
           <p className="text-muted-foreground mt-2">Welcome back! Monitor your food safety journey.</p>
         </div>
 
+        {expiringItems.length > 0 && (
+          <Card className="border-amber-400/80 bg-amber-500/10">
+            <CardHeader className="py-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base text-amber-800 dark:text-amber-300">
+                      {expiringItems.length} Food Item{expiringItems.length === 1 ? "" : "s"} Expiring Soon!
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Check your fridge and consume them before they go to waste.
+                    </CardDescription>
+                  </div>
+                </div>
+                <Link href="/fridge">
+                  <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white shrink-0">
+                    Open Fridge Tracker
+                  </Button>
+                </Link>
+              </div>
+            </CardHeader>
+          </Card>
+        )}
+
         <div>
           <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {quickActions.map((action, index) => {
               const Icon = action.icon;
               return (

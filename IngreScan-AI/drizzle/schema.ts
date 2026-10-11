@@ -166,3 +166,26 @@ export const ingredientDatabase = mysqlTable("ingredient_database", {
 
 export type IngredientData = typeof ingredientDatabase.$inferSelect;
 export type InsertIngredientData = typeof ingredientDatabase.$inferInsert;
+
+/**
+ * Food Expiry Tracker inventory items (EcoFridge Integration)
+ */
+export const foodInventory = mysqlTable("food_inventory", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  category: varchar("category", { length: 100 }).notNull(),
+  quantity: varchar("quantity", { length: 100 }).default("1").notNull(),
+  storageLocation: mysqlEnum("storage_location", ["fridge", "freezer", "pantry"]).default("fridge").notNull(),
+  foodImageUrl: text("food_image_url"),
+  barcode: varchar("barcode", { length: 64 }),
+  expiryDate: timestamp("expiry_date").notNull(),
+  addedDate: timestamp("added_date").defaultNow().notNull(),
+  notes: text("notes"),
+  status: mysqlEnum("status", ["fresh", "expiring_soon", "expired", "consumed"]).default("fresh").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type FoodInventoryItem = typeof foodInventory.$inferSelect;
+export type InsertFoodInventoryItem = typeof foodInventory.$inferInsert;

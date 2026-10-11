@@ -9,7 +9,8 @@ import {
   scanIngredients, InsertScanIngredient,
   alternatives, InsertAlternative,
   chatMessages, InsertChatMessage,
-  ingredientDatabase, InsertIngredientData
+  ingredientDatabase, InsertIngredientData,
+  foodInventory, InsertFoodInventoryItem
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -316,4 +317,44 @@ export async function upsertIngredient(ingredient: InsertIngredientData) {
       lastUpdated: new Date(),
     },
   });
+}
+
+// ============= Food Expiry Tracker Inventory =============
+
+export async function getUserInventory(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(foodInventory)
+    .where(eq(foodInventory.userId, userId))
+    .orderBy(foodInventory.expiryDate);
+}
+
+export async function addInventoryItem(item: InsertFoodInventoryItem) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(foodInventory).values(item);
+  return result[0].insertId;
+}
+
+export async function updateInventoryItem(
+  id: number,
+  userId: number,
+  updates: Partial<InsertFoodInventoryItem>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(foodInventory)
+    .set({ ...updates, updatedAt: new Date() })
+    .where(and(eq(foodInventory.id, id), eq(foodInventory.userId, userId)));
+}
+
+export async function deleteInventoryItem(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.delete(foodInventory)
+    .where(and(eq(foodInventory.id, id), eq(foodInventory.userId, userId)));
 }

@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Scan, User, History, MessageSquare, Sparkles } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Scan, User, History, MessageSquare, Sparkles, Refrigerator, Barcode } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -31,6 +31,8 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Scan, label: "Packaged Scanner", path: "/scanner" },
   { icon: Sparkles, label: "Fresh Produce AI", path: "/produce" },
+  { icon: Refrigerator, label: "Expiry Tracker", path: "/fridge" },
+  { icon: Barcode, label: "Open Food Facts", path: "/openfoodfacts" },
   { icon: User, label: "Profile", path: "/profile" },
   { icon: History, label: "History", path: "/history" },
   { icon: MessageSquare, label: "Chat", path: "/chat" },

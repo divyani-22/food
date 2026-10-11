@@ -45,6 +45,29 @@ const createScanSchema = z.object({
   imageKey: z.string().optional(),
 });
 
+const createInventoryItemSchema = z.object({
+  title: z.string().min(1),
+  category: z.string().default("Other"),
+  quantity: z.string().default("1"),
+  storageLocation: z.enum(["fridge", "freezer", "pantry"]).default("fridge"),
+  foodImageUrl: z.string().optional(),
+  barcode: z.string().optional(),
+  expiryDate: z.string().or(z.date()),
+  notes: z.string().optional(),
+});
+
+const updateInventoryItemSchema = z.object({
+  id: z.number(),
+  title: z.string().optional(),
+  category: z.string().optional(),
+  quantity: z.string().optional(),
+  storageLocation: z.enum(["fridge", "freezer", "pantry"]).optional(),
+  foodImageUrl: z.string().optional(),
+  expiryDate: z.string().or(z.date()).optional(),
+  notes: z.string().optional(),
+  status: z.enum(["fresh", "expiring_soon", "expired", "consumed"]).optional(),
+});
+
 // ============= Router Definition =============
 
 export const appRouter = router({
@@ -533,7 +556,166 @@ Be helpful, accurate, educational, and personalized to the user's health profile
       }),
   }),
 
+  // ============= Food Expiry Tracker Router (EcoFridge Integration) =============
+  inventory: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const items = await db.getUserInventory(ctx.user.id);
+      const now = new Date();
+      return items.map((item) => {
+        const diffMs = new Date(item.expiryDate).getTime() - now.getTime();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        if (item.status === "consumed") {
+          return {
+            ...item,
+            daysLeft: diffDays,
+          };
+        }
+        let calculatedStatus: "fresh" | "expiring_soon" | "expired" = "fresh";
+        if (diffDays <= 0) {
+          calculatedStatus = "expired";
+        } else if (diffDays <= 3) {
+          calculatedStatus = "expiring_soon";
+        }
+        return {
+          ...item,
+          daysLeft: diffDays,
+          status: calculatedStatus,
+        };
+      });
+    }),
 
+    add: protectedProcedure
+      .input(createInventoryItemSchema)
+      .mutation(async ({ ctx, input }) => {
+        const expDate = new Date(input.expiryDate);
+        const now = new Date();
+        const diffDays = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        let status: "fresh" | "expiring_soon" | "expired" = "fresh";
+        if (diffDays <= 0) status = "expired";
+        else if (diffDays <= 3) status = "expiring_soon";
+
+        const id = await db.addInventoryItem({
+          userId: ctx.user.id,
+          title: input.title,
+          category: input.category,
+          quantity: input.quantity || "1",
+          storageLocation: input.storageLocation || "fridge",
+          foodImageUrl: input.foodImageUrl || null,
+          barcode: input.barcode || null,
+          expiryDate: expDate,
+          addedDate: new Date(),
+          notes: input.notes || null,
+          status,
+        });
+        return { id, success: true };
+      }),
+
+    update: protectedProcedure
+      .input(updateInventoryItemSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { id, expiryDate, ...rest } = input;
+        const updates: any = { ...rest };
+        if (expiryDate) {
+          updates.expiryDate = new Date(expiryDate);
+        }
+        await db.updateInventoryItem(id, ctx.user.id, updates);
+        return { success: true };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.deleteInventoryItem(input.id, ctx.user.id);
+        return { success: true };
+      }),
+
+    consume: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.updateInventoryItem(input.id, ctx.user.id, { status: "consumed" });
+        return { success: true };
+      }),
+  }),
+
+  // ============= Open Food Facts Router =============
+  openFoodFacts: router({
+    getByBarcode: publicProcedure
+      .input(z.object({ barcode: z.string() }))
+      .query(async ({ input }) => {
+        const barcode = input.barcode.trim();
+        if (!barcode) return null;
+        try {
+          const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json`, {
+            headers: { "User-Agent": "IngreScanAI/1.0" },
+          });
+          if (!response.ok) return null;
+          const data = await response.json();
+          if (data.status === 0 || !data.product) return null;
+          const p = data.product;
+          return {
+            barcode: p.code || barcode,
+            productName: p.product_name || p.product_name_en || p.generic_name || "Unknown Product",
+            brand: p.brands || p.brand_owner || "Generic",
+            category: p.categories?.split(",")[0]?.trim() || "Food",
+            imageUrl: p.image_front_url || p.image_url || p.image_small_url || null,
+            ingredientsText: p.ingredients_text || p.ingredients_text_en || "",
+            nutriscoreGrade: p.nutriscore_grade ? p.nutriscore_grade.toUpperCase() : null,
+            novaGroup: p.nova_group || null,
+            ecoscoreGrade: p.ecoscore_grade ? p.ecoscore_grade.toUpperCase() : null,
+            allergens: p.allergens ? p.allergens.split(",").map((s: string) => s.trim().replace(/^en:/, "")).filter(Boolean) : [],
+            nutriments: {
+              energyKcal: p.nutriments?.["energy-kcal_100g"] ?? p.nutriments?.["energy-kcal"] ?? null,
+              fat: p.nutriments?.fat_100g ?? p.nutriments?.fat ?? null,
+              saturatedFat: p.nutriments?.["saturated-fat_100g"] ?? p.nutriments?.["saturated-fat"] ?? null,
+              sugars: p.nutriments?.sugars_100g ?? p.nutriments?.sugars ?? null,
+              salt: p.nutriments?.salt_100g ?? p.nutriments?.salt ?? null,
+              proteins: p.nutriments?.proteins_100g ?? p.nutriments?.proteins ?? null,
+              fiber: p.nutriments?.fiber_100g ?? p.nutriments?.fiber ?? null,
+            },
+          };
+        } catch (err) {
+          console.error("[OpenFoodFacts] Barcode fetch error:", err);
+          return null;
+        }
+      }),
+
+    search: publicProcedure
+      .input(z.object({ query: z.string(), pageSize: z.number().default(12) }))
+      .query(async ({ input }) => {
+        const q = input.query.trim();
+        if (!q) return [];
+        try {
+          const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=${input.pageSize}`;
+          const response = await fetch(url, {
+            headers: {
+              "User-Agent": "IngreScanAI - WebApp - 1.0 - (https://github.com/shivrajpatare/IngreScan-AI)",
+              "Accept": "application/json",
+            },
+          });
+          if (!response.ok) return [];
+          const text = await response.text();
+          if (!text.trim().startsWith("{")) {
+            console.warn("[OpenFoodFacts] Received non-JSON response from search API");
+            return [];
+          }
+          const data = JSON.parse(text);
+          if (!data.products || !Array.isArray(data.products)) return [];
+          return data.products.map((p: any) => ({
+            barcode: p.code || p._id || "",
+            productName: p.product_name || p.product_name_en || p.generic_name || "Food Product",
+            brand: p.brands || "",
+            category: p.categories?.split(",")[0]?.trim() || "Food",
+            imageUrl: p.image_front_small_url || p.image_front_url || p.image_url || null,
+            ingredientsText: p.ingredients_text || p.ingredients_text_en || "",
+            nutriscoreGrade: p.nutriscore_grade ? p.nutriscore_grade.toUpperCase() : null,
+            novaGroup: p.nova_group || null,
+          }));
+        } catch (err) {
+          console.error("[OpenFoodFacts] Search error:", err);
+          return [];
+        }
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

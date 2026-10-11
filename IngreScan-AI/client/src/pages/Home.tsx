@@ -2,7 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
-import { ScanLine, Shield, MessageSquare, User, TrendingUp, FileText } from "lucide-react";
+import { ScanLine, Shield, MessageSquare, User, TrendingUp, FileText, Refrigerator, Barcode } from "lucide-react";
 import { Link } from "wouter";
 
 export default function Home() {
@@ -13,6 +13,16 @@ export default function Home() {
       icon: ScanLine,
       title: "Smart Scanner",
       description: "Upload ingredient labels or enter text manually. Our OCR technology extracts ingredients instantly."
+    },
+    {
+      icon: Refrigerator,
+      title: "Food Expiry Tracker",
+      description: "Keep track of your fridge and pantry inventory. Dynamic shelf-life counters alert you before items expire."
+    },
+    {
+      icon: Barcode,
+      title: "Open Food Facts & Barcode",
+      description: "Look up millions of packaged foods via Open Food Facts. View Nutri-Scores, NOVA UPF grades, and allergens."
     },
     {
       icon: Shield,
