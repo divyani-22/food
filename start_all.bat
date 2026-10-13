@@ -17,6 +17,7 @@ timeout /t 3 /nobreak >nul
 
 echo [*] Starting IngreScan Unified Web Application...
 cd IngreScan-AI
+set NODE_ENV=development
 start "IngreScan Unified App (:3000)" cmd /k "npx tsx watch server/_core/index.ts"
 
 echo [*] Opening application in browser...

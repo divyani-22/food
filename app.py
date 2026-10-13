@@ -5,8 +5,10 @@ import time
 import uuid
 import sqlite3
 import base64
+from contextlib import closing
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageOps
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -18,6 +20,7 @@ import torch.nn as nn
 from torchvision.models import efficientnet_b0
 from torchvision import transforms
 from flask import Flask, request, jsonify, render_template, send_from_directory
+from werkzeug.exceptions import HTTPException
 from flask_cors import CORS
 
 # --- App Configuration ---
@@ -27,6 +30,8 @@ MODEL_PATH = MODELS_DIR / "efficientnet_b0_freshguard_multitask.pt"
 UPLOAD_FOLDER = BASE_DIR / "static" / "uploads"
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 DB_PATH = BASE_DIR / "freshguard.db"
+SAMPLES_DIR = BASE_DIR / "static" / "samples"
+ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 CORS(app)
@@ -185,7 +190,11 @@ class MultiTaskEffB0(nn.Module):
 
 # --- Model Loader ---
 print(f"[*] Loading FreshGuard model on device: {DEVICE}...")
-checkpoint = torch.load(MODEL_PATH, map_location=DEVICE, weights_only=False)
+try:
+    checkpoint = torch.load(MODEL_PATH, map_location=DEVICE, weights_only=True)
+except Exception:
+    # Fallback for checkpoints that pickle non-tensor objects (trusted local file)
+    checkpoint = torch.load(MODEL_PATH, map_location=DEVICE, weights_only=False)
 FRUIT_NAMES = checkpoint["fruit_names"]
 FRESH_LABELS = checkpoint["fresh_labels"]
 FRESH_IDX = FRESH_LABELS.index("fresh")
@@ -232,6 +241,7 @@ def evaluate_freshness(p_fresh: float):
         }
 
 def run_inference(image: Image.Image):
+    image = ImageOps.exif_transpose(image)
     image = image.convert("RGB")
     tensor = inference_transform(image).unsqueeze(0).to(DEVICE)
 
@@ -284,129 +294,181 @@ def run_inference(image: Image.Image):
 def index():
     return render_template("index.html")
 
+def _bad_request(msg, code=400):
+    return jsonify({"error": msg}), code
+
+@app.errorhandler(HTTPException)
+def handle_http_exception(e):
+    # Always answer with JSON so the frontend can show e.error (e.g. 413 too large)
+    return jsonify({"error": e.description or e.name}), e.code
+
 @app.route("/api/predict", methods=["POST"])
 def predict():
+    saved_path = None
     try:
-        image_data = None
-        saved_filename = None
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            body = {}
 
         if "file" in request.files and request.files["file"].filename != "":
             file = request.files["file"]
-            ext = os.path.splitext(file.filename)[1] or ".jpg"
+            ext = os.path.splitext(file.filename)[1].lower()
+            if ext not in ALLOWED_EXTS:
+                ext = ".jpg"
             saved_filename = f"{uuid.uuid4().hex}{ext}"
-            file_path = UPLOAD_FOLDER / saved_filename
-            file.save(file_path)
-            image = Image.open(file_path)
+            saved_path = UPLOAD_FOLDER / saved_filename
+            file.save(saved_path)
+            try:
+                with Image.open(saved_path) as img:
+                    img.load()
+                    image = img.copy()
+            except Exception:
+                saved_path.unlink(missing_ok=True)
+                return _bad_request("Invalid or unsupported image file.")
             image_url = f"/static/uploads/{saved_filename}"
 
-        elif request.is_json and "image" in request.json:
-            raw_b64 = request.json["image"]
-            if "," in raw_b64:
-                raw_b64 = raw_b64.split(",")[1]
-            img_bytes = base64.b64decode(raw_b64)
-            image = Image.open(io.BytesIO(img_bytes))
+        elif isinstance(body.get("image"), str) and body["image"]:
+            raw_b64 = body["image"]
+            if raw_b64.startswith("data:") and "," in raw_b64:
+                raw_b64 = raw_b64.split(",", 1)[1]
+            try:
+                img_bytes = base64.b64decode(raw_b64, validate=False)
+                with Image.open(io.BytesIO(img_bytes)) as img:
+                    img.load()
+                    image = img.copy()
+            except Exception:
+                return _bad_request("Invalid base64 image data.")
             saved_filename = f"{uuid.uuid4().hex}.jpg"
-            file_path = UPLOAD_FOLDER / saved_filename
-            image.save(file_path, "JPEG")
+            saved_path = UPLOAD_FOLDER / saved_filename
+            ImageOps.exif_transpose(image).convert("RGB").save(saved_path, "JPEG")
             image_url = f"/static/uploads/{saved_filename}"
 
-        elif "sample" in request.args or (request.is_json and "sample" in request.json):
-            sample_name = request.args.get("sample") or request.json.get("sample")
-            sample_path = BASE_DIR / "static" / "samples" / sample_name
-            if not sample_path.exists():
+        elif request.args.get("sample") or body.get("sample"):
+            sample_name = request.args.get("sample") or body.get("sample")
+            if not isinstance(sample_name, str):
+                return _bad_request("Invalid sample name.")
+            # Only plain file names inside static/samples are allowed (no traversal)
+            sample_name = os.path.basename(sample_name.replace("\\", "/"))
+            sample_path = SAMPLES_DIR / sample_name
+            if not sample_name or not sample_path.is_file():
                 return jsonify({"error": "Sample image not found"}), 404
-            image = Image.open(sample_path)
+            try:
+                with Image.open(sample_path) as img:
+                    img.load()
+                    image = img.copy()
+            except Exception:
+                return _bad_request("Invalid sample image.")
             image_url = f"/static/samples/{sample_name}"
 
         else:
-            return jsonify({"error": "No image provided. Upload a file, send base64, or specify sample."}), 400
+            return _bad_request("No image provided. Upload a file, send base64, or specify sample.")
 
         result = run_inference(image)
         result["image_url"] = image_url
 
         # Save to scan history
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO scan_history (fruit_type, fruit_name_kr, freshness, freshness_kr, p_fresh, confidence, image_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            result["fruit"],
-            result["fruit_kr"],
-            result["freshness_status"],
-            result["freshness_kr"],
-            result["p_fresh"],
-            result["confidence"],
-            result["image_url"]
-        ))
-        conn.commit()
-        conn.close()
+        with closing(sqlite3.connect(DB_PATH)) as conn:
+            conn.execute("""
+                INSERT INTO scan_history (fruit_type, fruit_name_kr, freshness, freshness_kr, p_fresh, confidence, image_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                result["fruit"],
+                result["fruit_kr"],
+                result["freshness_status"],
+                result["freshness_kr"],
+                result["p_fresh"],
+                result["confidence"],
+                result["image_url"]
+            ))
+            conn.commit()
 
         return jsonify(result)
 
+    except HTTPException:
+        raise  # e.g. 413; handled by the JSON error handler
     except Exception as e:
+        if saved_path is not None:
+            saved_path.unlink(missing_ok=True)
         return jsonify({"error": str(e)}), 500
+
+def _to_float(value, default):
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    return f if f == f and f not in (float("inf"), float("-inf")) else default
+
+def _days_until(expiry_date):
+    """Whole days from today until expiry_date (YYYY-MM-DD); None if unparsable."""
+    try:
+        return (datetime.strptime(str(expiry_date)[:10], "%Y-%m-%d").date() - date.today()).days
+    except ValueError:
+        return None
 
 @app.route("/api/inventory", methods=["GET", "POST"])
 def inventory():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
     if request.method == "POST":
-        data = request.json or {}
-        name = data.get("name") or data.get("fruit_kr") or "식재료"
-        fruit_type = data.get("fruit", "apple")
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return _bad_request("JSON object body required.")
+        name = str(data.get("name") or data.get("fruit_kr") or "식재료")
+        fruit_type = str(data.get("fruit") or "apple")
         freshness = data.get("freshness_status", "fresh")
-        p_fresh = data.get("p_fresh", 90.0)
-        confidence = data.get("confidence", 95.0)
-        image_url = data.get("image_url", "")
-        days_left = data.get("shelf_life_days", 5)
-        storage_tip = data.get("storage_tips", "")
-        expiry_date = data.get("expiry_date", "")
+        if freshness not in ("fresh", "normal", "rotten"):
+            return _bad_request("freshness_status must be fresh, normal or rotten.")
+        p_fresh = min(max(_to_float(data.get("p_fresh"), 90.0), 0.0), 100.0)
+        confidence = min(max(_to_float(data.get("confidence"), 95.0), 0.0), 100.0)
+        image_url = str(data.get("image_url") or "")
+        storage_tip = str(data.get("storage_tips") or "")
 
-        cursor.execute("""
-            INSERT INTO inventory (name, fruit_type, freshness, p_fresh, confidence, image_url, expiry_date, days_left, storage_tip)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (name, fruit_type, freshness, p_fresh, confidence, image_url, expiry_date, days_left, storage_tip))
-        conn.commit()
-        new_id = cursor.lastrowid
-        conn.close()
+        expiry_date = str(data.get("expiry_date") or "")[:10]
+        days_left = _days_until(expiry_date) if expiry_date else None
+        if days_left is None:
+            days_left = int(_to_float(data.get("shelf_life_days"), 5))
+            expiry_date = (date.today() + timedelta(days=max(days_left, 0))).isoformat()
+        days_left = max(days_left, 0)
+
+        with closing(sqlite3.connect(DB_PATH)) as conn:
+            cursor = conn.execute("""
+                INSERT INTO inventory (name, fruit_type, freshness, p_fresh, confidence, image_url, expiry_date, days_left, storage_tip)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (name, fruit_type, freshness, p_fresh, confidence, image_url, expiry_date, days_left, storage_tip))
+            conn.commit()
+            new_id = cursor.lastrowid
         return jsonify({"success": True, "id": new_id})
 
     # GET inventory
-    cursor.execute("SELECT * FROM inventory ORDER BY id DESC")
-    rows = cursor.fetchall()
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM inventory ORDER BY id DESC").fetchall()
     items = [dict(row) for row in rows]
-    conn.close()
+    for item in items:
+        # days_left was a snapshot at save time; recompute from the expiry date
+        remaining = _days_until(item["expiry_date"]) if item.get("expiry_date") else None
+        if remaining is not None:
+            item["days_left"] = max(remaining, 0)
     return jsonify(items)
 
 @app.route("/api/inventory/<int:item_id>", methods=["DELETE"])
 def delete_inventory_item(item_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM inventory WHERE id = ?", (item_id,))
-    conn.commit()
-    conn.close()
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        cur = conn.execute("DELETE FROM inventory WHERE id = ?", (item_id,))
+        conn.commit()
+        deleted = cur.rowcount
+    if not deleted:
+        return jsonify({"error": "Item not found"}), 404
     return jsonify({"success": True})
 
 @app.route("/api/history", methods=["GET", "DELETE"])
 def history():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    if request.method == "DELETE":
-        cursor.execute("DELETE FROM scan_history")
-        conn.commit()
-        conn.close()
-        return jsonify({"success": True})
-
-    cursor.execute("SELECT * FROM scan_history ORDER BY id DESC LIMIT 50")
-    rows = cursor.fetchall()
-    items = [dict(row) for row in rows]
-    conn.close()
-    return jsonify(items)
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.row_factory = sqlite3.Row
+        if request.method == "DELETE":
+            conn.execute("DELETE FROM scan_history")
+            conn.commit()
+            return jsonify({"success": True})
+        rows = conn.execute("SELECT * FROM scan_history ORDER BY id DESC LIMIT 50").fetchall()
+    return jsonify([dict(row) for row in rows])
 
 @app.route("/api/fruits", methods=["GET"])
 def get_fruits():
@@ -426,12 +488,12 @@ def get_samples():
     samples_dir = BASE_DIR / "static" / "samples"
     files = []
     if samples_dir.exists():
-        for f in samples_dir.glob("*.jpg"):
+        for f in sorted(samples_dir.glob("*.jpg")):
             fruit_key = f.stem.split("_")[0]
             info = FRUIT_INFO.get(fruit_key, {})
             files.append({
                 "filename": f.name,
-                "label": f"{info.get('emoji', '🍎')} {info.get('kr', f.stem).capitalize()}",
+                "label": f"{info.get('emoji', '🍎')} {info.get('kr', f.stem)}",
                 "url": f"/static/samples/{f.name}"
             })
     return jsonify(files)
@@ -441,4 +503,4 @@ if __name__ == "__main__":
     print(" FreshGuard (식재료 신선도 판별 AI 서비스)")
     print(" Running on http://127.0.0.1:5000")
     print("="*50 + "\n")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="127.0.0.1", port=5000, debug=False)

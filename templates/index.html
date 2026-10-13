@@ -463,6 +463,10 @@
     let webcamStream = null;
     let inventoryData = [];
 
+    function escapeHtml(v) {
+      return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
     // --- Tab Navigation ---
     function switchTab(tabId) {
       ['scanner', 'inventory', 'history', 'about'].forEach(t => {
@@ -540,6 +544,10 @@
 
     function captureCamera() {
       const video = document.getElementById('webcam-video');
+      if (!webcamStream || !video.videoWidth) {
+        showToast('카메라가 아직 준비되지 않았습니다.', 'error');
+        return;
+      }
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
@@ -557,6 +565,7 @@
 
       const formData = new FormData();
       formData.append('file', file);
+      e.target.value = '';  // allow re-selecting the same file
       sendPrediction(formData, true);
     }
 
@@ -582,9 +591,10 @@
         }
 
         const res = await fetch('/api/predict', options);
-        const data = await res.json();
+        let data = null;
+        try { data = await res.json(); } catch (_) { /* non-JSON error body */ }
 
-        if (!res.ok) throw new Error(data.error || '분석 중 오류 발생');
+        if (!res.ok || !data) throw new Error((data && data.error) || '분석 중 오류 발생');
 
         currentPrediction = data;
         renderResult(data);
@@ -593,6 +603,8 @@
       } catch (err) {
         showToast(err.message, 'error');
         showLoading(false);
+        // restore the previous result that showLoading(true) hid
+        if (currentPrediction) document.getElementById('result-card').classList.remove('hidden');
       }
     }
 
@@ -654,8 +666,8 @@
         const div = document.createElement('div');
         div.className = 'p-2 rounded-lg bg-slate-50 border border-slate-100 text-center';
         div.innerHTML = `
-          <div class="text-sm">${cand.emoji}</div>
-          <div class="font-bold text-[11px] text-slate-700 truncate">${cand.name_kr}</div>
+          <div class="text-sm">${escapeHtml(cand.emoji)}</div>
+          <div class="font-bold text-[11px] text-slate-700 truncate">${escapeHtml(cand.name_kr)}</div>
           <div class="text-[10px] font-semibold text-emerald-600">${cand.probability}%</div>
         `;
         candContainer.appendChild(div);
@@ -694,6 +706,8 @@
         if (res.ok) {
           showToast(`'${currentPrediction.fruit_kr}'을(를) 내 식재료함에 보관 등록했습니다!`, 'success');
           updateBadgeCount();
+        } else {
+          showToast('저장 중 오류 발생', 'error');
         }
       } catch (err) {
         showToast('저장 중 오류 발생', 'error');
@@ -705,6 +719,7 @@
       try {
         const res = await fetch('/api/inventory');
         inventoryData = await res.json();
+        if (!res.ok || !Array.isArray(inventoryData)) { inventoryData = []; }
         renderInventoryList(inventoryData);
         updateBadgeCount();
       } catch (err) {
@@ -754,27 +769,27 @@
         card.innerHTML = `
           <div>
             <div class="relative h-36 bg-slate-100">
-              <img src="${item.image_url || '/static/samples/apple.jpg'}" class="w-full h-full object-cover">
+              <img src="${escapeHtml(item.image_url || '/static/samples/apple.jpg')}" class="w-full h-full object-cover">
               <span class="absolute top-2.5 left-2.5 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm ${badgeClass}">
-                ${badgeText} (${item.p_fresh}%)
+                ${badgeText} (${escapeHtml(item.p_fresh)}%)
               </span>
-              <button onclick="deleteInventoryItem(${item.id})" class="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-white/80 hover:bg-white text-slate-600 hover:text-rose-600 flex items-center justify-center text-xs shadow-sm transition">
+              <button onclick="deleteInventoryItem(${Number(item.id)})" class="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-white/80 hover:bg-white text-slate-600 hover:text-rose-600 flex items-center justify-center text-xs shadow-sm transition">
                 <i class="fa-solid fa-trash"></i>
               </button>
             </div>
             <div class="p-4 space-y-2">
               <div class="flex items-center justify-between">
-                <h4 class="font-bold text-slate-900 text-base">${item.name}</h4>
+                <h4 class="font-bold text-slate-900 text-base">${escapeHtml(item.name)}</h4>
                 <span class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
-                  ${item.days_left > 0 ? `D-${item.days_left}` : '소비기한 만료'}
+                  ${item.days_left > 0 ? `D-${item.days_left}` : (item.freshness === 'rotten' ? '소비기한 만료' : 'D-Day')}
                 </span>
               </div>
-              <p class="text-[11px] text-slate-500 line-clamp-2">${item.storage_tip || '서늘한 곳에 보관'}</p>
+              <p class="text-[11px] text-slate-500 line-clamp-2">${escapeHtml(item.storage_tip || '서늘한 곳에 보관')}</p>
             </div>
           </div>
           <div class="px-4 pb-4 pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
             <span>등록: ${item.created_at ? item.created_at.substring(0, 10) : '오늘'}</span>
-            <span class="font-semibold text-slate-600">신뢰도 ${item.confidence}%</span>
+            <span class="font-semibold text-slate-600">신뢰도 ${escapeHtml(item.confidence)}%</span>
           </div>
         `;
         grid.appendChild(card);
@@ -799,6 +814,7 @@
       try {
         const res = await fetch('/api/history');
         const list = await res.json();
+        if (!res.ok || !Array.isArray(list)) return;
         const tbody = document.getElementById('history-table-body');
         const empty = document.getElementById('history-empty');
 
@@ -820,13 +836,13 @@
           tr.className = 'hover:bg-slate-50/80 transition';
           tr.innerHTML = `
             <td class="py-2.5 px-4">
-              <img src="${item.image_url}" class="w-10 h-10 object-cover rounded-lg shadow-xs">
+              <img src="${escapeHtml(item.image_url)}" class="w-10 h-10 object-cover rounded-lg shadow-xs">
             </td>
-            <td class="py-2.5 px-4 font-bold text-slate-800">${item.fruit_name_kr} <span class="text-slate-400 font-normal">(${item.fruit_type})</span></td>
-            <td class="py-2.5 px-4"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${badgeClass}">${item.freshness_kr}</span></td>
+            <td class="py-2.5 px-4 font-bold text-slate-800">${escapeHtml(item.fruit_name_kr)} <span class="text-slate-400 font-normal">(${escapeHtml(item.fruit_type)})</span></td>
+            <td class="py-2.5 px-4"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${badgeClass}">${escapeHtml(item.freshness_kr)}</span></td>
             <td class="py-2.5 px-4 font-semibold text-emerald-600">${item.p_fresh}%</td>
             <td class="py-2.5 px-4 text-slate-600">${item.confidence}%</td>
-            <td class="py-2.5 px-4 text-slate-400 text-[11px]">${item.created_at || '방금'}</td>
+            <td class="py-2.5 px-4 text-slate-400 text-[11px]">${escapeHtml(item.created_at || '방금')}</td>
           `;
           tbody.appendChild(tr);
         });
@@ -852,7 +868,7 @@
       try {
         const res = await fetch('/api/inventory');
         const list = await res.json();
-        document.getElementById('nav-inv-count').innerText = list.length;
+        if (Array.isArray(list)) document.getElementById('nav-inv-count').innerText = list.length;
       } catch (err) {}
     }
 
