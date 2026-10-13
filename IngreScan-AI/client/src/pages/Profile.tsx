@@ -10,6 +10,13 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Trash2, Plus } from "lucide-react";
 
+// Parse a numeric input to a positive integer, or undefined if empty/invalid
+// (the server rejects NaN and the DB columns are integers).
+function toInt(v: string): number | undefined {
+  const n = Math.round(parseFloat(v));
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
 export default function Profile() {
   const { data: profile, refetch: refetchProfile } = trpc.profile.get.useQuery();
   const { data: conditions, refetch: refetchConditions } = trpc.profile.getMedicalConditions.useQuery();
@@ -45,12 +52,12 @@ export default function Profile() {
   const handleSaveProfile = async () => {
     try {
       await upsertProfileMutation.mutateAsync({
-        age: age ? parseInt(age) : undefined,
-        gender: gender as any,
-        height: height ? parseInt(height) : undefined,
-        weight: weight ? parseInt(weight) : undefined,
-        exerciseFrequency: exerciseFrequency as any,
-        dietType: dietType as any,
+        age: toInt(age),
+        gender: (gender || undefined) as any,
+        height: toInt(height),
+        weight: toInt(weight),
+        exerciseFrequency: (exerciseFrequency || undefined) as any,
+        dietType: (dietType || undefined) as any,
       });
       toast.success("Profile updated successfully");
       refetchProfile();
@@ -62,7 +69,7 @@ export default function Profile() {
   const handleAddCondition = async () => {
     if (!newCondition.trim()) return;
     try {
-      await addConditionMutation.mutateAsync({ condition: newCondition });
+      await addConditionMutation.mutateAsync({ condition: newCondition.trim() });
       toast.success("Medical condition added");
       setNewCondition("");
       refetchConditions();
@@ -84,7 +91,11 @@ export default function Profile() {
   const handleAddMedication = async () => {
     if (!newMedication.name.trim()) return;
     try {
-      await addMedicationMutation.mutateAsync(newMedication);
+      await addMedicationMutation.mutateAsync({
+        name: newMedication.name.trim(),
+        dosage: newMedication.dosage.trim() || undefined,
+        isCurrent: newMedication.isCurrent,
+      });
       toast.success("Medication added");
       setNewMedication({ name: "", dosage: "", isCurrent: true });
       refetchMedications();
@@ -103,7 +114,9 @@ export default function Profile() {
     }
   };
 
-  const bmi = height && weight ? (parseInt(weight) / Math.pow(parseInt(height) / 100, 2)).toFixed(1) : null;
+  const hNum = toInt(height);
+  const wNum = toInt(weight);
+  const bmi = hNum && wNum ? (wNum / Math.pow(hNum / 100, 2)).toFixed(1) : null;
 
   return (
     <DashboardLayout>

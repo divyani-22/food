@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 export default function Dashboard() {
   const { data: scans, isLoading: scansLoading } = trpc.scanner.getUserScans.useQuery({ limit: 5 });
   const { data: inventory = [] } = trpc.inventory.list.useQuery();
-  const { data: profile } = trpc.profile.get.useQuery();
+  const { data: profile, isLoading: profileLoading } = trpc.profile.get.useQuery();
 
   const expiringItems = inventory.filter((i) => i.status === "expiring_soon" || i.status === "expired");
 
@@ -98,7 +98,7 @@ export default function Dashboard() {
                           <CardTitle className="text-base">{scan.productName || "Unnamed Product"}</CardTitle>
                           <CardDescription>{new Date(scan.createdAt).toLocaleDateString()} • {scan.inputType === "image" ? "Image Scan" : "Text Entry"}</CardDescription>
                         </div>
-                        {scan.analysisComplete && scan.riskScore !== null && (
+                        {scan.analysisComplete && scan.riskScore != null && (
                           <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Risk Score:</span>
                             <span className={`text-lg font-bold ${scan.riskScore < 30 ? "text-green-600" : scan.riskScore < 60 ? "text-yellow-600" : "text-red-600"}`}>{scan.riskScore}</span>
@@ -115,7 +115,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {!profile && (
+        {!profile && !profileLoading && (
           <Card className="border-primary/50 bg-primary/5">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><User className="h-5 w-5" />Complete Your Profile</CardTitle>

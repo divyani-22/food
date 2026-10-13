@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
+import { toLocalDateInput } from "@/lib/utils";
 import {
   AlertCircle,
   Barcode,
@@ -38,6 +39,8 @@ export default function OpenFoodFactsExplorer() {
   const [barcodeInput, setBarcodeInput] = useState("8901030895470");
   const [activeBarcode, setActiveBarcode] = useState("8901030895470");
   const [searchQuery, setSearchQuery] = useState("");
+  // Only the submitted query drives the API call (not every keystroke)
+  const [submittedQuery, setSubmittedQuery] = useState("");
   const [activeTab, setActiveTab] = useState("barcode");
 
   // tRPC query for single barcode
@@ -57,8 +60,8 @@ export default function OpenFoodFactsExplorer() {
     isLoading: isSearchLoading,
     refetch: refetchSearch,
   } = trpc.openFoodFacts.search.useQuery(
-    { query: searchQuery },
-    { enabled: Boolean(searchQuery && activeTab === "search") }
+    { query: submittedQuery },
+    { enabled: Boolean(submittedQuery && activeTab === "search") }
   );
 
   // tRPC mutations
@@ -81,7 +84,12 @@ export default function OpenFoodFactsExplorer() {
       toast.error("Please enter a product name to search");
       return;
     }
-    refetchSearch();
+    const q = searchQuery.trim();
+    if (q === submittedQuery) {
+      refetchSearch();
+    } else {
+      setSubmittedQuery(q);
+    }
   };
 
   // 1-Click Bridge to IngreScan-AI
@@ -128,7 +136,7 @@ export default function OpenFoodFactsExplorer() {
         storageLocation: "pantry",
         foodImageUrl: product.imageUrl || undefined,
         barcode: product.barcode,
-        expiryDate: expiry.toISOString().split("T")[0],
+        expiryDate: toLocalDateInput(expiry),
         notes: `Imported via Open Food Facts (Nutri-Score: ${product.nutriscoreGrade || "N/A"})`,
       });
 
@@ -434,43 +442,43 @@ export default function OpenFoodFactsExplorer() {
                         <div className="p-2.5 rounded-lg bg-muted/50 border">
                           <p className="text-xs text-muted-foreground">Energy</p>
                           <p className="font-bold text-sm mt-0.5">
-                            {product.nutriments.energyKcal ? `${product.nutriments.energyKcal} kcal` : "—"}
+                            {product.nutriments.energyKcal != null ? `${product.nutriments.energyKcal} kcal` : "—"}
                           </p>
                         </div>
                         <div className="p-2.5 rounded-lg bg-muted/50 border">
                           <p className="text-xs text-muted-foreground">Total Fat</p>
                           <p className="font-bold text-sm mt-0.5">
-                            {product.nutriments.fat !== null ? `${product.nutriments.fat}g` : "—"}
+                            {product.nutriments.fat != null ? `${product.nutriments.fat}g` : "—"}
                           </p>
                         </div>
                         <div className="p-2.5 rounded-lg bg-muted/50 border">
                           <p className="text-xs text-muted-foreground">Sat. Fat</p>
                           <p className="font-bold text-sm mt-0.5 text-rose-600">
-                            {product.nutriments.saturatedFat !== null ? `${product.nutriments.saturatedFat}g` : "—"}
+                            {product.nutriments.saturatedFat != null ? `${product.nutriments.saturatedFat}g` : "—"}
                           </p>
                         </div>
                         <div className="p-2.5 rounded-lg bg-muted/50 border">
                           <p className="text-xs text-muted-foreground">Sugars</p>
                           <p className="font-bold text-sm mt-0.5 text-amber-600">
-                            {product.nutriments.sugars !== null ? `${product.nutriments.sugars}g` : "—"}
+                            {product.nutriments.sugars != null ? `${product.nutriments.sugars}g` : "—"}
                           </p>
                         </div>
                         <div className="p-2.5 rounded-lg bg-muted/50 border">
                           <p className="text-xs text-muted-foreground">Salt / Sodium</p>
                           <p className="font-bold text-sm mt-0.5">
-                            {product.nutriments.salt !== null ? `${product.nutriments.salt}g` : "—"}
+                            {product.nutriments.salt != null ? `${product.nutriments.salt}g` : "—"}
                           </p>
                         </div>
                         <div className="p-2.5 rounded-lg bg-muted/50 border">
                           <p className="text-xs text-muted-foreground">Protein</p>
                           <p className="font-bold text-sm mt-0.5 text-emerald-600">
-                            {product.nutriments.proteins !== null ? `${product.nutriments.proteins}g` : "—"}
+                            {product.nutriments.proteins != null ? `${product.nutriments.proteins}g` : "—"}
                           </p>
                         </div>
                         <div className="p-2.5 rounded-lg bg-muted/50 border">
                           <p className="text-xs text-muted-foreground">Dietary Fiber</p>
                           <p className="font-bold text-sm mt-0.5">
-                            {product.nutriments.fiber !== null ? `${product.nutriments.fiber}g` : "—"}
+                            {product.nutriments.fiber != null ? `${product.nutriments.fiber}g` : "—"}
                           </p>
                         </div>
                       </div>
@@ -554,8 +562,8 @@ export default function OpenFoodFactsExplorer() {
               </div>
             ) : searchResults.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {searchResults.map((item: any) => (
-                  <Card key={item.barcode} className="overflow-hidden flex flex-col justify-between hover:shadow-md transition-all">
+                {searchResults.map((item: any, idx: number) => (
+                  <Card key={`${item.barcode}-${idx}`} className="overflow-hidden flex flex-col justify-between hover:shadow-md transition-all">
                     <CardHeader className="pb-3">
                       <div className="flex items-start gap-3">
                         {item.imageUrl ? (
@@ -599,6 +607,7 @@ export default function OpenFoodFactsExplorer() {
                         variant="secondary"
                         size="sm"
                         className="text-xs h-8 gap-1"
+                        disabled={!item.barcode}
                         onClick={() => {
                           setBarcodeInput(item.barcode);
                           setActiveBarcode(item.barcode);
@@ -639,9 +648,9 @@ export default function OpenFoodFactsExplorer() {
                   </Card>
                 ))}
               </div>
-            ) : searchQuery ? (
+            ) : submittedQuery ? (
               <div className="text-center py-16 text-muted-foreground">
-                No products found for &ldquo;{searchQuery}&rdquo;. Try another term.
+                No products found for &ldquo;{submittedQuery}&rdquo;. Try another term.
               </div>
             ) : null}
           </TabsContent>

@@ -10,16 +10,27 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { AIChatBox } from "@/components/AIChatBox";
 
+function parseSources(raw?: string | null): string {
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.join(", ") : String(parsed);
+  } catch {
+    return raw;
+  }
+}
+
 export default function ScanResult() {
   const [, params] = useRoute("/scan/:id");
-  const scanId = parseInt(params?.id || "0");
+  const scanId = parseInt(params?.id || "0", 10) || 0;
+  const utils = trpc.useUtils();
   const [loadingAlternatives, setLoadingAlternatives] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
 
-  const { data, isLoading } = trpc.scanner.getScan.useQuery({ scanId });
+  const { data, isLoading } = trpc.scanner.getScan.useQuery({ scanId }, { enabled: scanId > 0, retry: false });
   const suggestAlternativesMutation = trpc.analysis.suggestAlternatives.useMutation();
-  const { data: chatHistory, refetch: refetchChat } = trpc.chat.getHistory.useQuery({ scanId });
+  const { data: chatHistory, refetch: refetchChat } = trpc.chat.getHistory.useQuery({ scanId }, { enabled: scanId > 0 });
   const sendMessageMutation = trpc.chat.sendMessage.useMutation();
 
   useEffect(() => {
@@ -40,7 +51,7 @@ export default function ScanResult() {
         productName: data.scan.productName,
       });
       toast.success("Alternatives generated!");
-      window.location.reload();
+      await utils.scanner.getScan.invalidate({ scanId });
     } catch (error: any) {
       toast.error(error.message || "Failed to generate alternatives");
     } finally {
@@ -114,7 +125,7 @@ export default function ScanResult() {
             <h1 className="text-3xl font-bold text-foreground">{scan.productName || "Scan Result"}</h1>
             <p className="text-muted-foreground mt-2">Scanned on {new Date(scan.createdAt).toLocaleDateString()}</p>
           </div>
-          {scan.riskScore !== null && (
+          {scan.riskScore != null && (
             <div className="text-center">
               <div className="text-sm text-muted-foreground mb-1">Risk Score</div>
               <div className={`text-4xl font-bold ${scan.riskScore < 30 ? "text-green-600" : scan.riskScore < 60 ? "text-yellow-600" : "text-red-600"}`}>
@@ -182,7 +193,7 @@ export default function ScanResult() {
                   </div>
                   {ingredient.sources && (
                     <div className="text-xs text-muted-foreground">
-                      Sources: {JSON.parse(ingredient.sources).join(", ")}
+                      Sources: {parseSources(ingredient.sources)}
                     </div>
                   )}
                 </div>
@@ -221,7 +232,7 @@ export default function ScanResult() {
                     {alt.sources && (
                       <div className="text-xs text-muted-foreground flex items-center gap-1">
                         <ExternalLink className="h-3 w-3" />
-                        Sources: {JSON.parse(alt.sources).join(", ")}
+                        Sources: {parseSources(alt.sources)}
                       </div>
                     )}
                   </div>
@@ -260,6 +271,8 @@ export default function ScanResult() {
               <div className="h-[400px]">
                 <AIChatBox
                   messages={messages}
+                  isLoading={sendMessageMutation.isPending}
+                  height="100%"
                   onSendMessage={async (message: string) => {
                     setMessages(prev => [...prev, { role: "user", content: message }]);
                     try {

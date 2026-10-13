@@ -23,6 +23,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { toLocalDateInput } from "@/lib/utils";
 import {
   AlertTriangle,
   Barcode,
@@ -84,12 +85,18 @@ export default function FridgeTracker() {
       utils.inventory.list.invalidate();
       toast.success("Marked as consumed! Zero food waste 🎉");
     },
+    onError: (err) => {
+      toast.error(err.message || "Failed to update item");
+    },
   });
 
   const deleteMutation = trpc.inventory.delete.useMutation({
     onSuccess: () => {
       utils.inventory.list.invalidate();
       toast.success("Item removed from tracker");
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to remove item");
     },
   });
 
@@ -108,7 +115,7 @@ export default function FridgeTracker() {
   const [expiryDate, setExpiryDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 7);
-    return d.toISOString().split("T")[0];
+    return toLocalDateInput(d);
   });
   const [notes, setNotes] = useState("");
 
@@ -121,7 +128,7 @@ export default function FridgeTracker() {
     setBarcode("");
     const d = new Date();
     d.setDate(d.getDate() + 7);
-    setExpiryDate(d.toISOString().split("T")[0]);
+    setExpiryDate(toLocalDateInput(d));
     setNotes("");
   };
 
@@ -131,7 +138,7 @@ export default function FridgeTracker() {
     setStorageLocation(preset.storageLocation as any);
     const d = new Date();
     d.setDate(d.getDate() + preset.days);
-    setExpiryDate(d.toISOString().split("T")[0]);
+    setExpiryDate(toLocalDateInput(d));
   };
 
   const handleAddItem = (e: React.FormEvent) => {
@@ -574,16 +581,17 @@ export default function FridgeTracker() {
                     >
                       <span className="flex items-center gap-1.5">
                         <Clock className="h-3.5 w-3.5" />
-                        {isExpired
-                          ? `Expired ${Math.abs(daysLeft)} day${Math.abs(daysLeft) === 1 ? "" : "s"} ago`
-                          : daysLeft === 0
+                        {daysLeft === 0
                           ? "Expires Today!"
+                          : isExpired
+                          ? `Expired ${Math.abs(daysLeft)} day${Math.abs(daysLeft) === 1 ? "" : "s"} ago`
                           : `${daysLeft} day${daysLeft === 1 ? "" : "s"} left`}
                       </span>
                       <span className="text-[11px] font-normal opacity-80">
                         {new Date(item.expiryDate).toLocaleDateString(undefined, {
                           month: "short",
                           day: "numeric",
+                          timeZone: "UTC",
                         })}
                       </span>
                     </div>

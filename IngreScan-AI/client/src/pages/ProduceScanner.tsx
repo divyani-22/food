@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { toLocalDateInput } from "@/lib/utils";
 import { 
   Sparkles, 
   Upload, 
@@ -60,6 +61,26 @@ interface InventoryItem {
   created_at: string;
 }
 
+// SQLite CURRENT_TIMESTAMP is UTC "YYYY-MM-DD HH:MM:SS" with no zone marker;
+// parse it as UTC so it displays correctly in local time.
+function formatDbTimestamp(ts?: string): string {
+  if (!ts) return "";
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(ts) ? ts.replace(" ", "T") + "Z" : ts;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? ts : d.toLocaleString();
+}
+
+// Days remaining until a YYYY-MM-DD expiry (local), falling back to the stored value.
+function daysUntil(expiry: string | undefined, fallback: number): number {
+  if (!expiry) return fallback;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(expiry);
+  if (!m) return fallback;
+  const target = new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.round((target - today) / 86400000);
+}
+
 interface HistoryItem {
   id: number;
   fruit_type: string;
@@ -97,7 +118,7 @@ export default function ProduceScanner() {
       const res = await fetch("/api/freshguard/samples");
       if (res.ok) {
         const data = await res.json();
-        setSamples(data);
+        setSamples(Array.isArray(data) ? data : []);
       }
     } catch {
       // ignore
@@ -109,7 +130,7 @@ export default function ProduceScanner() {
       const res = await fetch("/api/freshguard/inventory");
       if (res.ok) {
         const data = await res.json();
-        setInventory(data);
+        setInventory(Array.isArray(data) ? data : []);
       }
     } catch {
       // ignore
@@ -121,7 +142,7 @@ export default function ProduceScanner() {
       const res = await fetch("/api/freshguard/history");
       if (res.ok) {
         const data = await res.json();
-        setHistoryList(data);
+        setHistoryList(Array.isArray(data) ? data : []);
       }
     } catch {
       // ignore
@@ -129,16 +150,23 @@ export default function ProduceScanner() {
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setSelectedImage(base64);
-        analyzeBase64(base64);
-      };
-      reader.readAsDataURL(file);
+    const input = e.target;
+    const file = input.files?.[0];
+    // Reset so selecting the same file again still fires onChange
+    input.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
     }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      setSelectedImage(base64);
+      analyzeBase64(base64);
+    };
+    reader.onerror = () => toast.error("Could not read the selected file");
+    reader.readAsDataURL(file);
   };
 
   const analyzeBase64 = async (base64Img: string) => {
@@ -174,7 +202,8 @@ export default function ProduceScanner() {
         method: "POST",
       });
       if (!res.ok) {
-        throw new Error("Failed to load sample prediction");
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || "Failed to load sample prediction");
       }
       const data: PredictionResult = await res.json();
       setResult(data);
@@ -193,7 +222,7 @@ export default function ProduceScanner() {
     try {
       const expiry = new Date();
       expiry.setDate(expiry.getDate() + (result.shelf_life_days || 3));
-      const expiryStr = expiry.toISOString().split("T")[0];
+      const expiryStr = toLocalDateInput(expiry);
 
       const res = await fetch("/api/freshguard/inventory", {
         method: "POST",
@@ -231,6 +260,8 @@ export default function ProduceScanner() {
       if (res.ok) {
         toast.success("Item removed from inventory");
         loadInventory();
+      } else {
+        toast.error("Failed to delete item");
       }
     } catch {
       toast.error("Failed to delete item");
@@ -243,6 +274,8 @@ export default function ProduceScanner() {
       if (res.ok) {
         toast.success("History cleared");
         loadHistory();
+      } else {
+        toast.error("Failed to clear history");
       }
     } catch {
       toast.error("Failed to clear history");
@@ -516,7 +549,7 @@ export default function ProduceScanner() {
                               <span>Freshness Probability</span>
                               <span className="text-emerald-600">{result.p_fresh}%</span>
                             </div>
-                            <Progress value={result.p_fresh} className="h-2" />
+                            <Progress value={Math.max(0, Math.min(100, result.p_fresh))} className="h-2" />
                             <p className="text-[11px] text-muted-foreground">
                               ≥70%: Fresh | 30-70%: Normal | ≤30%: Rotten
                             </p>
@@ -643,7 +676,12 @@ export default function ProduceScanner() {
                       )}
                       <div className="flex justify-between py-1 border-b">
                         <span className="text-muted-foreground">Shelf Life:</span>
-                        <span className="font-bold text-foreground">{item.days_left} Days</span>
+                        <span className="font-bold text-foreground">
+                          {(() => {
+                            const d = daysUntil(item.expiry_date, item.days_left);
+                            return d < 0 ? `Expired ${-d} day${d === -1 ? "" : "s"} ago` : `${d} Days`;
+                          })()}
+                        </span>
                       </div>
                       {item.expiry_date && (
                         <div className="flex justify-between py-1 border-b">
@@ -720,7 +758,7 @@ export default function ProduceScanner() {
                           Confidence: {h.confidence}% | Freshness Prob: {h.p_fresh}%
                         </p>
                         <p className="text-[11px] text-muted-foreground">
-                          {new Date(h.created_at).toLocaleString()}
+                          {formatDbTimestamp(h.created_at)}
                         </p>
                       </div>
                     </div>

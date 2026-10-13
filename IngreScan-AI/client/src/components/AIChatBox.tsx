@@ -165,6 +165,11 @@ export function AIChatBox({
     }
   };
 
+  // Keep the newest message (and loading indicator) in view
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages.length, isLoading]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedInput = input.trim();

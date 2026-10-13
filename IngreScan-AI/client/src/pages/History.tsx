@@ -43,7 +43,7 @@ export default function History() {
                           <span>{scan.inputType === "image" ? "Image Scan" : "Text Entry"}</span>
                         </CardDescription>
                       </div>
-                      {scan.analysisComplete && scan.riskScore !== null && (
+                      {scan.analysisComplete && scan.riskScore != null && (
                         <div className="text-center ml-4">
                           <div className="text-xs text-muted-foreground mb-1">Risk Score</div>
                           <div className={`text-3xl font-bold ${
