@@ -212,10 +212,11 @@ class SDKServer {
       });
       const { openId, appId, name } = payload as Record<string, unknown>;
 
+      // name may legitimately be "" (createSessionToken defaults it to ""), so only require a string
       if (
         !isNonEmptyString(openId) ||
         !isNonEmptyString(appId) ||
-        !isNonEmptyString(name)
+        typeof name !== "string"
       ) {
         console.warn("[Auth] Session payload missing required fields");
         return null;
@@ -224,7 +225,7 @@ class SDKServer {
       return {
         openId,
         appId,
-        name,
+        name: name as string,
       };
     } catch (error) {
       console.warn("[Auth] Session verification failed", String(error));

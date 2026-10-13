@@ -15,6 +15,13 @@
       "when": 1762328757040,
       "tag": "0001_optimal_lady_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1791935691800,
+      "tag": "0002_loving_synch",
+      "breakpoints": true
     }
   ]
 }

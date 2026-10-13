@@ -1,4 +1,4 @@
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, users, 
@@ -163,7 +163,7 @@ export async function getMedications(userId: number, currentOnly: boolean = fals
     ? and(eq(medications.userId, userId), eq(medications.isCurrent, true))
     : eq(medications.userId, userId);
   
-  return db.select().from(medications).where(conditions).orderBy(desc(medications.startDate));
+  return db.select().from(medications).where(conditions).orderBy(desc(medications.startDate), desc(medications.id));
 }
 
 export async function addMedication(medication: InsertMedication) {
@@ -198,12 +198,9 @@ export async function createFoodScan(scan: InsertFoodScan) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  await db.insert(foodScans).values(scan);
-  const result = await db.select().from(foodScans)
-    .where(eq(foodScans.userId, scan.userId))
-    .orderBy(desc(foodScans.createdAt))
-    .limit(1);
-  return result[0]?.id;
+  const result = await db.insert(foodScans).values(scan);
+  // Use the actual insert id (selecting "latest by createdAt" is racy and has 1s resolution)
+  return result[0].insertId;
 }
 
 export async function getFoodScan(scanId: number, userId: number) {
@@ -246,6 +243,13 @@ export async function addScanIngredient(ingredient: InsertScanIngredient) {
   return result;
 }
 
+export async function deleteScanIngredients(scanId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(scanIngredients).where(eq(scanIngredients.scanId, scanId));
+}
+
 export async function getScanIngredients(scanId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -261,6 +265,13 @@ export async function addAlternative(alternative: InsertAlternative) {
   
   const result = await db.insert(alternatives).values(alternative);
   return result;
+}
+
+export async function deleteAlternatives(scanId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(alternatives).where(eq(alternatives.scanId, scanId));
 }
 
 export async function getAlternatives(scanId: number) {
@@ -284,14 +295,17 @@ export async function getChatHistory(userId: number, scanId?: number, limit: num
   const db = await getDb();
   if (!db) return [];
   
-  const conditions = scanId 
+  // Without a scanId, only the general (non-scan) conversation is returned.
+  const conditions = scanId !== undefined
     ? and(eq(chatMessages.userId, userId), eq(chatMessages.scanId, scanId))
-    : eq(chatMessages.userId, userId);
+    : and(eq(chatMessages.userId, userId), isNull(chatMessages.scanId));
   
-  return db.select().from(chatMessages)
+  // Take the most recent `limit` messages, then return them oldest-first.
+  const rows = await db.select().from(chatMessages)
     .where(conditions)
-    .orderBy(chatMessages.createdAt)
+    .orderBy(desc(chatMessages.createdAt), desc(chatMessages.id))
     .limit(limit);
+  return rows.reverse();
 }
 
 // ============= Ingredient Database =============
@@ -327,7 +341,7 @@ export async function getUserInventory(userId: number) {
   
   return db.select().from(foodInventory)
     .where(eq(foodInventory.userId, userId))
-    .orderBy(foodInventory.expiryDate);
+    .orderBy(foodInventory.expiryDate, foodInventory.id);
 }
 
 export async function addInventoryItem(item: InsertFoodInventoryItem) {
