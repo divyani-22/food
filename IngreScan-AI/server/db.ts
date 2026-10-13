@@ -114,16 +114,12 @@ export async function upsertUserProfile(profile: InsertUserProfile) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const existing = await getUserProfile(profile.userId);
-  
-  if (existing) {
-    await db.update(userProfiles)
-      .set({ ...profile, updatedAt: new Date() })
-      .where(eq(userProfiles.userId, profile.userId));
-  } else {
-    await db.insert(userProfiles).values(profile);
-  }
-  
+  // Atomic thanks to the unique index on user_profiles.user_id.
+  const { userId: _userId, ...updates } = profile;
+  await db.insert(userProfiles).values(profile).onDuplicateKeyUpdate({
+    set: { ...updates, updatedAt: new Date() },
+  });
+
   return getUserProfile(profile.userId);
 }
 
