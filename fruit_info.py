@@ -82,3 +82,75 @@ FRUIT_INFO = {
         "cooking_rotten": "Not safe to eat (discard if sour-smelling or mushy)"
     }
 }
+
+
+# ---------------------------------------------------------------------------
+# Freshness rules and result defaults.
+#
+# Single source of truth shared by the Flask service (app.py) and the in-browser
+# ONNX inference (IngreScan-AI/client/src/lib/fruitInfo.json, generated from this
+# module by tools/export_onnx.py; tests/test_onnx_export.py fails when it is stale).
+# ---------------------------------------------------------------------------
+
+FRESH_THRESHOLD = 0.7   # p_fresh >= 0.7 -> fresh
+ROTTEN_THRESHOLD = 0.3  # p_fresh <= 0.3 -> rotten, anything in between -> normal
+
+FRESHNESS_STATUSES = {
+    "fresh": {
+        "status_kr": "Fresh",
+        "badge_color": "emerald",
+        "message": "This produce is in excellent, fresh condition.",
+    },
+    "rotten": {
+        "status_kr": "Rotten",
+        "badge_color": "rose",
+        "message": "Spoilage has set in. Do not eat it; discard it.",
+    },
+    "normal": {
+        "status_kr": "Normal",
+        "badge_color": "amber",
+        "message": "Good to eat now. Cook and use it soon.",
+    },
+}
+
+DEFAULT_SHELF_LIFE_DAYS = 3
+DEFAULT_STORAGE_TIP = "Store in a cool place."
+DEFAULT_COOKING_TIP = "Best eaten cooked"
+
+
+def freshness_status_for(p_fresh: float) -> str:
+    """Map the model's fresh probability (0..1) to fresh / normal / rotten."""
+    if p_fresh >= FRESH_THRESHOLD:
+        return "fresh"
+    if p_fresh <= ROTTEN_THRESHOLD:
+        return "rotten"
+    return "normal"
+
+
+def evaluate_freshness(p_fresh: float) -> dict:
+    status = freshness_status_for(p_fresh)
+    meta = FRESHNESS_STATUSES[status]
+    return {
+        "status": status,
+        "status_kr": meta["status_kr"],
+        "badge_color": meta["badge_color"],
+        "message": meta["message"],
+    }
+
+
+def build_client_knowledge() -> dict:
+    """The JSON document consumed by the browser (client/src/lib/fruitInfo.json)."""
+    return {
+        "_generated_from": "fruit_info.py (run `python tools/export_onnx.py` to regenerate)",
+        "fruits": FRUIT_INFO,
+        "freshness": {
+            "fresh_threshold": FRESH_THRESHOLD,
+            "rotten_threshold": ROTTEN_THRESHOLD,
+            "statuses": FRESHNESS_STATUSES,
+        },
+        "defaults": {
+            "shelf_life_days": DEFAULT_SHELF_LIFE_DAYS,
+            "storage": DEFAULT_STORAGE_TIP,
+            "cooking": DEFAULT_COOKING_TIP,
+        },
+    }

@@ -103,7 +103,13 @@ def prune_uploads(max_age_days: int = UPLOAD_MAX_AGE_DAYS):
 prune_uploads()
 
 # --- Fruit Knowledge Base (see fruit_info.py) ---
-from fruit_info import FRUIT_INFO  # noqa: E402
+from fruit_info import (  # noqa: E402
+    FRUIT_INFO,
+    DEFAULT_COOKING_TIP,
+    DEFAULT_SHELF_LIFE_DAYS,
+    DEFAULT_STORAGE_TIP,
+    evaluate_freshness,
+)
 
 # --- PyTorch MultiTask Architecture ---
 class MultiTaskEffB0(nn.Module):
@@ -147,32 +153,7 @@ inference_transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-def evaluate_freshness(p_fresh: float):
-    # FreshGuard rule:
-    # p_fresh >= 0.7 -> fresh
-    # p_fresh <= 0.3 -> rotten
-    # otherwise      -> normal
-    if p_fresh >= 0.7:
-        return {
-            "status": "fresh",
-            "status_kr": "Fresh",
-            "badge_color": "emerald",
-            "message": "This produce is in excellent, fresh condition."
-        }
-    elif p_fresh <= 0.3:
-        return {
-            "status": "rotten",
-            "status_kr": "Rotten",
-            "badge_color": "rose",
-            "message": "Spoilage has set in. Do not eat it; discard it."
-        }
-    else:
-        return {
-            "status": "normal",
-            "status_kr": "Normal",
-            "badge_color": "amber",
-            "message": "Good to eat now. Cook and use it soon."
-        }
+# evaluate_freshness lives in fruit_info.py (shared with the in-browser inference).
 
 def run_inference(image: Image.Image):
     image = ImageOps.exif_transpose(image)
@@ -203,8 +184,8 @@ def run_inference(image: Image.Image):
     fruit_meta = FRUIT_INFO.get(fruit_code, {})
     status_key = status_data["status"]
 
-    shelf_days = fruit_meta.get("shelf_life_days", {}).get(status_key, 3)
-    cooking_guide = fruit_meta.get(f"cooking_{status_key}", "Best eaten cooked")
+    shelf_days = fruit_meta.get("shelf_life_days", {}).get(status_key, DEFAULT_SHELF_LIFE_DAYS)
+    cooking_guide = fruit_meta.get(f"cooking_{status_key}", DEFAULT_COOKING_TIP)
 
     return {
         "fruit": fruit_code,
@@ -216,7 +197,7 @@ def run_inference(image: Image.Image):
         "badge_color": status_data["badge_color"],
         "status_message": status_data["message"],
         "shelf_life_days": shelf_days,
-        "storage_tips": fruit_meta.get("storage", "Store in a cool place."),
+        "storage_tips": fruit_meta.get("storage", DEFAULT_STORAGE_TIP),
         "cooking_tips": cooking_guide,
         "top_candidates": all_fruits[:4]
     }
