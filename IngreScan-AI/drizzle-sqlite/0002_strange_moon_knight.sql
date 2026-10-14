@@ -1,0 +1,1 @@
+ALTER TABLE `qc_batches` ADD `declared_sample_size` integer;

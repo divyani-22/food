@@ -256,6 +256,7 @@ export const qcBatches = sqliteTable("qc_batches", {
   vendor: text("vendor", { length: 120 }).notNull(),
   lotId: text("lot_id", { length: 80 }),
   notes: text("notes"),
+  declaredSampleSize: integer("declared_sample_size"), // physical sample size declared by the receiver (informational)
   verdict: text("verdict", { length: 32 }).notNull(),
   total: integer("total").notNull(),
   gradeA: integer("grade_a").default(0).notNull(),

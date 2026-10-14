@@ -15,6 +15,13 @@
       "when": 1791956993152,
       "tag": "0001_dapper_vengeance",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791984045719,
+      "tag": "0002_strange_moon_knight",
+      "breakpoints": true
     }
   ]
 }

@@ -313,6 +313,7 @@ export const qcBatches = mysqlTable("qc_batches", {
   vendor: varchar("vendor", { length: 120 }).notNull(),
   lotId: varchar("lot_id", { length: 80 }),
   notes: text("notes"),
+  declaredSampleSize: int("declared_sample_size"), // physical sample size declared by the receiver (informational)
   verdict: varchar("verdict", { length: 32 }).notNull(),
   total: int("total").notNull(),
   gradeA: int("grade_a").default(0).notNull(),

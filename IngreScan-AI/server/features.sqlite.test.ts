@@ -54,6 +54,21 @@ describe("qc router (B2B batch grading)", () => {
     { label: "crate-3.jpg", fruit: "apple", freshness: "rotten" as const, pFresh: 5, confidence: 95 },
   ];
 
+  it("stores the declared sample size and reproduces it in the reloaded summary and CSV", async () => {
+    const a = await user("qc-sample");
+    const res = await a.caller.qc.gradeBatch({ vendor: "Sample Co", sampleSize: 50, items: photos });
+    const got = await a.caller.qc.get({ id: res.id });
+    expect(got.batch.declaredSampleSize).toBe(50);
+    expect(got.summary.declaredSampleSize).toBe(50);
+    expect(got.summary.warnings.some((w) => w.includes("Declared sample size (50)"))).toBe(true);
+    const csv = await a.caller.qc.csv({ id: res.id });
+    expect(csv.csv).toContain("declared_sample_size");
+    expect(csv.csv).toMatch(/declared_sample_size,50/);
+
+    const none = await a.caller.qc.gradeBatch({ vendor: "No Sample", items: photos });
+    expect((await a.caller.qc.get({ id: none.id })).batch.declaredSampleSize).toBeNull();
+  });
+
   it("grades on the server from model outputs, stores the batch and keeps it private", async () => {
     const a = await user("qc-a");
     const b = await user("qc-b");
