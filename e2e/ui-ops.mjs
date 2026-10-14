@@ -333,8 +333,14 @@ async function readReceipt(page, text) {
   await shot(page, "receipt-review-us-1440.png");
   await readReceipt(page, "Qzxv Wrblat 1  12.00\nBananas 6 pcs 1.50\nTotal 13.50");
   const rows = await page.getByTestId("receipt-rows").locator("li").count();
+  // A line with no shelf-life estimate is a doubtful line: it starts unticked, with a visible doubt marker.
+  const doubt = await page.getByTestId("line-doubt").count();
+  const unticked = await page.locator('[data-testid="receipt-row"][data-included="false"]').count();
+  check("item with no shelf-life estimate starts unticked with a doubt marker", rows === 2 && doubt >= 1 && unticked === 1, `${rows} rows, ${doubt} doubt markers, ${unticked} unticked`);
+  // Ticking it brings back the missing-date highlight and blocks the import until a date is entered.
+  await page.locator('[data-testid="receipt-row"][data-included="false"]').getByRole("checkbox").first().click();
   const highlighted = await page.locator('[data-testid="receipt-row"].border-sunset-orange').count();
-  check("item with no shelf-life estimate is highlighted", rows === 2 && highlighted === 1, `${rows} rows, ${highlighted} highlighted`);
+  check("ticked item with no estimate is highlighted", highlighted === 1, `${highlighted} highlighted`);
   const invBefore = Number(sql("select count(*) from food_inventory"));
   await page.getByRole("button", { name: /^Add 2 items to my pantry$/ }).click();
   check("import blocked until the missing date is entered", Number(sql("select count(*) from food_inventory")) === invBefore && (await page.getByText(/needs? an expiry date before import/).count()) === 1);

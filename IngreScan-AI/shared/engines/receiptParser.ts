@@ -41,6 +41,9 @@ export type ReceiptSkipReason =
 
 export type ReceiptUnit = "pcs" | "kg" | "g" | "lb" | "oz" | "l" | "ml" | "pack" | "dozen";
 
+/** How sure the parser is about one line. Doubtful ("low") lines are unticked by default in the UI. */
+export type ReceiptLineConfidence = "high" | "medium" | "low";
+
 export interface ParsedReceiptItem {
   rawLine: string;
   name: string;
@@ -58,6 +61,10 @@ export interface ParsedReceiptItem {
   matchedKey: string | null;
   /** Estimate note from the shelf-life engine, when there is one. */
   note?: string;
+  /** Confidence that this line is a correctly read food item (separate from the shelf-life confidence). */
+  lineConfidence: ReceiptLineConfidence;
+  /** Short reasons behind a medium or low lineConfidence. */
+  lineConfidenceReasons?: string[];
 }
 
 export interface SkippedReceiptLine {
@@ -71,11 +78,25 @@ export interface ParsedReceipt {
   /** ISO 4217 code when one could be detected (INR, USD, EUR, GBP, CAD, AUD). */
   currency?: string;
   store?: string;
+  /** Order / purchase date (YYYY-MM-DD) used as the base for expiry estimates, when one was found. */
+  purchaseDate?: string;
+  /** Where purchaseDate came from. */
+  purchaseDateSource?: "bill" | "email";
   warnings: string[];
 }
 
 export interface ParseReceiptOptions {
+  /** "Today" for the clock; also the fallback purchase date. */
   now?: Date;
+  /**
+   * E-bill mode: stricter skipping of e-mail boilerplate, merchant tweaks, and the order date found in the
+   * bill (or fallbackDate) is used as the purchase date for the expiry estimates instead of today.
+   */
+  ebill?: boolean;
+  /** Merchant id from ebill.ts ("instacart", "blinkit", "zepto", "bigbasket", "instamart", "amazon_fresh", "generic"). */
+  merchant?: string;
+  /** Email header date (YYYY-MM-DD), used when the bill text has no order date (ebill mode only). */
+  fallbackDate?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -303,7 +324,13 @@ function looksLikeItemShape(line: string): boolean {
   return /\d/.test(line) && letterCount(line) >= 3;
 }
 
-function classifyLine(line: string): Classified {
+/** E-mail / web boilerplate that is never a purchased item. Applied in e-bill mode only. */
+const EBILL_HEADER_RE =
+  /\b(?:view\s+(?:in\s+(?:your\s+)?browser|(?:your\s+)?(?:order|receipt|invoice|bill))|manage\s+(?:your\s+)?order|unsubscribe|privacy\s+(?:policy|notice)|help\s+cent(?:er|re)|contact\s+us|(?:download|get)\s+the\s+app|rate\s+(?:your|this|us)|sold\s+by|supplied\s+by|fulfil+ed\s+by|condition\s*:|delivery\s+partner|order\s+(?:number|placed|date)|payment\s+method|invoice\s+date|billing\s+address|delivering\s+to|delivery\s+details|your\s+shopper|items?\s+subtotal|estimated\s+tax|free\s+delivery|feeding\s+india|replac(?:ed|ement)|pick\s*-?up|bill\s+details|item\s+bill|order\s+summary|all\s+rights\s+reserved|copyright)(?![A-Za-z0-9])|item\(s\)|\(c\)\s*\d{4}/i;
+const EBILL_SAVINGS_RE = /\b(?:saved|total\s+savings|cart\s+savings|bag\s+savings)\b/i;
+const ITEM_COUNT_RE = /^\s*(?:total\s+)?(?:items?|products?)\s*(?:\(\s*\d+\s*\)|[:=-]?\s*\d+)\s*$/i;
+
+function classifyLine(line: string, ebill = false): Classified {
   const trimmed = line.trim();
   if (!trimmed) return { kind: "blank" };
   if (/^[\s\-=_*#~.:+|<>/\\]+$/.test(trimmed)) return { kind: "blank" };
@@ -331,7 +358,12 @@ function classifyLine(line: string): Classified {
   if (TAX_RE.test(trimmed)) return { kind: "skip", reason: "tax" };
   if (FEE_RE.test(trimmed)) return { kind: "skip", reason: "fee" };
   if (PAYMENT_RE.test(trimmed)) return { kind: "skip", reason: "payment" };
+  if (ITEM_COUNT_RE.test(trimmed)) return { kind: "skip", reason: "header" };
   if ((ADDRESS_WORDS_RE.test(trimmed) || ADDRESS_CODES_RE.test(trimmed))) return { kind: "skip", reason: "address" };
+  if (ebill) {
+    if (EBILL_SAVINGS_RE.test(trimmed)) return { kind: "skip", reason: "discount" };
+    if (EBILL_HEADER_RE.test(trimmed)) return { kind: "skip", reason: "header" };
+  }
 
   if (HEADER_GREETING.test(trimmed) || HEADER_PHRASES.test(trimmed) || isColumnHeader(trimmed)) {
     return { kind: "skip", reason: "header" };
@@ -342,6 +374,160 @@ function classifyLine(line: string): Classified {
   // A line with only a single letter or ornamental noise.
   if (letterCount(trimmed) === 0 && !looksLikeItemShape(trimmed) && !/\d/.test(trimmed)) return { kind: "blank" };
   return { kind: "content" };
+}
+
+/* ------------------------------------------------------------------ */
+/* E-bill merchant tweaks and order date                                */
+/* ------------------------------------------------------------------ */
+
+interface MerchantInfo {
+  name: string;
+  currency?: string;
+  /** Order of day and month in all-numeric dates such as 12/10/2026. */
+  dateOrder: "dmy" | "mdy";
+}
+
+const MERCHANT_INFO: Readonly<Record<string, MerchantInfo>> = {
+  instacart: { name: "Instacart", currency: "USD", dateOrder: "mdy" },
+  amazon_fresh: { name: "Amazon Fresh", currency: "USD", dateOrder: "mdy" },
+  blinkit: { name: "Blinkit", currency: "INR", dateOrder: "dmy" },
+  zepto: { name: "Zepto", currency: "INR", dateOrder: "dmy" },
+  bigbasket: { name: "BigBasket", currency: "INR", dateOrder: "dmy" },
+  instamart: { name: "Swiggy Instamart", currency: "INR", dateOrder: "dmy" },
+};
+
+const MONTH_LIST = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const DATE_KEYWORD_RE =
+  /\b(?:order(?:ed)?\s*(?:date|on|placed)?|placed\s+on|delivered\s+on|delivery\s+date|invoice\s+date|bill\s+date|date\s+of\s+(?:order|purchase|delivery)|purchased|purchase\s+date|delivered|date)\b\s*[:-]?/i;
+const DATE_NOT_PURCHASE_RE = /\b(?:valid|expir\w*|best\s*before|use\s*by|till|until|offer|coupon|due|return|refund|by)\b/i;
+
+function isRealDate(y: number, m: number, d: number): boolean {
+  if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+}
+
+const iso = (y: number, m: number, d: number) => `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+/** Parse the first date in a line. `ambiguous` is set for all-numeric dates where day and month could swap. */
+function parseDateInLine(line: string, order: "dmy" | "mdy"): { iso: string; ambiguous: boolean } | null {
+  let m = /\b(\d{4})-(\d{1,2})-(\d{1,2})\b/.exec(line);
+  if (m && isRealDate(+m[1], +m[2], +m[3])) return { iso: iso(+m[1], +m[2], +m[3]), ambiguous: false };
+  m = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?[\\s-]+(${MONTHS})[a-z]*\\.?,?[\\s-]+(\\d{2,4})\\b`, "i").exec(line);
+  if (m) {
+    const y = m[3].length === 2 ? 2000 + +m[3] : +m[3];
+    const mi = MONTH_LIST.indexOf(m[2].toLowerCase().slice(0, 3)) + 1;
+    if (mi > 0 && isRealDate(y, mi, +m[1])) return { iso: iso(y, mi, +m[1]), ambiguous: false };
+  }
+  m = new RegExp(`\\b(${MONTHS})[a-z]*\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{2,4})\\b`, "i").exec(line);
+  if (m) {
+    const y = m[3].length === 2 ? 2000 + +m[3] : +m[3];
+    const mi = MONTH_LIST.indexOf(m[1].toLowerCase().slice(0, 3)) + 1;
+    if (mi > 0 && isRealDate(y, mi, +m[2])) return { iso: iso(y, mi, +m[2]), ambiguous: false };
+  }
+  m = /\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})\b/.exec(line);
+  if (m) {
+    const a = +m[1];
+    const b = +m[2];
+    const y = m[3].length === 2 ? 2000 + +m[3] : +m[3];
+    let day: number;
+    let mon: number;
+    let ambiguous = false;
+    if (a > 12) {
+      day = a;
+      mon = b;
+    } else if (b > 12) {
+      mon = a;
+      day = b;
+    } else {
+      ambiguous = a !== b;
+      if (order === "dmy") {
+        day = a;
+        mon = b;
+      } else {
+        mon = a;
+        day = b;
+      }
+    }
+    if (isRealDate(y, mon, day)) return { iso: iso(y, mon, day), ambiguous };
+  }
+  return null;
+}
+
+interface BillDate {
+  iso: string;
+  source: "bill" | "email";
+  ambiguous: boolean;
+}
+
+/**
+ * Find the order date in a bill: a dated line carrying an order/delivery keyword wins, then the email header date.
+ * Dates in the future or older than 400 days are rejected (a warning is added) so a misread date cannot shift
+ * every expiry.
+ */
+function findBillDate(lines: string[], order: "dmy" | "mdy", today: Date, fallback: string | undefined, warnings: string[]): BillDate | null {
+  const todayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const inRange = (isoDate: string): boolean => {
+    const t = Date.parse(`${isoDate}T00:00:00Z`);
+    return Number.isFinite(t) && t <= todayMs + 86_400_000 && t >= todayMs - 400 * 86_400_000;
+  };
+  let sawOutOfRange = false;
+  for (const line of lines.slice(0, 400)) {
+    if (!DATE_KEYWORD_RE.test(line) || DATE_NOT_PURCHASE_RE.test(line)) continue;
+    const d = parseDateInLine(line, order);
+    if (!d) continue;
+    if (inRange(d.iso)) return { iso: d.iso, source: "bill", ambiguous: d.ambiguous };
+    sawOutOfRange = true;
+  }
+  if (fallback && /^\d{4}-\d{2}-\d{2}$/.test(fallback)) {
+    if (inRange(fallback)) return { iso: fallback, source: "email", ambiguous: false };
+    sawOutOfRange = true;
+  }
+  if (sawOutOfRange) warnings.push("An order date was found but it is in the future or more than a year old, so today was used as the purchase date.");
+  return null;
+}
+
+/** Combine reasons into one line confidence. */
+function scoreLine(input: {
+  shelf: ShelfLifeConfidence | "none";
+  hasPrice: boolean;
+  listMode: boolean;
+  ambiguous: boolean;
+  name: string;
+  alreadyExpired: boolean;
+}): { level: ReceiptLineConfidence; reasons: string[] } {
+  const reasons: string[] = [];
+  let level: ReceiptLineConfidence = "high";
+  const lower = (to: ReceiptLineConfidence) => {
+    const rank = { high: 2, medium: 1, low: 0 } as const;
+    if (rank[to] < rank[level]) level = to;
+  };
+  if (input.shelf === "none") {
+    lower("low");
+    reasons.push("Product not recognised as a food with a known shelf life");
+  } else if (input.shelf === "low") {
+    lower("medium");
+    reasons.push("Rough shelf-life estimate");
+  }
+  if (!input.hasPrice && !input.listMode) {
+    lower("medium");
+    reasons.push("No price found on the line");
+  }
+  if (input.ambiguous) {
+    lower("low");
+    reasons.push("More than one possible price");
+  }
+  const letters = letterCount(input.name);
+  const digits = (input.name.match(/\d/g) || []).length;
+  if (letters < 3 || digits > letters) {
+    lower("low");
+    reasons.push("Name looks incomplete");
+  }
+  if (input.alreadyExpired) {
+    lower("low");
+    reasons.push("Estimated expiry is already in the past based on the order date");
+  }
+  return { level, reasons };
 }
 
 /* ------------------------------------------------------------------ */
@@ -458,6 +644,7 @@ function cleanNameText(s: string): string {
     .replace(/\(\s*\)/g, " ")
     .replace(/\bmrp\b\.?/gi, " ")
     .replace(SIZE_ALL_RE, " ")
+    .replace(/\b\d+(?:\.\d+)?\s*(?:gal(?:lons?)?|qts?|quarts?|pints?|fl\.?\s*oz)\b/gi, " ")
     .replace(/\b\d+(?:[.,]\d+)?\s*%/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -698,6 +885,15 @@ interface DraftItem {
   rateUnit?: ReceiptUnit | null;
   price?: number;
   packPieces?: number;
+  ambiguous?: boolean;
+}
+
+interface BuildContext {
+  /** Base date for the shelf-life estimate (purchase date; "today" when unknown). */
+  base: Date | undefined;
+  /** Real "today" (UTC) used to detect estimates that already lapsed. */
+  todayIso: string | undefined;
+  listMode: boolean;
 }
 
 function finalizeName(name: string): string {
@@ -724,7 +920,8 @@ function formatSize(value: number | undefined, unit: ReceiptUnit | undefined): s
   return `${round(value, 3)} ${unit}`;
 }
 
-function buildItem(draft: DraftItem, now: Date | undefined, warnings: string[]): ParsedReceiptItem | { skip: ReceiptSkipReason } {
+function buildItem(draft: DraftItem, ctx: BuildContext, warnings: string[]): ParsedReceiptItem | { skip: ReceiptSkipReason } {
+  const now = ctx.base;
   const name = finalizeName(draft.name);
   if (letterCount(name) < 2) return { skip: "unparseable" };
   const cls = classifyFoodItem(name);
@@ -771,6 +968,16 @@ function buildItem(draft: DraftItem, now: Date | undefined, warnings: string[]):
   const price = clampPrice(draft.price);
   if (draft.price !== undefined && price === undefined) warnings.push(`Price out of range ignored for "${name}".`);
 
+  const expired = est !== null && ctx.todayIso !== undefined && est.expiryDate < ctx.todayIso;
+  const conf = scoreLine({
+    shelf: est ? est.confidence : "none",
+    hasPrice: price !== undefined,
+    listMode: ctx.listMode,
+    ambiguous: draft.ambiguous === true,
+    name,
+    alreadyExpired: expired,
+  });
+
   return {
     rawLine: toSafeAscii(draft.rawLines.join(" | "), 400),
     name,
@@ -784,8 +991,12 @@ function buildItem(draft: DraftItem, now: Date | undefined, warnings: string[]):
     shelfLifeConfidence: est ? est.confidence : "none",
     matchedKey: est ? est.matchedKey : null,
     ...(est ? { note: est.note } : {}),
+    lineConfidence: conf.level,
+    ...(conf.reasons.length ? { lineConfidenceReasons: conf.reasons } : {}),
   };
 }
+
+const CONF_RANK: Readonly<Record<ReceiptLineConfidence, number>> = { high: 2, medium: 1, low: 0 };
 
 function mergeKey(it: ParsedReceiptItem): string {
   return `${it.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}|${it.unit}|${it.packSize ?? ""}`;
@@ -804,6 +1015,10 @@ function mergeDuplicates(items: ParsedReceiptItem[]): ParsedReceiptItem[] {
     }
     const base = out[at];
     base.quantity = clampQty(base.quantity + it.quantity);
+    if (CONF_RANK[it.lineConfidence] < CONF_RANK[base.lineConfidence]) {
+      base.lineConfidence = it.lineConfidence;
+      base.lineConfidenceReasons = it.lineConfidenceReasons;
+    }
     if (it.price !== undefined) base.price = round((base.price ?? 0) + it.price, 2);
     if (base.rawLine.length < 380) base.rawLine = toSafeAscii(`${base.rawLine} | ${it.rawLine}`, 400);
   }
@@ -857,11 +1072,25 @@ function parseReceiptTextUnsafe(text: unknown, options: ParseReceiptOptions): Pa
   });
   if (longLines > 0) warnings.push(`${longLines} very long line(s) were truncated.`);
 
-  const currency = detectCurrency(folded);
-  const store = detectStore(lines);
+  const ebill = options.ebill === true;
+  const mInfo = ebill && options.merchant ? MERCHANT_INFO[options.merchant] : undefined;
+  const currency = detectCurrency(folded) ?? mInfo?.currency;
+  const store = mInfo ? mInfo.name : detectStore(lines);
+
+  // Purchase date: only e-bills carry a trustworthy order date; plain receipts keep using "today".
+  let base: Date | undefined = now;
+  let purchaseDate: BillDate | null = null;
+  if (ebill) {
+    const today = now ?? new Date();
+    purchaseDate = findBillDate(lines, mInfo?.dateOrder ?? "dmy", today, options.fallbackDate, warnings);
+    if (purchaseDate) {
+      base = new Date(`${purchaseDate.iso}T12:00:00Z`);
+      if (purchaseDate.ambiguous) warnings.push(`The order date ${purchaseDate.iso} was read as ${mInfo?.dateOrder === "mdy" ? "month/day" : "day/month"}/year; check it.`);
+    }
+  }
 
   // First pass: classify.
-  const classes = lines.map((l) => classifyLine(l));
+  const classes = lines.map((l) => classifyLine(l, ebill));
   const skipped: SkippedReceiptLine[] = [];
   const contentIdx: number[] = [];
   classes.forEach((c, i) => {
@@ -927,6 +1156,7 @@ function parseReceiptTextUnsafe(text: unknown, options: ParseReceiptOptions): Pa
       target.draft.sizeUnit = info.sizeUnit;
     }
     if (info.rate) target.draft.rateUnit = info.rate.unit;
+    if (info.priceAmbiguous) target.draft.ambiguous = true;
     if (info.price !== undefined) target.draft.price = info.price;
     if (info.packPieces !== undefined) target.draft.packPieces = info.packPieces;
     target.draft.rawLines.push(src.trim());
@@ -1002,6 +1232,7 @@ function parseReceiptTextUnsafe(text: unknown, options: ParseReceiptOptions): Pa
         rateUnit: info.rate ? info.rate.unit : undefined,
         price: info.price,
         packPieces: info.packPieces,
+        ambiguous: info.priceAmbiguous || undefined,
       },
       hasInfo,
     };
@@ -1012,8 +1243,9 @@ function parseReceiptTextUnsafe(text: unknown, options: ParseReceiptOptions): Pa
 
   // Build items.
   const built: ParsedReceiptItem[] = [];
+  const buildCtx: BuildContext = { base, todayIso: (now ?? new Date()).toISOString().slice(0, 10), listMode };
   for (const { draft } of drafts) {
-    const res = buildItem(draft, now, warnings);
+    const res = buildItem(draft, buildCtx, warnings);
     if ("skip" in res) skipLine(draft.rawLines.join(" "), res.skip);
     else built.push(res);
   }
@@ -1026,6 +1258,8 @@ function parseReceiptTextUnsafe(text: unknown, options: ParseReceiptOptions): Pa
   if (items.length === 0) warnings.push("No grocery items were recognised. Check that the text contains item lines.");
   const noMatch = items.filter((i) => i.shelfLifeConfidence === "none").length;
   if (noMatch > 0) warnings.push(`${noMatch} item(s) have no shelf-life estimate; please set an expiry date manually.`);
+  const lapsed = items.filter((i) => i.lineConfidenceReasons?.some((r) => r.startsWith("Estimated expiry is already"))).length;
+  if (lapsed > 0) warnings.push(`${lapsed} item(s) would already be past their estimated expiry on the order date; they are unticked.`);
   if (skipped.length > 400) skipped.length = 400;
 
   return {
@@ -1033,6 +1267,7 @@ function parseReceiptTextUnsafe(text: unknown, options: ParseReceiptOptions): Pa
     skipped,
     ...(currency ? { currency } : {}),
     ...(store ? { store } : {}),
+    ...(purchaseDate ? { purchaseDate: purchaseDate.iso, purchaseDateSource: purchaseDate.source } : {}),
     warnings,
   };
 }
@@ -1273,6 +1508,9 @@ export function enrichReceiptItems(items: SanitizedReceiptItem[], options: Parse
       shelfLifeConfidence: est ? est.confidence : "none",
       matchedKey: est ? est.matchedKey : null,
       ...(est ? { note: est.note } : {}),
+      // Read by a model, not by the rule-based parser: never "high" and unticked when no shelf life is known.
+      lineConfidence: est ? "medium" : "low",
+      ...(est ? {} : { lineConfidenceReasons: ["Product not recognised as a food with a known shelf life"] }),
     });
   }
   return out;

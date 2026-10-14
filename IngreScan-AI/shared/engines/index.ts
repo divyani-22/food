@@ -97,10 +97,21 @@ export type {
   SkippedReceiptLine,
   ParsedReceipt,
   ParseReceiptOptions,
+  ReceiptLineConfidence,
   ReceiptExtractionMessage,
   SanitizedReceiptItem,
   SanitizeReceiptResult,
 } from "./receiptParser";
+
+export {
+  MAX_EBILL_CHARS,
+  EBILL_MERCHANTS,
+  ebillToText,
+  htmlToText,
+  decodeMimeWords,
+  detectEbillMerchant,
+} from "./ebill";
+export type { EbillMerchantId, EbillMerchant, EbillFormat, EbillText } from "./ebill";
 
 export {
   DEFAULT_QC_THRESHOLDS,

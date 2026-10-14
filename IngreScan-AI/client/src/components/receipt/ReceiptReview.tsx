@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { TriangleAlert } from "lucide-react";
 import { memo } from "react";
 
 export const UNITS = ["pcs", "kg", "g", "lb", "oz", "l", "ml", "pack", "dozen"] as const;
@@ -34,6 +35,9 @@ export interface ReviewRow {
   hadSuggestion: boolean;
   price?: number;
   packSize?: string;
+  /** Parser confidence that this is a correctly read food line. "low" rows start unticked. */
+  lineConfidence?: "high" | "medium" | "low";
+  lineReasons?: string[];
 }
 
 export interface RowErrors {
@@ -153,6 +157,15 @@ export const ReceiptRow = memo(function ReceiptRow({
         <span className="hidden md:inline-flex">
           <StatusTag tone={conf.tone}>{conf.label}</StatusTag>
         </span>
+        {row.lineConfidence && row.lineConfidence !== "high" ? (
+          <span className="inline-flex items-center gap-1.5" data-testid="line-doubt" data-level={row.lineConfidence}>
+            <TriangleAlert className="h-3.5 w-3.5 text-sunset-orange" aria-hidden="true" />
+            <span className="text-xs font-bold text-graphite">
+              {row.lineConfidence === "low" ? "Doubtful line" : "Check this line"}
+              {row.lineReasons?.length ? `: ${row.lineReasons.join("; ")}` : ""}
+            </span>
+          </span>
+        ) : null}
         {row.note ? <span className="text-xs text-muted-foreground">{row.note}</span> : null}
         <span className="min-w-0 truncate text-xs text-muted-foreground" title={row.rawLine}>
           Receipt line: {row.rawLine}

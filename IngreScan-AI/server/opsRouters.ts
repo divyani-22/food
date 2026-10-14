@@ -8,6 +8,7 @@ import {
   batchPhotosCsv,
   batchReportCsv,
   buildReceiptExtractionMessages,
+  ebillToText,
   enrichReceiptItems,
   gradePhoto,
   parseReceiptText,
@@ -195,19 +196,44 @@ export const receiptRouter = router({
       z
         .object({
           text: z.string().max(60_000).optional(),
+          /** Raw content of an uploaded .eml / .html / .htm / .txt e-bill (read as text by the client). PDF is not supported. */
+          ebill: z.object({ content: z.string().max(1_100_000), filename: z.string().max(255).optional() }).optional(),
           imageDataUrl: z.string().max(MAX_IMAGE_DATA_URL).regex(/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/i).optional(),
         })
-        .refine((v) => Boolean(v.text?.trim()) || Boolean(v.imageDataUrl), { message: "Provide receipt text or a receipt photo." })
+        .refine((v) => Boolean(v.text?.trim()) || Boolean(v.ebill?.content?.trim()) || Boolean(v.imageDataUrl), {
+          message: "Provide receipt text, an e-bill file or a receipt photo.",
+        })
     )
     .mutation(async ({ input }) => {
       const now = new Date();
-      if (input.text?.trim()) {
-        const parsed = parseReceiptText(input.text, { now });
+      const rawText = input.ebill?.content?.trim() ? input.ebill.content : input.text?.trim() ? input.text : "";
+      if (rawText) {
+        // An uploaded file is always an e-bill. Pasted text is treated as one when it is an email/HTML or a known merchant.
+        const eb = ebillToText(rawText, { filename: input.ebill?.filename });
+        const uploaded = Boolean(input.ebill?.content?.trim());
+        if (uploaded && !eb.text.trim()) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: eb.warnings[eb.warnings.length - 1] ?? "That e-bill had no readable text. Paste the bill text instead." });
+        }
+        const isEbill = uploaded || eb.format !== "text" || eb.merchant.id !== "generic";
+        const body = isEbill ? eb.text : rawText;
+        const parsed = parseReceiptText(body, {
+          now,
+          ...(isEbill ? { ebill: true, merchant: eb.merchant.id, fallbackDate: eb.headerDate } : {}),
+        });
+        const meta = {
+          merchant: isEbill && eb.merchant.id !== "generic" ? eb.merchant.name : null,
+          orderDate: parsed.purchaseDate ?? null,
+          orderDateSource: parsed.purchaseDateSource ?? null,
+          ebillFormat: isEbill ? eb.format : null,
+          subject: eb.subject ?? null,
+        };
+        const warnings = isEbill ? [...eb.warnings, ...parsed.warnings] : parsed.warnings;
         if (parsed.items.length > 0 || !isRealLLMConfigured()) {
-          return { source: "parser" as const, items: parsed.items, skipped: parsed.skipped, currency: parsed.currency ?? null, store: parsed.store ?? null, warnings: parsed.warnings };
+          return { source: "parser" as const, items: parsed.items, skipped: parsed.skipped, currency: parsed.currency ?? null, store: parsed.store ?? null, ...meta, warnings };
         }
         // Nothing recognised and a real model is available: let it read the layout.
-        return extractWithLLM(input.text, now);
+        const viaLlm = await extractWithLLM(body, now);
+        return { ...viaLlm, ...meta, warnings: [...warnings, ...viaLlm.warnings] };
       }
       if (!isRealLLMConfigured()) {
         throw new TRPCError({
@@ -273,6 +299,11 @@ async function extractWithLLM(textOrImage: string, now: Date) {
     skipped: [] as Array<{ line: string; reason: string }>,
     currency: null as string | null,
     store: null as string | null,
+    merchant: null as string | null,
+    orderDate: null as string | null,
+    orderDateSource: null as "bill" | "email" | null,
+    ebillFormat: null as "eml" | "html" | "text" | null,
+    subject: null as string | null,
     warnings: sanitized.warnings,
   };
 }

@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../server/routers";
-import { AlertTriangle, CheckCircle2, ChevronDown, ImagePlus, Loader2, ReceiptText, RotateCcw, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, ImagePlus, Loader2, Mail, ReceiptText, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
@@ -19,6 +19,8 @@ import { toast } from "sonner";
 type Parsed = inferRouterOutputs<AppRouter>["receipt"]["parse"];
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_EBILL_BYTES = 1024 * 1024;
+const EBILL_EXT = /\.(eml|html?|txt)$/i;
 const SKIP_LABEL: Record<string, string> = {
   total: "Total line",
   tax: "Tax",
@@ -40,7 +42,7 @@ let rowSeq = 0;
 function toRows(parsed: Parsed): ReviewRow[] {
   return parsed.items.map((it) => ({
     key: `r${++rowSeq}`,
-    include: true,
+    include: it.lineConfidence !== "low",
     name: it.name,
     quantity: String(it.quantity),
     unit: it.unit,
@@ -53,12 +55,23 @@ function toRows(parsed: Parsed): ReviewRow[] {
     hadSuggestion: !!it.suggestedExpiryDate,
     price: it.price,
     packSize: it.packSize,
+    lineConfidence: it.lineConfidence,
+    lineReasons: it.lineConfidenceReasons,
   }));
+}
+
+function formatOrderDate(iso: string): string {
+  const d = new Date(`${iso}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
 export default function ReceiptImport() {
   const [text, setText] = useState("");
   const [image, setImage] = useState<{ dataUrl: string; name: string } | null>(null);
+  const [ebill, setEbill] = useState<{ content: string; name: string } | null>(null);
+  const [ebillError, setEbillError] = useState<string | null>(null);
+  const ebillRef = useRef<HTMLInputElement>(null);
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [errors, setErrors] = useState<Record<string, RowErrors>>({});
@@ -110,9 +123,35 @@ export default function ReceiptImport() {
     reader.readAsDataURL(file);
   };
 
+  const onEbillFile = (file: File | undefined) => {
+    if (!file) return;
+    setEbillError(null);
+    if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
+      setEbillError("PDF e-bills are not supported. Open the PDF, select and copy its text, and paste it into the box above.");
+      return;
+    }
+    if (!EBILL_EXT.test(file.name)) {
+      setEbillError("Use an .eml, .html, .htm or .txt file, or paste the bill text.");
+      return;
+    }
+    if (file.size > MAX_EBILL_BYTES) {
+      setEbillError("That file is larger than 1 MB. Paste only the order items section instead.");
+      return;
+    }
+    if (file.size === 0) {
+      setEbillError("That file is empty.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setEbill({ content: String(reader.result ?? ""), name: file.name });
+    reader.onerror = () => setEbillError("Could not read that file.");
+    reader.readAsText(file);
+  };
+
   const readReceipt = () => {
     setParseError(null);
-    if (text.trim()) parse.mutate({ text });
+    if (ebill) parse.mutate({ ebill: { content: ebill.content, filename: ebill.name } });
+    else if (text.trim()) parse.mutate({ text });
     else if (image) parse.mutate({ imageDataUrl: image.dataUrl });
   };
 
@@ -156,6 +195,8 @@ export default function ReceiptImport() {
   const reset = () => {
     setText("");
     setImage(null);
+    setEbill(null);
+    setEbillError(null);
     setParsed(null);
     setRows([]);
     setErrors({});
@@ -164,7 +205,7 @@ export default function ReceiptImport() {
     setImportError(null);
   };
 
-  const canRead = (text.trim().length > 0 || !!image) && !parse.isPending;
+  const canRead = (text.trim().length > 0 || !!image || !!ebill) && !parse.isPending;
 
   return (
     <DashboardLayout>
@@ -172,7 +213,7 @@ export default function ReceiptImport() {
         <PageHeader
           eyebrow="Track"
           title="Receipt import"
-          description="Paste a grocery receipt or e-bill and add what you bought to your pantry, with estimated expiry dates you can edit before saving."
+          description="Paste a grocery receipt or e-bill, or upload an order email (.eml or .html), and add what you bought to your pantry with estimated expiry dates you can edit before saving."
         />
 
         {importedCount !== null ? (
@@ -213,6 +254,51 @@ export default function ReceiptImport() {
                 </div>
 
                 <div className="space-y-3">
+                  <p className="text-sm font-bold text-graphite">Or upload an e-bill</p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button variant="secondary" onClick={() => ebillRef.current?.click()}>
+                      <Mail className="h-4 w-4" />
+                      Upload e-bill file
+                    </Button>
+                    <input
+                      ref={ebillRef}
+                      type="file"
+                      accept=".eml,.html,.htm,.txt,message/rfc822,text/html,text/plain,application/pdf"
+                      className="sr-only"
+                      tabIndex={-1}
+                      aria-label="Upload e-bill file"
+                      data-testid="ebill-file"
+                      onChange={(e) => {
+                        onEbillFile(e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
+                    {ebill && (
+                      <span className="flex min-w-0 items-center gap-2 rounded-3xl bg-fog py-1 pl-3 pr-1 text-sm font-medium text-graphite" data-testid="ebill-chip">
+                        <span className="truncate">{ebill.name}</span>
+                        <button
+                          type="button"
+                          aria-label="Remove e-bill file"
+                          onClick={() => setEbill(null)}
+                          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                  {ebillError && (
+                    <div className="flex items-start gap-3 rounded-2xl bg-fog p-3" role="alert" data-testid="ebill-error">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-signal-red-orange" aria-hidden="true" />
+                      <p className="text-sm font-medium text-graphite">{ebillError}</p>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Save the order email from Instacart, Blinkit, Zepto, BigBasket, Swiggy Instamart or Amazon Fresh as .eml, or save the page as .html, then upload it (up to 1 MB). PDF files are not supported: copy the text from the PDF and paste it above. Layouts differ and may change, so check every row.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
                   <p className="text-sm font-bold text-graphite">Or use a photo</p>
                   <div className="flex flex-wrap items-center gap-3">
                     <Button variant="secondary" onClick={() => fileRef.current?.click()}>
@@ -247,7 +333,7 @@ export default function ReceiptImport() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Reading a photo needs an AI key on the server; pasted text always works and is parsed locally on the server. Photos up to 8 MB. If both are given the text is used.
+                    Reading a photo needs an AI key on the server; pasted text always works and is parsed locally on the server. Photos up to 8 MB. If several are given the e-bill file is used first, then the text.
                   </p>
                 </div>
 
@@ -270,7 +356,7 @@ export default function ReceiptImport() {
                     {parse.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ReceiptText className="h-4 w-4" />}
                     {parse.isPending ? "Reading" : "Read receipt"}
                   </Button>
-                  {(text || image || parsed) && (
+                  {(text || image || ebill || parsed) && (
                     <Button variant="ghost" size="lg" onClick={reset} disabled={parse.isPending}>
                       Clear
                     </Button>
@@ -298,7 +384,22 @@ export default function ReceiptImport() {
                     </h2>
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusTag tone="info">{parsed.source === "llm" ? "Read by AI" : "Parsed from text"}</StatusTag>
-                      {parsed.store && <StatusTag>{parsed.store}</StatusTag>}
+                      {parsed.merchant ? (
+                        <span data-testid="merchant-tag">
+                          <StatusTag tone="info">{parsed.merchant}</StatusTag>
+                        </span>
+                      ) : (
+                        parsed.store && <StatusTag>{parsed.store}</StatusTag>
+                      )}
+                      {parsed.orderDate && (
+                        <span className="inline-flex items-center gap-1.5" data-testid="order-date">
+                          <CalendarDays className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                          <StatusTag>
+                            Order date {formatOrderDate(parsed.orderDate)}
+                            {parsed.orderDateSource === "email" ? " (email date)" : ""}
+                          </StatusTag>
+                        </span>
+                      )}
                       {parsed.currency && <StatusTag>{parsed.currency}</StatusTag>}
                       <span className="text-sm text-muted-foreground">
                         {rows.length} item{rows.length === 1 ? "" : "s"} detected
@@ -325,7 +426,9 @@ export default function ReceiptImport() {
                 ) : (
                   <>
                     <p className="text-sm text-muted-foreground">
-                      Expiry dates are estimates from typical shelf life. Check the pack for the printed date and edit any row.
+                      Expiry dates are estimates from typical shelf life
+                      {parsed.orderDate ? `, counted from the order date (${formatOrderDate(parsed.orderDate)})` : ""}. Check the pack for the printed date and edit any row.
+                      {rows.some((r) => !r.include) ? " Doubtful lines start unticked; tick them if they are correct." : ""}
                     </p>
                     <ReceiptHeader />
                     <ul className="space-y-3" data-testid="receipt-rows">
