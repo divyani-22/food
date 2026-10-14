@@ -95,12 +95,30 @@ In development you are signed in automatically as a local user. Production
 (`pnpm build && pnpm start`) requires OAuth settings (`VITE_OAUTH_PORTAL_URL`, `VITE_APP_ID`,
 `OAUTH_SERVER_URL`) and an LLM key (`OPENAI_API_KEY`); see `IngreScan-AI/README.md`.
 
-### 4. Tests
+### 4. How the two parts fit together
+This is one website: the IngreScan web app on port 3000. Its **Fresh Produce AI** page sends photos to the
+FreshGuard service (port 5000) through an authenticated proxy, and the service only identifies the produce.
+Everything you save (pantry items and scan history) is stored **per user in MySQL**, next to your scans and
+profile. The proxy only forwards the classification routes, so users can never read each other's data.
+
+`http://127.0.0.1:5000` also serves the original standalone FreshGuard page. It is a single-user demo with its own
+SQLite file (`freshguard.db`) and is not linked to web-app accounts.
+
+**Moving existing FreshGuard data into an account (one time):**
+```bash
+python tools/import_freshguard_data.py --user-id 1 > import.sql
+mysql -u ingrescan -p ingrescan < import.sql
+```
+Use the `id` of the user in the `users` table who should own the old pantry and history. Run it once.
+
+### 5. Tests
 ```bash
 python -m pytest tests -q                 # Flask API + real-model check (needs torch)
 cd IngreScan-AI && pnpm check && pnpm test   # type-check + server unit tests
 # Full browser journey (both servers running, DB as above):
 npx playwright@1.56.1 install chromium && node e2e/full-journey.mjs
+# Per-user storage / isolation check against the real API (start the web app with VITE_APP_ID=e2e-app JWT_SECRET=dev-only-secret):
+node e2e/produce-isolation.mjs          # add BASE_URL=http://localhost:4000 EXPECT_PROD=1 for a production build
 ```
 
 The FreshGuard page's CSS is prebuilt in `static/css/freshguard.css`; after editing
@@ -112,3 +130,12 @@ Visit **[http://localhost:3000](http://localhost:3000)** to use the application.
 
 ## License
 MIT License - Created by [divyani-22](https://github.com/divyani-22)
+
+## Zero-config setup and new features
+
+- **No database needed to start**: without `DATABASE_URL` the web app uses an embedded SQLite file (`IngreScan-AI/data/ingrescan.db`). Set `DATABASE_URL` to use MySQL. See `docs/database.md`.
+- **On-device produce inspection** (ONNX in the browser, server fallback): `docs/on-device-inference.md`.
+- **Barcode and Open Food Facts lookup** alongside OCR: `docs/barcode-scanning.md`.
+- **Ethylene alerts, health alerts, Rescue My Fridge, receipt import, batch QC**: `docs/engines-health.md`, `docs/engines-ops.md`.
+- **WhatsApp bot** (Twilio or Meta): `docs/whatsapp-bot.md`. Copy `IngreScan-AI/.env.example` to `.env`.
+- Tests: `cd IngreScan-AI && npx vitest run`; `python3 -m pytest tests -q`.

@@ -455,6 +455,11 @@ export class LLMUnavailableError extends Error {
   }
 }
 
+/** True when a real LLM API key is configured (the local keyword engine is a demo fallback, not a real model). */
+export function isRealLLMConfigured(): boolean {
+  return Boolean(getApiKey());
+}
+
 /** Local keyword engine is allowed outside production, or when explicitly enabled. */
 export function isLocalFallbackAllowed(): boolean {
   return process.env.NODE_ENV !== "production" || process.env.ALLOW_LOCAL_LLM_FALLBACK === "true";

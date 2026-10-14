@@ -1,0 +1,96 @@
+{
+  "name": "freshguard",
+  "architecture": "EfficientNet-B0 multitask (fruit + fresh/rotten)",
+  "model_file": "freshguard.onnx",
+  "model_bytes": 16090152,
+  "model_sha256": "7c219a0fd862d3dfeb70aafefed5b134362641d0bd7fc53d942fde61a18108de",
+  "input": {
+    "name": "input",
+    "shape": [
+      1,
+      3,
+      224,
+      224
+    ],
+    "layout": "NCHW",
+    "dtype": "float32"
+  },
+  "outputs": {
+    "fruit": "fruit_logits",
+    "fresh": "fresh_logits"
+  },
+  "fruit_names": [
+    "apple",
+    "banana",
+    "bell_pepper",
+    "carrot",
+    "cucumber",
+    "mango",
+    "orange",
+    "potato",
+    "strawberry",
+    "tomato"
+  ],
+  "fresh_labels": [
+    "fresh",
+    "rotten"
+  ],
+  "fresh_index": 0,
+  "preprocess": {
+    "resize_shorter_side": 256,
+    "interpolation": "bilinear (antialiased, PIL/torchvision semantics)",
+    "center_crop": 224,
+    "mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "std": [
+      0.229,
+      0.224,
+      0.225
+    ],
+    "exif_orientation": "applied",
+    "color": "RGB"
+  },
+  "opset": 17,
+  "checkpoint_file": "efficientnet_b0_freshguard_multitask.pt",
+  "checkpoint_sha256": "0d9ecc42c5cc8471cf9a1889eed2c353dc1fa17c4a94c3a82ed7138fc395962a",
+  "export_verification": {
+    "images": [
+      "apple.jpg",
+      "apple_crop",
+      "apple_rot90",
+      "apple_small",
+      "apple_jpeg35",
+      "banana.jpg",
+      "banana_crop",
+      "banana_rot90",
+      "banana_small",
+      "banana_jpeg35",
+      "orange.jpg",
+      "orange_crop",
+      "orange_rot90",
+      "orange_small",
+      "orange_jpeg35",
+      "strawberry.jpg",
+      "strawberry_crop",
+      "strawberry_rot90",
+      "strawberry_small",
+      "strawberry_jpeg35",
+      "tomato.jpg",
+      "tomato_crop",
+      "tomato_rot90",
+      "tomato_small",
+      "tomato_jpeg35"
+    ],
+    "max_abs_logit_diff": 2.3126602172851562e-05,
+    "tolerance": 0.001
+  },
+  "exported_at": "2026-10-14T05:38:51Z",
+  "versions": {
+    "torch": "2.14.1+cu130",
+    "onnx": "1.23.2",
+    "onnxruntime": "1.29.0"
+  }
+}

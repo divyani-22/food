@@ -79,6 +79,7 @@ def init_db():
 init_db()
 
 UPLOAD_MAX_AGE_DAYS = 7
+FRESHGUARD_PORT = int(os.environ.get("FRESHGUARD_PORT", "5000"))
 
 def prune_uploads(max_age_days: int = UPLOAD_MAX_AGE_DAYS):
     """Delete old uploaded scan images that no inventory item or history row references."""
@@ -101,89 +102,14 @@ def prune_uploads(max_age_days: int = UPLOAD_MAX_AGE_DAYS):
 
 prune_uploads()
 
-# --- Fruit Knowledge Base ---
-FRUIT_INFO = {
-    "apple": {
-        "kr": "Apple",
-        "shelf_life_days": {"fresh": 14, "normal": 4, "rotten": 0},
-        "storage": "Refrigerate at 0–4°C. Apples release ethylene gas, so seal them in a bag away from other fruit.",
-        "cooking_fresh": "Eat fresh, in salads or as fresh juice",
-        "cooking_normal": "Apple jam, stewed apples, apple pie, smoothies",
-        "cooking_rotten": "Not safe to eat (discard as food waste)"
-    },
-    "banana": {
-        "kr": "Banana",
-        "shelf_life_days": {"fresh": 5, "normal": 2, "rotten": 0},
-        "storage": "Keep at room temperature (13–16°C). Wrapping the stem in cling film slows ethylene release and extends shelf life.",
-        "cooking_fresh": "Eat fresh or as a yogurt topping",
-        "cooking_normal": "Banana pancakes, banana bread, freeze for smoothies",
-        "cooking_rotten": "Not safe to eat (discard if the flesh is discoloured or rotting)"
-    },
-    "bell_pepper": {
-        "kr": "Bell Pepper",
-        "shelf_life_days": {"fresh": 10, "normal": 3, "rotten": 0},
-        "storage": "Pat dry, wrap in a paper towel, seal in a zip bag and keep in the fridge crisper (4–7°C).",
-        "cooking_fresh": "Fresh salads, crudités, lettuce wraps",
-        "cooking_normal": "Stir-fries, pasta topping, fried rice",
-        "cooking_rotten": "Not safe to eat (discard if soft rot appears)"
-    },
-    "carrot": {
-        "kr": "Carrot",
-        "shelf_life_days": {"fresh": 21, "normal": 5, "rotten": 0},
-        "storage": "Brush off soil, wrap in a paper towel, place in a bag and store upright in the fridge.",
-        "cooking_fresh": "Carrot salad, raw carrot sticks, juice",
-        "cooking_normal": "Curry, soup garnish, braised carrots, carrot fritters",
-        "cooking_rotten": "Not safe to eat (discard if black spots or a bad smell appear)"
-    },
-    "cucumber": {
-        "kr": "Cucumber",
-        "shelf_life_days": {"fresh": 7, "normal": 2, "rotten": 0},
-        "storage": "Dry well, wrap each one in a paper towel, bag and refrigerate at 7–10°C.",
-        "cooking_fresh": "Cucumber salad, chilled soup, quick pickled salad",
-        "cooking_normal": "Stir-fried cucumber, pickles, cold noodle topping",
-        "cooking_rotten": "Not safe to eat (discard if the skin turns slimy)"
-    },
-    "mango": {
-        "kr": "Mango",
-        "shelf_life_days": {"fresh": 6, "normal": 2, "rotten": 0},
-        "storage": "Ripen at room temperature, then wrap in paper and refrigerate once fully ripe.",
-        "cooking_fresh": "Fresh mango desserts, mango shaved ice",
-        "cooking_normal": "Mango lassi, mango purée, smoothies",
-        "cooking_rotten": "Not safe to eat (discard if it smells alcoholic or shows mould)"
-    },
-    "orange": {
-        "kr": "Orange",
-        "shelf_life_days": {"fresh": 14, "normal": 4, "rotten": 0},
-        "storage": "Store in a cool, well-ventilated place, or wrap individually and refrigerate.",
-        "cooking_fresh": "Eat fresh or as fresh-squeezed juice",
-        "cooking_normal": "Orange marmalade, fruit syrup, sangria",
-        "cooking_rotten": "Not safe to eat (discard immediately if mould appears)"
-    },
-    "potato": {
-        "kr": "Potato",
-        "shelf_life_days": {"fresh": 28, "normal": 7, "rotten": 0},
-        "storage": "Store in a dark, cool, well-ventilated place at room temperature. Keeping an apple with them helps stop sprouting.",
-        "cooking_fresh": "Potato salad, baked potatoes, potato wedges",
-        "cooking_normal": "Braised potatoes, potato pancakes, stews",
-        "cooking_rotten": "Not safe to eat (green patches contain toxic solanine)"
-    },
-    "strawberry": {
-        "kr": "Strawberry",
-        "shelf_life_days": {"fresh": 4, "normal": 1, "rotten": 0},
-        "storage": "Do not wash. Place stem-side down on a paper towel in a sealed container and refrigerate.",
-        "cooking_fresh": "Eat fresh or as a cake topping",
-        "cooking_normal": "Strawberry syrup, homemade jam, smoothies",
-        "cooking_rotten": "Not safe to eat (discard immediately if white mould appears)"
-    },
-    "tomato": {
-        "kr": "Tomato",
-        "shelf_life_days": {"fresh": 8, "normal": 3, "rotten": 0},
-        "storage": "Store stem-side down in a shaded spot at room temperature. Refrigerate once fully ripe.",
-        "cooking_fresh": "Caprese salad, fresh salads",
-        "cooking_normal": "Tomato pasta sauce, tomato soup, shakshuka",
-        "cooking_rotten": "Not safe to eat (discard if sour-smelling or mushy)"
-    }
-}
+# --- Fruit Knowledge Base (see fruit_info.py) ---
+from fruit_info import (  # noqa: E402
+    FRUIT_INFO,
+    DEFAULT_COOKING_TIP,
+    DEFAULT_SHELF_LIFE_DAYS,
+    DEFAULT_STORAGE_TIP,
+    evaluate_freshness,
+)
 
 # --- PyTorch MultiTask Architecture ---
 class MultiTaskEffB0(nn.Module):
@@ -227,32 +153,7 @@ inference_transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-def evaluate_freshness(p_fresh: float):
-    # FreshGuard rule:
-    # p_fresh >= 0.7 -> fresh
-    # p_fresh <= 0.3 -> rotten
-    # otherwise      -> normal
-    if p_fresh >= 0.7:
-        return {
-            "status": "fresh",
-            "status_kr": "Fresh",
-            "badge_color": "emerald",
-            "message": "This produce is in excellent, fresh condition."
-        }
-    elif p_fresh <= 0.3:
-        return {
-            "status": "rotten",
-            "status_kr": "Rotten",
-            "badge_color": "rose",
-            "message": "Spoilage has set in. Do not eat it; discard it."
-        }
-    else:
-        return {
-            "status": "normal",
-            "status_kr": "Normal",
-            "badge_color": "amber",
-            "message": "Good to eat now. Cook and use it soon."
-        }
+# evaluate_freshness lives in fruit_info.py (shared with the in-browser inference).
 
 def run_inference(image: Image.Image):
     image = ImageOps.exif_transpose(image)
@@ -283,8 +184,8 @@ def run_inference(image: Image.Image):
     fruit_meta = FRUIT_INFO.get(fruit_code, {})
     status_key = status_data["status"]
 
-    shelf_days = fruit_meta.get("shelf_life_days", {}).get(status_key, 3)
-    cooking_guide = fruit_meta.get(f"cooking_{status_key}", "Best eaten cooked")
+    shelf_days = fruit_meta.get("shelf_life_days", {}).get(status_key, DEFAULT_SHELF_LIFE_DAYS)
+    cooking_guide = fruit_meta.get(f"cooking_{status_key}", DEFAULT_COOKING_TIP)
 
     return {
         "fruit": fruit_code,
@@ -296,34 +197,14 @@ def run_inference(image: Image.Image):
         "badge_color": status_data["badge_color"],
         "status_message": status_data["message"],
         "shelf_life_days": shelf_days,
-        "storage_tips": fruit_meta.get("storage", "Store in a cool place."),
+        "storage_tips": fruit_meta.get("storage", DEFAULT_STORAGE_TIP),
         "cooking_tips": cooking_guide,
         "top_candidates": all_fruits[:4]
     }
 
 
-# --- English-only display helpers ---
-# Older databases may hold Korean names/labels and emoji saved by earlier versions.
-# Translate them on read so every page shows English, without rewriting user data.
-LEGACY_KO_TO_EN = {
-    "\ud30c\ud504\ub9ac\uce74/\ud53c\ub9dd": "Bell Pepper", "\uc0ac\uacfc": "Apple", "\ubc14\ub098\ub098": "Banana", "\ub2f9\uadfc": "Carrot",
-    "\uc624\uc774": "Cucumber", "\ub9dd\uace0": "Mango", "\uc624\ub80c\uc9c0": "Orange", "\uac10\uc790": "Potato", "\ub538\uae30": "Strawberry",
-    "\ud1a0\ub9c8\ud1a0": "Tomato", "\uc2dd\uc7ac\ub8cc": "Produce",
-    "\uc2e0\uc120\ud568 (Fresh)": "Fresh", "\uc0c1\ud568/\ubd80\ud328 (Rotten)": "Rotten", "\ubcf4\ud1b5 (Normal)": "Normal",
-    "\uc2e0\uc120": "Fresh", "\ubcf4\ud1b5": "Normal", "\uc0c1\ud568": "Rotten",
-}
-_EMOJI_RE = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F\u200D]")
-_HANGUL_RE = re.compile("[\uac00-\ud7af]")
-
-
-def englishify(text):
-    """Strip emoji and translate known legacy Korean labels to English."""
-    if not isinstance(text, str):
-        return text
-    out = _EMOJI_RE.sub("", text)
-    for ko in sorted(LEGACY_KO_TO_EN, key=len, reverse=True):
-        out = out.replace(ko, LEGACY_KO_TO_EN[ko])
-    return out.strip()
+# --- English-only display helpers (see legacy_text.py) ---
+from legacy_text import LEGACY_KO_TO_EN, englishify, _HANGUL_RE  # noqa: F401
 
 
 def _englishify_row(row):
@@ -412,21 +293,23 @@ def predict():
         result = run_inference(image)
         result["image_url"] = image_url
 
-        # Save to scan history
-        with closing(sqlite3.connect(DB_PATH)) as conn:
-            conn.execute("""
-                INSERT INTO scan_history (fruit_type, fruit_name_kr, freshness, freshness_kr, p_fresh, confidence, image_url)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                result["fruit"],
-                result["fruit_kr"],
-                result["freshness_status"],
-                result["freshness_kr"],
-                result["p_fresh"],
-                result["confidence"],
-                result["image_url"]
-            ))
-            conn.commit()
+        # Save to this service's own scan history, used only by the standalone page.
+        # The IngreScan web app sends persist=0 and stores history per user in MySQL instead.
+        if request.args.get("persist", "1") != "0":
+            with closing(sqlite3.connect(DB_PATH)) as conn:
+                conn.execute("""
+                    INSERT INTO scan_history (fruit_type, fruit_name_kr, freshness, freshness_kr, p_fresh, confidence, image_url)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    result["fruit"],
+                    result["fruit_kr"],
+                    result["freshness_status"],
+                    result["freshness_kr"],
+                    result["p_fresh"],
+                    result["confidence"],
+                    result["image_url"]
+                ))
+                conn.commit()
 
         return jsonify(result)
 
@@ -436,6 +319,107 @@ def predict():
         if saved_path is not None:
             saved_path.unlink(missing_ok=True)
         return jsonify({"error": str(e)}), 500
+
+_detector = None
+
+
+def get_detector():
+    global _detector
+    if _detector is None:
+        import detector as det
+        _detector = det.Detector()
+    return _detector
+
+
+def _load_request_image():
+    """Image from a multipart 'file' or a JSON {"image": base64}. Returns (image, error_response)."""
+    if "file" in request.files and request.files["file"].filename != "":
+        try:
+            with Image.open(request.files["file"].stream) as img:
+                img.load()
+                return img.copy(), None
+        except Exception:
+            return None, _bad_request("Invalid or unsupported image file.")
+    body = request.get_json(silent=True)
+    if isinstance(body, dict) and isinstance(body.get("image"), str) and body["image"]:
+        raw_b64 = body["image"]
+        if raw_b64.startswith("data:") and "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        try:
+            with Image.open(io.BytesIO(base64.b64decode(raw_b64, validate=False))) as img:
+                img.load()
+                return img.copy(), None
+        except Exception:
+            return None, _bad_request("Invalid base64 image data.")
+    return None, _bad_request("No image provided. Upload a file or send base64.")
+
+
+@app.route("/api/detect", methods=["POST"])
+def detect_items():
+    """Find several fruit/vegetables in one photo and classify each crop with the FreshGuard model.
+
+    The COCO detector only localises; labels and freshness always come from the classifier, and a
+    detection is kept only if the classifier is at least MIN_CLASSIFIER_CONFIDENCE percent sure.
+    """
+    import detector as det
+    detector = get_detector()
+    ok, why = detector.is_available()
+    if not ok:
+        return jsonify({"error": "Detector not installed. " + why, "code": "detector_not_installed"}), 503
+
+    image, err = _load_request_image()
+    if err is not None:
+        return err
+    image = ImageOps.exif_transpose(image).convert("RGB")
+    width, height = image.size
+
+    saved = []
+    try:
+        try:
+            found = detector.detect(image)
+        except det.DetectorUnavailable as e:
+            return jsonify({"error": "Detector not installed. " + str(e), "code": "detector_not_installed"}), 503
+
+        items, rejected = [], []
+        for d in found:
+            left, top, right, bottom = det.pad_box(d["box"], width, height)
+            crop = image.crop((left, top, right, bottom))
+            result = run_inference(crop)
+            x1, y1, x2, y2 = d["box"]
+            base = {
+                "box": {"x": round(x1, 1), "y": round(y1, 1), "w": round(x2 - x1, 1), "h": round(y2 - y1, 1)},
+                "detector_label": d["label"],
+                "detector_score": round(d["score"] * 100, 1),
+            }
+            if result["confidence"] < det.MIN_CLASSIFIER_CONFIDENCE:
+                rejected.append({**base, "fruit": result["fruit"], "confidence": result["confidence"],
+                                 "reason": "low_classifier_confidence"})
+                continue
+            thumb = crop.copy()
+            thumb.thumbnail((256, 256))
+            name = f"{uuid.uuid4().hex}.jpg"
+            path = UPLOAD_FOLDER / name
+            thumb.save(path, "JPEG", quality=85)
+            saved.append(path)
+            items.append({**base, **result, "image_url": f"/static/uploads/{name}"})
+
+        return jsonify({
+            "items": items,
+            "rejected": rejected,
+            "image": {"width": width, "height": height},
+            "min_confidence": det.MIN_CLASSIFIER_CONFIDENCE,
+            "detector": {"model": det.MODEL_NAME, "license": det.MODEL_LICENSE,
+                         "classes": sorted(set(det.COCO_PRODUCE.values()))},
+            "note": "The detector only knows apple, banana, orange and carrot as produce; other items "
+                    "(mango, bell pepper, potato, tomato, cucumber, strawberry) are often missed.",
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        for p in saved:
+            p.unlink(missing_ok=True)
+        return jsonify({"error": str(e)}), 500
+
 
 def _to_float(value, default):
     try:
@@ -546,6 +530,6 @@ def get_samples():
 if __name__ == "__main__":
     print("\n" + "="*50)
     print(" FreshGuard (produce freshness AI service)")
-    print(" Running on http://127.0.0.1:5000")
+    print(f" Running on http://127.0.0.1:{FRESHGUARD_PORT}")
     print("="*50 + "\n")
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(host="127.0.0.1", port=FRESHGUARD_PORT, debug=False)

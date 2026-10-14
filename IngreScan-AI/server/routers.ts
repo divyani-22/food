@@ -2,6 +2,8 @@ import { COOKIE_NAME } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
+import { insightsRouter, rescueRouter, whatsappRouter } from "./featureRouters";
+import { qcRouter, receiptRouter } from "./opsRouters";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
@@ -10,6 +12,8 @@ import { invokeLLM } from "./_core/llm";
 import fs from "fs";
 import { randomBytes } from "crypto";
 import path from "path";
+import { ALT_MARKET_ATTRIBUTION, allowAltMarketCall, countryFromRegion, lookupAlternativeMarket } from "./lib/altMarket";
+import { fetchOffProduct, isWellFormedBarcode, searchOffProducts } from "./lib/offClient";
 import {
   clampRiskScore,
   computeBmi,
@@ -33,6 +37,52 @@ async function requireOwnedScan(scanId: number, userId: number) {
   const scan = await db.getFoodScan(scanId, userId);
   if (!scan) throw new TRPCError({ code: "NOT_FOUND", message: "Scan not found" });
   return scan;
+}
+
+/** Produce images are served from this app's own /static (uploads or bundled samples); no external URLs. */
+const produceImageUrl = z
+  .string()
+  .max(512)
+  .regex(/^\/static\/(uploads|samples)\/[A-Za-z0-9._-]+$/, "Invalid image path")
+  .or(z.literal(""))
+  .optional();
+
+/** Whole calendar days from today (UTC date) to a YYYY-MM-DD expiry; negative once expired. */
+function produceDaysLeft(expiryDate: string, now: Date = new Date()): number {
+  const target = Date.parse(`${expiryDate}T00:00:00Z`);
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Number.isNaN(target) ? 0 : Math.round((target - today) / 86_400_000);
+}
+
+// Row shapes keep the snake_case field names the Produce page already renders.
+function toProduceInventoryRow(r: db.ProduceInventoryRow) {
+  return {
+    id: r.id,
+    name: r.name,
+    fruit_type: r.fruitType,
+    freshness: r.freshness,
+    p_fresh: r.pFresh,
+    confidence: r.confidence,
+    image_url: r.imageUrl ?? "",
+    expiry_date: r.expiryDate,
+    days_left: Math.max(produceDaysLeft(r.expiryDate), 0),
+    storage_tip: r.storageTip ?? "",
+    created_at: r.createdAt.toISOString(),
+  };
+}
+
+function toProduceScanRow(r: db.ProduceScanRow) {
+  return {
+    id: r.id,
+    fruit_type: r.fruitType,
+    fruit_name_kr: r.fruitName,
+    freshness: r.freshness,
+    freshness_kr: r.freshnessLabel,
+    p_fresh: r.pFresh,
+    confidence: r.confidence,
+    image_url: r.imageUrl ?? "",
+    created_at: r.createdAt.toISOString(),
+  };
 }
 
 /** Parse a date input for a TIMESTAMP column or throw BAD_REQUEST. */
@@ -69,6 +119,8 @@ const userProfileSchema = z.object({
   bmi: z.number().min(0).max(200).optional(),
   exerciseFrequency: z.enum(["sedentary", "light", "moderate", "active", "very_active"]).optional(),
   dietType: z.enum(["veg", "non_veg", "vegan", "keto", "other"]).optional(),
+  // Country or city; lets the AI suggest brands that are actually sold near the user. Empty string clears it.
+  region: z.string().trim().max(64).optional(),
 });
 
 const medicalConditionSchema = z.object({
@@ -151,6 +203,7 @@ export const appRouter = router({
         return db.upsertUserProfile({
           userId: ctx.user.id,
           ...input,
+          region: input.region === undefined ? undefined : input.region || null,
           bmi,
         });
       }),
@@ -430,6 +483,20 @@ Return the analysis with consumer education focus as a JSON array with this stru
         return analysisResult;
       }),
 
+    /** Real community price/availability data (Open Food Facts + Open Prices) for a scan's alternatives. Never throws on upstream failure. */
+    alternativeMarket: protectedProcedure
+      .input(z.object({ scanId: z.number().int() }))
+      .query(async ({ ctx, input }) => {
+        await requireOwnedScan(input.scanId, ctx.user.id);
+        if (!allowAltMarketCall(ctx.user.id)) {
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many price lookups. Please wait a minute and try again." });
+        }
+        const [alternatives, profile] = await Promise.all([db.getAlternatives(input.scanId), db.getUserProfile(ctx.user.id)]);
+        const country = countryFromRegion(profile?.region);
+        const items = await Promise.all(alternatives.slice(0, 8).map((a) => lookupAlternativeMarket(a, country)));
+        return { country, items, attribution: ALT_MARKET_ATTRIBUTION };
+      }),
+
     suggestAlternatives: protectedProcedure
       .input(z.object({
         scanId: z.number().int(),
@@ -447,15 +514,19 @@ User Profile: ${JSON.stringify(userProfile)}
 Current Product Risk Score: ${scan.riskScore}
 Problematic Ingredients: ${ingredients.filter(i => i.riskLevel && ['moderate', 'high', 'severe'].includes(i.riskLevel)).map(i => i.name).join(', ')}
 
+User region: ${userProfile?.region || "not provided"}
+
 For each alternative, provide:
 1. Product name
-2. Reason why it's better
-3. Scientific justification
-4. Sources
+2. Brand: a specific commercial brand${userProfile?.region ? ` that is sold in ${userProfile.region}` : ""}, only if you are confident it exists and fits; otherwise an empty string. Never invent a brand, a price or store availability.
+3. Reason why it's better
+4. Scientific justification
+5. Sources
 
 Return as JSON array:
 [{
   "productName": "alternative product",
+  "brand": "brand name or empty string",
   "reason": "why it's better",
   "scientificJustification": "detailed explanation",
   "sources": ["source1", "source2"]
@@ -480,11 +551,12 @@ Return as JSON array:
                       type: "object",
                       properties: {
                         productName: { type: "string" },
+                        brand: { type: "string" },
                         reason: { type: "string" },
                         scientificJustification: { type: "string" },
                         sources: { type: "array", items: { type: "string" } }
                       },
-                      required: ["productName", "reason", "scientificJustification", "sources"],
+                      required: ["productName", "brand", "reason", "scientificJustification", "sources"],
                       additionalProperties: false
                     }
                   }
@@ -610,6 +682,86 @@ Be helpful, accurate, educational, and personalized to the user's health profile
       }),
   }),
 
+  // ============= FreshGuard produce: per-user pantry + scan history =============
+  // The Flask service only classifies images; persistence happens here, scoped to the signed-in user.
+  produce: router({
+    listInventory: protectedProcedure.query(async ({ ctx }) => {
+      const rows = await db.listProduceInventory(ctx.user.id);
+      return rows.map(toProduceInventoryRow);
+    }),
+
+    addInventory: protectedProcedure
+      .input(z.object({
+        name: z.string().trim().min(1).max(100),
+        fruit: z.string().trim().min(1).max(64),
+        freshness: z.enum(["fresh", "normal", "rotten"]),
+        pFresh: z.number().min(0).max(100),
+        confidence: z.number().min(0).max(100),
+        imageUrl: produceImageUrl,
+        expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expiry must be YYYY-MM-DD"),
+        storageTip: z.string().max(2000).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (Number.isNaN(new Date(`${input.expiryDate}T00:00:00Z`).getTime())) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid expiry date" });
+        }
+        const id = await db.addProduceInventoryItem({
+          userId: ctx.user.id,
+          name: input.name,
+          fruitType: input.fruit,
+          freshness: input.freshness,
+          pFresh: input.pFresh,
+          confidence: input.confidence,
+          imageUrl: input.imageUrl || null,
+          expiryDate: input.expiryDate,
+          storageTip: input.storageTip ?? null,
+        });
+        return { id };
+      }),
+
+    deleteInventory: protectedProcedure
+      .input(z.object({ id: z.number().int() }))
+      .mutation(async ({ ctx, input }) => {
+        const deleted = await db.deleteProduceInventoryItem(input.id, ctx.user.id);
+        if (!deleted) throw new TRPCError({ code: "NOT_FOUND", message: "Item not found" });
+        return { success: true };
+      }),
+
+    listHistory: protectedProcedure.query(async ({ ctx }) => {
+      const rows = await db.listProduceScans(ctx.user.id, 50);
+      return rows.map(toProduceScanRow);
+    }),
+
+    recordScan: protectedProcedure
+      .input(z.object({
+        fruit: z.string().trim().min(1).max(64),
+        fruitName: z.string().trim().min(1).max(100),
+        freshness: z.enum(["fresh", "normal", "rotten"]),
+        freshnessLabel: z.string().trim().min(1).max(64),
+        pFresh: z.number().min(0).max(100),
+        confidence: z.number().min(0).max(100),
+        imageUrl: produceImageUrl,
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const id = await db.addProduceScan({
+          userId: ctx.user.id,
+          fruitType: input.fruit,
+          fruitName: input.fruitName,
+          freshness: input.freshness,
+          freshnessLabel: input.freshnessLabel,
+          pFresh: input.pFresh,
+          confidence: input.confidence,
+          imageUrl: input.imageUrl || null,
+        });
+        return { id };
+      }),
+
+    clearHistory: protectedProcedure.mutation(async ({ ctx }) => {
+      await db.clearProduceScans(ctx.user.id);
+      return { success: true };
+    }),
+  }),
+
   // ============= Food Expiry Tracker Router (EcoFridge Integration) =============
   inventory: router({
     list: protectedProcedure.query(async ({ ctx }) => {
@@ -674,44 +826,23 @@ Be helpful, accurate, educational, and personalized to the user's health profile
   }),
 
   // ============= Open Food Facts Router =============
+  // Pantry intelligence (ethylene alerts, personal health alerts), rescue recipes and the WhatsApp link.
+  insights: insightsRouter,
+  rescue: rescueRouter,
+  whatsapp: whatsappRouter,
+  qc: qcRouter,
+  receipt: receiptRouter,
+
   openFoodFacts: router({
     getByBarcode: publicProcedure
       .input(z.object({ barcode: z.string().max(64) }))
       .query(async ({ input }) => {
         const barcode = input.barcode.trim();
-        if (!/^\d{4,20}$/.test(barcode)) return null; // barcodes are numeric; avoids odd URL paths
-        
+        // Only malformed input is rejected here. Check digits are validated (and overridable) on the client
+        // because real Open Food Facts data contains some codes with invalid check digits.
+        if (!isWellFormedBarcode(barcode)) return null;
         try {
-          const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json`, {
-            headers: { "User-Agent": "IngreScanAI/1.0" },
-            signal: AbortSignal.timeout(10000),
-          });
-          if (response.status === 404) return null;
-          if (!response.ok) throw new Error(`Open Food Facts responded ${response.status}`);
-          const data = await response.json();
-          if (data.status === 0 || !data.product) return null;
-          const p = data.product;
-          return {
-            barcode: p.code || barcode,
-            productName: p.product_name || p.product_name_en || p.generic_name || "Unknown Product",
-            brand: p.brands || p.brand_owner || "Generic",
-            category: firstCategory(p.categories),
-            imageUrl: p.image_front_url || p.image_url || p.image_small_url || null,
-            ingredientsText: p.ingredients_text || p.ingredients_text_en || "",
-            nutriscoreGrade: normalizeGrade(p.nutriscore_grade),
-            novaGroup: normalizeNova(p.nova_group),
-            ecoscoreGrade: normalizeGrade(p.ecoscore_grade),
-            allergens: parseAllergens(p.allergens),
-            nutriments: {
-              energyKcal: p.nutriments?.["energy-kcal_100g"] ?? p.nutriments?.["energy-kcal"] ?? null,
-              fat: p.nutriments?.fat_100g ?? p.nutriments?.fat ?? null,
-              saturatedFat: p.nutriments?.["saturated-fat_100g"] ?? p.nutriments?.["saturated-fat"] ?? null,
-              sugars: p.nutriments?.sugars_100g ?? p.nutriments?.sugars ?? null,
-              salt: p.nutriments?.salt_100g ?? p.nutriments?.salt ?? null,
-              proteins: p.nutriments?.proteins_100g ?? p.nutriments?.proteins ?? null,
-              fiber: p.nutriments?.fiber_100g ?? p.nutriments?.fiber ?? null,
-            },
-          };
+          return await fetchOffProduct(barcode);
         } catch (err) {
           console.error("[OpenFoodFacts] Barcode fetch error:", err);
           throw new TRPCError({
@@ -727,29 +858,7 @@ Be helpful, accurate, educational, and personalized to the user's health profile
         const q = input.query.trim();
         if (!q) return [];
         try {
-          const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=${input.pageSize}`;
-          const response = await fetch(url, {
-            headers: {
-              "User-Agent": "IngreScanAI - WebApp - 1.0 - (https://github.com/shivrajpatare/IngreScan-AI)",
-              "Accept": "application/json",
-            },
-            signal: AbortSignal.timeout(15000),
-          });
-          if (!response.ok) throw new Error(`Open Food Facts responded ${response.status}`);
-          const text = await response.text();
-          if (!text.trim().startsWith("{")) throw new Error("Open Food Facts returned a non-JSON response");
-          const data = JSON.parse(text);
-          if (!data.products || !Array.isArray(data.products)) return [];
-          return data.products.filter((p: any) => p && typeof p === "object").map((p: any) => ({
-            barcode: String(p.code || p._id || ""),
-            productName: p.product_name || p.product_name_en || p.generic_name || "Food Product",
-            brand: p.brands || "",
-            category: firstCategory(p.categories),
-            imageUrl: p.image_front_small_url || p.image_front_url || p.image_url || null,
-            ingredientsText: p.ingredients_text || p.ingredients_text_en || "",
-            nutriscoreGrade: normalizeGrade(p.nutriscore_grade),
-            novaGroup: normalizeNova(p.nova_group),
-          }));
+          return await searchOffProducts(q, input.pageSize);
         } catch (err) {
           console.error("[OpenFoodFacts] Search error:", err);
           throw new TRPCError({

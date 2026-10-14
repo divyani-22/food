@@ -108,6 +108,7 @@ export function sanitizeAlternative(raw: any) {
     : [];
   return {
     productName,
+    brand: str(raw?.brand, 255) || null,
     reason,
     scientificJustification: str(raw?.scientificJustification, 5000),
     sources: JSON.stringify(sources),

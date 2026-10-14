@@ -293,3 +293,98 @@ def test_legacy_korean_rows_are_translated_on_read(client, appmod):
     # POSTed legacy names are normalised too
     client.post("/api/inventory", json={"name": "\U0001F34C \ubc14\ub098\ub098", "freshness_status": "fresh"})
     assert client.get("/api/inventory").get_json()[0]["name"] == "Banana"
+
+
+def test_persist_zero_skips_flask_history(client):
+    assert client.post("/api/predict?sample=apple.jpg&persist=0").status_code == 200
+    assert client.get("/api/history").get_json() == []
+    assert client.post("/api/predict?sample=apple.jpg").status_code == 200
+    assert len(client.get("/api/history").get_json()) == 1
+
+
+def test_import_script_emits_english_sql_for_one_user(client, appmod, tmp_path):
+    import sqlite3, subprocess, sys
+    from pathlib import Path
+    db = tmp_path / "legacy.db"
+    with sqlite3.connect(db) as conn:
+        conn.executescript(
+            "CREATE TABLE inventory (id INTEGER PRIMARY KEY, name TEXT, fruit_type TEXT, freshness TEXT, p_fresh REAL, confidence REAL,"
+            " image_url TEXT, expiry_date TEXT, days_left INTEGER, storage_tip TEXT, created_at TEXT);"
+            "CREATE TABLE scan_history (id INTEGER PRIMARY KEY, fruit_type TEXT, fruit_name_kr TEXT, freshness TEXT, freshness_kr TEXT,"
+            " p_fresh REAL, confidence REAL, image_url TEXT, created_at TEXT);"
+        )
+        conn.execute("INSERT INTO inventory VALUES (1, ?, 'apple', 'fresh', 90, 95, '/static/uploads/a.jpg', '2030-01-02', 5, ?, '2026-01-01 10:00:00')",
+                     ("\U0001F34E \uC0AC\uACFC", "O'Brien \uB0C9\uC7A5"))
+        conn.execute("INSERT INTO scan_history VALUES (1, 'bell_pepper', ?, 'weird', ?, 50, 80, '', '2026-01-01 10:00:00')",
+                     ("\uD30C\uD504\uB9AC\uCE74/\uD53C\uB9DD", "\uBCF4\uD1B5 (Normal)"))
+    root = Path(appmod.__file__).parent
+    proc = subprocess.run([sys.executable, str(root / "tools" / "import_freshguard_data.py"), "--user-id", "7", "--db", str(db)],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    sql = proc.stdout
+    assert not _NON_ENGLISH.search(sql)
+    assert "INSERT INTO produce_inventory" in sql and "VALUES (7, 'Apple', 'apple', 'fresh'" in sql
+    assert "Refrigerate at 0" in sql      # Korean tip replaced by that fruit's English tip
+    assert "'Bell Pepper', 'normal', 'Normal'" in sql   # label translated, bad status normalised
+    assert "1 pantry items, 1 history rows for user 7" in proc.stderr
+
+
+# ---- multi-item detection (/api/detect) with a fake localiser; the real one is in test_detector_integration.py ----
+class FakeDetector:
+    def __init__(self, found=None, available=True):
+        self.found, self.available = found or [], available
+
+    def is_available(self):
+        return (True, "") if self.available else (False, "Detector model not found. Run: python tools/fetch_detector.py")
+
+    def detect(self, image):
+        return self.found
+
+
+def test_detect_503_when_detector_missing(client, appmod, monkeypatch):
+    monkeypatch.setattr(appmod, "_detector", FakeDetector(available=False))
+    r = client.post("/api/detect", data={"file": (io.BytesIO(png_bytes()), "x.png")})
+    assert r.status_code == 503
+    assert r.get_json()["code"] == "detector_not_installed" and "fetch_detector" in r.get_json()["error"]
+
+
+def test_detect_no_image_and_bad_image(client, appmod, monkeypatch):
+    monkeypatch.setattr(appmod, "_detector", FakeDetector())
+    assert client.post("/api/detect").status_code == 400
+    assert client.post("/api/detect", data={"file": (io.BytesIO(b"junk"), "a.png")}).status_code == 400
+    assert client.post("/api/detect", json={"image": "!!!"}).status_code == 400
+
+
+def test_detect_returns_items_with_classifier_labels_and_thumbnails(client, appmod, monkeypatch):
+    found = [{"box": [2, 2, 20, 20], "score": 0.9, "coco_class": 49, "label": "orange"},
+             {"box": [22, 3, 38, 25], "score": 0.5, "coco_class": 46, "label": "banana"}]
+    monkeypatch.setattr(appmod, "_detector", FakeDetector(found))
+    r = client.post("/api/detect", json={"image": base64.b64encode(png_bytes()).decode()})
+    assert r.status_code == 200, r.get_json()
+    d = r.get_json()
+    assert d["image"] == {"width": 40, "height": 30} and len(d["items"]) == 2
+    first = d["items"][0]
+    # classifier (stub: apple, strongly) overrides the detector label
+    assert first["fruit"] == "apple" and first["detector_label"] == "orange"
+    assert first["box"] == {"x": 2.0, "y": 2.0, "w": 18.0, "h": 18.0}
+    assert first["image_url"].startswith("/static/uploads/") and first["shelf_life_days"] > 0
+    assert len(list(client.up.iterdir())) == 2
+    assert d["rejected"] == [] and d["detector"]["license"] == "Apache-2.0"
+
+
+def test_detect_drops_low_classifier_confidence(client, appmod, monkeypatch):
+    found = [{"box": [2, 2, 20, 20], "score": 0.9, "coco_class": 47, "label": "apple"}]
+    monkeypatch.setattr(appmod, "_detector", FakeDetector(found))
+    # near-uniform logits -> confidence ~10 percent, below the 70 percent minimum
+    monkeypatch.setattr(appmod, "model", lambda t: (FakeT([[0.0] * 10]), FakeT([[0.0, 1.0]])))
+    r = client.post("/api/detect", data={"file": (io.BytesIO(png_bytes()), "x.png")})
+    d = r.get_json()
+    assert r.status_code == 200 and d["items"] == []
+    assert d["rejected"][0]["reason"] == "low_classifier_confidence"
+    assert list(client.up.iterdir()) == []
+
+
+def test_detect_zero_detections_is_ok(client, appmod, monkeypatch):
+    monkeypatch.setattr(appmod, "_detector", FakeDetector([]))
+    r = client.post("/api/detect", data={"file": (io.BytesIO(png_bytes()), "x.png")})
+    assert r.status_code == 200 and r.get_json()["items"] == []

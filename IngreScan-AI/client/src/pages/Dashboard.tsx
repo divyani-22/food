@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/brand/PageHeader";
 import { Ring } from "@/components/brand/PhoneMockup";
 import { StatusTag, scoreTone } from "@/components/brand/StatusTag";
 import { Card } from "@/components/ui/card";
+import { RescueFridge } from "@/components/features/RescueFridge";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { ScanLine, History, MessageSquare, User, Sparkles, Refrigerator, Barcode, AlertTriangle, ArrowRight, ChevronRight, ImageIcon, Type } from "lucide-react";
@@ -72,6 +73,8 @@ export default function Dashboard() {
             </Link>
           </div>
         )}
+
+        <RescueFridge />
 
         {/* At a glance — app-internal data cards */}
         <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">

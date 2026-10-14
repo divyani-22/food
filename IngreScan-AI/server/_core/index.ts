@@ -9,7 +9,12 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { registerWhatsappRoutes, startReminderScheduler } from "../whatsappRuntime";
 import { createRateLimiter } from "./rateLimit";
+import { assertRuntimeConfig } from "./env";
+import { initDatabase } from "./database";
+
+const FRESHGUARD_DETECT_MAX_BYTES = 10 * 1024 * 1024;
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -31,8 +36,23 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  assertRuntimeConfig();
+  // Opens the database; for embedded SQLite this also applies pending migrations (fails fast on error).
+  await initDatabase();
   const app = express();
   const server = createServer(app);
+  // WhatsApp webhooks need the exact raw request bytes for signature checks, so they are mounted
+  // BEFORE the JSON/urlencoded body parsers below.
+  registerWhatsappRoutes(app);
+  // Whole-shelf detection uploads one photo; refuse anything over 10 MB before the 50 MB parser buffers it.
+  app.use("/api/freshguard/detect", (req, res, next) => {
+    const declared = Number(req.headers["content-length"] ?? 0);
+    if (declared > FRESHGUARD_DETECT_MAX_BYTES) {
+      res.status(413).json({ error: "Image is too large (10 MB maximum)." });
+      return;
+    }
+    next();
+  });
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -53,6 +73,9 @@ async function startServer() {
   }
 
   const freshguardLimiter = createRateLimiter({ windowMs: 60_000, max: 60 });
+  // Detection runs a detector plus one classifier pass per item, so it gets a tighter budget.
+  const freshguardDetectLimiter = createRateLimiter({ windowMs: 60_000, max: 10 });
+  app.use("/api/freshguard/detect", freshguardDetectLimiter);
   app.all("/api/freshguard/*", freshguardLimiter, async (req, res) => {
     try {
       // Only signed-in users may reach the FreshGuard backend (same auth as tRPC).
@@ -62,8 +85,19 @@ async function startServer() {
         return;
       }
 
-      const targetPath = req.url.replace(/^\/api\/freshguard/, "/api");
-      const targetUrl = `http://127.0.0.1:5000${targetPath}`;
+      // Only the stateless classification endpoints are reachable from the web app. Pantry and history
+      // are stored per user in the app database (tRPC "produce" router), never in the Flask service's shared SQLite.
+      const parsed = new URL(req.url.replace(/^\/api\/freshguard/, "/api"), "http://internal");
+      const route = parsed.pathname.replace(/\/+$/, "");
+      const allowed =
+        (req.method === "POST" && (route === "/api/predict" || route === "/api/detect")) ||
+        (req.method === "GET" && (route === "/api/samples" || route === "/api/fruits"));
+      if (!allowed) {
+        res.status(404).json({ error: "Not found." });
+        return;
+      }
+      if (route === "/api/predict") parsed.searchParams.set("persist", "0");
+      const targetUrl = `${process.env.FRESHGUARD_URL ?? "http://127.0.0.1:5000"}${parsed.pathname}${parsed.search}`;
 
       const headers: Record<string, string> = {};
       if (req.headers["content-type"]) {
@@ -119,6 +153,7 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    startReminderScheduler();
   });
 }
 
@@ -130,4 +165,7 @@ process.on("unhandledRejection", (reason) => {
   console.error("[Unhandled Rejection]", reason);
 });
 
-startServer().catch(console.error);
+startServer().catch(err => {
+  console.error("[Startup] Fatal:", err instanceof Error ? err.message : err);
+  process.exit(1);
+});

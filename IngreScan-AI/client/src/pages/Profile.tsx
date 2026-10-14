@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Trash2, Plus, UserRound, HeartPulse, Pill, Activity } from "lucide-react";
 import { PageHeader } from "@/components/brand/PageHeader";
 import { StatusTag } from "@/components/brand/StatusTag";
+import { WhatsAppCard } from "@/components/features/WhatsAppCard";
 
 // Parse a numeric input to a positive integer, or undefined if empty/invalid
 // (the server rejects NaN and the DB columns are integers).
@@ -30,6 +31,7 @@ export default function Profile() {
   const [weight, setWeight] = useState("");
   const [exerciseFrequency, setExerciseFrequency] = useState("");
   const [dietType, setDietType] = useState("");
+  const [region, setRegion] = useState("");
 
   const [newCondition, setNewCondition] = useState("");
   const [newMedication, setNewMedication] = useState({ name: "", dosage: "", isCurrent: true });
@@ -48,6 +50,7 @@ export default function Profile() {
       setWeight(profile.weight?.toString() || "");
       setExerciseFrequency(profile.exerciseFrequency || "");
       setDietType(profile.dietType || "");
+      setRegion(profile.region || "");
     }
   }, [profile]);
 
@@ -60,6 +63,7 @@ export default function Profile() {
         weight: toInt(weight),
         exerciseFrequency: (exerciseFrequency || undefined) as any,
         dietType: (dietType || undefined) as any,
+        region: region.trim(),
       });
       toast.success("Profile updated successfully");
       refetchProfile();
@@ -194,6 +198,17 @@ export default function Profile() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="region">Country or city</Label>
+                <Input
+                  id="region"
+                  value={region}
+                  maxLength={64}
+                  onChange={(e) => setRegion(e.target.value)}
+                  placeholder="e.g. India, Mumbai"
+                />
+                <p className="text-xs text-muted-foreground">Used to suggest healthier alternatives that are sold where you live. Optional.</p>
+              </div>
             </div>
             <div className="flex justify-end border-t border-border pt-6">
               <Button onClick={handleSaveProfile} className="w-full sm:w-auto">Save Profile</Button>
@@ -247,6 +262,8 @@ export default function Profile() {
             </div>
           </CardContent>
         </Card>
+
+        <WhatsAppCard />
       </div>
     </DashboardLayout>
   );

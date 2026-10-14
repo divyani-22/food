@@ -1,6 +1,8 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/brand/PageHeader";
 import { StatusTag, type Tone } from "@/components/brand/StatusTag";
+import { EthyleneAlerts } from "@/components/features/EthyleneAlerts";
+import { RescueFridge } from "@/components/features/RescueFridge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -456,6 +458,9 @@ export default function FridgeTracker() {
             );
           })}
         </section>
+
+        <RescueFridge />
+        <EthyleneAlerts />
 
         {/* Filter & Search Bar */}
         <div className="flex flex-col gap-3 rounded-3xl bg-white p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between">

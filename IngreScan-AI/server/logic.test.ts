@@ -60,6 +60,17 @@ describe("parseLLMJson / getLLMText", () => {
   });
 });
 
+describe("sanitizeAlternative brand", () => {
+  it("keeps a named brand, trims it, and stores null for empty/missing/non-string brands", () => {
+    const base = { productName: "Roasted makhana", reason: "No palm oil" };
+    expect(sanitizeAlternative({ ...base, brand: "  Farmley  " })?.brand).toBe("Farmley");
+    expect(sanitizeAlternative({ ...base, brand: "" })?.brand).toBeNull();
+    expect(sanitizeAlternative({ ...base })?.brand).toBeNull();
+    expect(sanitizeAlternative({ ...base, brand: 42 })?.brand).toBeNull();
+    expect(sanitizeAlternative({ ...base, brand: "x".repeat(400) })?.brand?.length).toBeLessThanOrEqual(255);
+  });
+});
+
 describe("sanitizeIngredient / sanitizeAlternative", () => {
   it("drops nameless entries and invalid risk levels, truncates long names", () => {
     expect(sanitizeIngredient({ riskLevel: "high" })).toBeNull();

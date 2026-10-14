@@ -36,6 +36,27 @@
       "when": 1791936152323,
       "tag": "0004_mighty_vindicator",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1791955144871,
+      "tag": "0005_shiny_squirrel_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1791956991337,
+      "tag": "0006_last_liz_osborn",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1791984041835,
+      "tag": "0007_outstanding_vance_astro",
+      "breakpoints": true
     }
   ]
 }

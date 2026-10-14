@@ -1,31 +1,44 @@
 import { eq, desc, and, isNull } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
-import { 
-  InsertUser, users, 
-  userProfiles, InsertUserProfile,
-  medicalConditions, InsertMedicalCondition,
-  medications, InsertMedication,
-  foodScans, InsertFoodScan,
-  scanIngredients, InsertScanIngredient,
-  alternatives, InsertAlternative,
-  chatMessages, InsertChatMessage,
-  ingredientDatabase, InsertIngredientData,
-  foodInventory, InsertFoodInventoryItem
+import type {
+  InsertUser,
+  InsertUserProfile,
+  InsertMedicalCondition,
+  InsertMedication,
+  InsertFoodScan,
+  InsertScanIngredient,
+  InsertAlternative,
+  InsertChatMessage,
+  InsertIngredientData,
+  InsertFoodInventoryItem,
+  InsertProduceScan,
+  InsertProduceInventoryItem,
+  produceInventory,
+  produceScans,
 } from "../drizzle/schema";
+import {
+  getDbContext,
+  insertedId,
+  affectedRows,
+  writeResult,
+  upsertRow,
+  eqInsensitive,
+  type DbContext,
+} from "./_core/database";
 import { ENV } from './_core/env';
 
-let _db: ReturnType<typeof drizzle> | null = null;
+export type ProduceInventoryRow = typeof produceInventory.$inferSelect;
+export type ProduceScanRow = typeof produceScans.$inferSelect;
 
+/**
+ * Active database (MySQL when DATABASE_URL is mysql://, embedded SQLite otherwise), or null if a MySQL
+ * connection could not be created. All functions below work on both dialects; see ./_core/database.ts.
+ */
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
-    try {
-      _db = drizzle(process.env.DATABASE_URL);
-    } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
-      _db = null;
-    }
-  }
-  return _db;
+  return (await getDbContext())?.db ?? null;
+}
+
+async function getCtx(): Promise<DbContext | null> {
+  return getDbContext();
 }
 
 // ============= User Management =============
@@ -35,11 +48,12 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     throw new Error("User openId is required for upsert");
   }
 
-  const db = await getDb();
-  if (!db) {
+  const ctx = await getCtx();
+  if (!ctx) {
     console.warn("[Database] Cannot upsert user: database not available");
     return;
   }
+  const { db, s } = ctx;
 
   try {
     const values: InsertUser = {
@@ -80,9 +94,10 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.lastSignedIn = new Date();
     }
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
+    // MySQL refreshes updatedAt itself (ON UPDATE CURRENT_TIMESTAMP); SQLite needs it set explicitly.
+    if (ctx.dialect === "sqlite") updateSet.updatedAt = new Date();
+
+    await upsertRow(ctx, s.users, values, updateSet, "openId");
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
@@ -90,35 +105,34 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 }
 
 export async function getUserByOpenId(openId: string) {
-  const db = await getDb();
-  if (!db) {
+  const ctx = await getCtx();
+  if (!ctx) {
     console.warn("[Database] Cannot get user: database not available");
     return undefined;
   }
+  const { db, s } = ctx;
 
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const result = await db.select().from(s.users).where(eq(s.users.openId, openId)).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
 
 // ============= User Profile =============
 
 export async function getUserProfile(userId: number) {
-  const db = await getDb();
-  if (!db) return null;
-  
-  const result = await db.select().from(userProfiles).where(eq(userProfiles.userId, userId)).limit(1);
+  const ctx = await getCtx();
+  if (!ctx) return null;
+  const { db, s } = ctx;
+  const result = await db.select().from(s.userProfiles).where(eq(s.userProfiles.userId, userId)).limit(1);
   return result.length > 0 ? result[0] : null;
 }
 
 export async function upsertUserProfile(profile: InsertUserProfile) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
   // Atomic thanks to the unique index on user_profiles.user_id.
   const { userId: _userId, ...updates } = profile;
-  await db.insert(userProfiles).values(profile).onDuplicateKeyUpdate({
-    set: { ...updates, updatedAt: new Date() },
-  });
+  await upsertRow(ctx, s.userProfiles, profile, { ...updates, updatedAt: new Date() }, "userId");
 
   return getUserProfile(profile.userId);
 }
@@ -126,180 +140,180 @@ export async function upsertUserProfile(profile: InsertUserProfile) {
 // ============= Medical Conditions =============
 
 export async function getMedicalConditions(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  
-  return db.select().from(medicalConditions).where(eq(medicalConditions.userId, userId));
+  const ctx = await getCtx();
+  if (!ctx) return [];
+  const { db, s } = ctx;
+  return db.select().from(s.medicalConditions).where(eq(s.medicalConditions.userId, userId));
 }
 
 export async function addMedicalCondition(condition: InsertMedicalCondition) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  const result = await db.insert(medicalConditions).values(condition);
-  return result;
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  const result = await db.insert(s.medicalConditions).values(condition);
+  return writeResult(ctx, result);
 }
 
 export async function deleteMedicalCondition(id: number, userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  await db.delete(medicalConditions).where(
-    and(eq(medicalConditions.id, id), eq(medicalConditions.userId, userId))
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  await db.delete(s.medicalConditions).where(
+    and(eq(s.medicalConditions.id, id), eq(s.medicalConditions.userId, userId))
   );
 }
 
 // ============= Medications =============
 
 export async function getMedications(userId: number, currentOnly: boolean = false) {
-  const db = await getDb();
-  if (!db) return [];
-  
+  const ctx = await getCtx();
+  if (!ctx) return [];
+  const { db, s } = ctx;
   const conditions = currentOnly 
-    ? and(eq(medications.userId, userId), eq(medications.isCurrent, true))
-    : eq(medications.userId, userId);
+    ? and(eq(s.medications.userId, userId), eq(s.medications.isCurrent, true))
+    : eq(s.medications.userId, userId);
   
-  return db.select().from(medications).where(conditions).orderBy(desc(medications.startDate), desc(medications.id));
+  return db.select().from(s.medications).where(conditions).orderBy(desc(s.medications.startDate), desc(s.medications.id));
 }
 
 export async function addMedication(medication: InsertMedication) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  const result = await db.insert(medications).values(medication);
-  return result;
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  const result = await db.insert(s.medications).values(medication);
+  return writeResult(ctx, result);
 }
 
 export async function updateMedication(id: number, userId: number, updates: Partial<InsertMedication>) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  await db.update(medications)
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  await db.update(s.medications)
     .set({ ...updates, updatedAt: new Date() })
-    .where(and(eq(medications.id, id), eq(medications.userId, userId)));
+    .where(and(eq(s.medications.id, id), eq(s.medications.userId, userId)));
 }
 
 export async function deleteMedication(id: number, userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  await db.delete(medications).where(
-    and(eq(medications.id, id), eq(medications.userId, userId))
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  await db.delete(s.medications).where(
+    and(eq(s.medications.id, id), eq(s.medications.userId, userId))
   );
 }
 
 // ============= Food Scans =============
 
 export async function createFoodScan(scan: InsertFoodScan) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  const result = await db.insert(foodScans).values(scan);
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  const result = await db.insert(s.foodScans).values(scan);
   // Use the actual insert id (selecting "latest by createdAt" is racy and has 1s resolution)
-  return result[0].insertId;
+  return insertedId(ctx, result);
 }
 
 export async function getFoodScan(scanId: number, userId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-  
-  const result = await db.select().from(foodScans).where(
-    and(eq(foodScans.id, scanId), eq(foodScans.userId, userId))
+  const ctx = await getCtx();
+  if (!ctx) return undefined;
+  const { db, s } = ctx;
+  const result = await db.select().from(s.foodScans).where(
+    and(eq(s.foodScans.id, scanId), eq(s.foodScans.userId, userId))
   ).limit(1);
   
   return result.length > 0 ? result[0] : undefined;
 }
 
 export async function getUserScans(userId: number, limit: number = 50) {
-  const db = await getDb();
-  if (!db) return [];
-  
-  return db.select().from(foodScans)
-    .where(eq(foodScans.userId, userId))
-    .orderBy(desc(foodScans.createdAt))
+  const ctx = await getCtx();
+  if (!ctx) return [];
+  const { db, s } = ctx;
+  return db.select().from(s.foodScans)
+    .where(eq(s.foodScans.userId, userId))
+    .orderBy(desc(s.foodScans.createdAt), desc(s.foodScans.id))
     .limit(limit);
 }
 
 export async function updateFoodScan(scanId: number, userId: number, updates: Partial<InsertFoodScan>) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  await db.update(foodScans)
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  await db.update(s.foodScans)
     .set({ ...updates, updatedAt: new Date() })
-    .where(and(eq(foodScans.id, scanId), eq(foodScans.userId, userId)));
+    .where(and(eq(s.foodScans.id, scanId), eq(s.foodScans.userId, userId)));
 }
 
 // ============= Scan Ingredients =============
 
 export async function addScanIngredient(ingredient: InsertScanIngredient) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  const result = await db.insert(scanIngredients).values(ingredient);
-  return result;
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  const result = await db.insert(s.scanIngredients).values(ingredient);
+  return writeResult(ctx, result);
 }
 
 export async function deleteScanIngredients(scanId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  await db.delete(scanIngredients).where(eq(scanIngredients.scanId, scanId));
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  await db.delete(s.scanIngredients).where(eq(s.scanIngredients.scanId, scanId));
 }
 
 export async function getScanIngredients(scanId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  
-  return db.select().from(scanIngredients).where(eq(scanIngredients.scanId, scanId));
+  const ctx = await getCtx();
+  if (!ctx) return [];
+  const { db, s } = ctx;
+  return db.select().from(s.scanIngredients).where(eq(s.scanIngredients.scanId, scanId));
 }
 
 // ============= Alternatives =============
 
 export async function addAlternative(alternative: InsertAlternative) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  const result = await db.insert(alternatives).values(alternative);
-  return result;
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  const result = await db.insert(s.alternatives).values(alternative);
+  return writeResult(ctx, result);
 }
 
 export async function deleteAlternatives(scanId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  await db.delete(alternatives).where(eq(alternatives.scanId, scanId));
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  await db.delete(s.alternatives).where(eq(s.alternatives.scanId, scanId));
 }
 
 export async function getAlternatives(scanId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  
-  return db.select().from(alternatives).where(eq(alternatives.scanId, scanId));
+  const ctx = await getCtx();
+  if (!ctx) return [];
+  const { db, s } = ctx;
+  return db.select().from(s.alternatives).where(eq(s.alternatives.scanId, scanId));
 }
 
 // ============= Chat Messages =============
 
 export async function addChatMessage(message: InsertChatMessage) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  const result = await db.insert(chatMessages).values(message);
-  return result;
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  const result = await db.insert(s.chatMessages).values(message);
+  return writeResult(ctx, result);
 }
 
 export async function getChatHistory(userId: number, scanId?: number, limit: number = 100) {
-  const db = await getDb();
-  if (!db) return [];
-  
+  const ctx = await getCtx();
+  if (!ctx) return [];
+  const { db, s } = ctx;
   // Without a scanId, only the general (non-scan) conversation is returned.
   const conditions = scanId !== undefined
-    ? and(eq(chatMessages.userId, userId), eq(chatMessages.scanId, scanId))
-    : and(eq(chatMessages.userId, userId), isNull(chatMessages.scanId));
+    ? and(eq(s.chatMessages.userId, userId), eq(s.chatMessages.scanId, scanId))
+    : and(eq(s.chatMessages.userId, userId), isNull(s.chatMessages.scanId));
   
   // Take the most recent `limit` messages, then return them oldest-first.
-  const rows = await db.select().from(chatMessages)
+  const rows = await db.select().from(s.chatMessages)
     .where(conditions)
-    .orderBy(desc(chatMessages.createdAt), desc(chatMessages.id))
+    .orderBy(desc(s.chatMessages.createdAt), desc(s.chatMessages.id))
     .limit(limit);
   return rows.reverse();
 }
@@ -307,45 +321,52 @@ export async function getChatHistory(userId: number, scanId?: number, limit: num
 // ============= Ingredient Database =============
 
 export async function getIngredientByName(name: string) {
-  const db = await getDb();
-  if (!db) return undefined;
-  
-  const result = await db.select().from(ingredientDatabase)
-    .where(eq(ingredientDatabase.name, name))
+  const ctx = await getCtx();
+  if (!ctx) return undefined;
+  const { db, s } = ctx;
+  const result = await db.select().from(s.ingredientDatabase)
+    .where(eqInsensitive(ctx, s.ingredientDatabase.name, name))
     .limit(1);
   
   return result.length > 0 ? result[0] : undefined;
 }
 
 export async function upsertIngredient(ingredient: InsertIngredientData) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  await db.insert(ingredientDatabase).values(ingredient).onDuplicateKeyUpdate({
-    set: {
-      ...ingredient,
-      lastUpdated: new Date(),
-    },
-  });
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  const set = { ...ingredient, lastUpdated: new Date() };
+  if (ctx.dialect === "sqlite") {
+    // MySQL's default collation makes the unique name case-insensitive; mimic that on SQLite.
+    const existing = await db.select({ id: s.ingredientDatabase.id }).from(s.ingredientDatabase)
+      .where(eqInsensitive(ctx, s.ingredientDatabase.name, ingredient.name))
+      .limit(1);
+    if (existing.length > 0) {
+      const { name: _name, ...rest } = set;
+      await db.update(s.ingredientDatabase).set(rest).where(eq(s.ingredientDatabase.id, existing[0].id));
+      return;
+    }
+  }
+  await upsertRow(ctx, s.ingredientDatabase, ingredient, set, "name");
 }
 
 // ============= Food Expiry Tracker Inventory =============
 
 export async function getUserInventory(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  
-  return db.select().from(foodInventory)
-    .where(eq(foodInventory.userId, userId))
-    .orderBy(foodInventory.expiryDate, foodInventory.id);
+  const ctx = await getCtx();
+  if (!ctx) return [];
+  const { db, s } = ctx;
+  return db.select().from(s.foodInventory)
+    .where(eq(s.foodInventory.userId, userId))
+    .orderBy(s.foodInventory.expiryDate, s.foodInventory.id);
 }
 
 export async function addInventoryItem(item: InsertFoodInventoryItem) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  const result = await db.insert(foodInventory).values(item);
-  return result[0].insertId;
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  const result = await db.insert(s.foodInventory).values(item);
+  return insertedId(ctx, result);
 }
 
 export async function updateInventoryItem(
@@ -353,18 +374,72 @@ export async function updateInventoryItem(
   userId: number,
   updates: Partial<InsertFoodInventoryItem>
 ) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  await db.update(foodInventory)
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  await db.update(s.foodInventory)
     .set({ ...updates, updatedAt: new Date() })
-    .where(and(eq(foodInventory.id, id), eq(foodInventory.userId, userId)));
+    .where(and(eq(s.foodInventory.id, id), eq(s.foodInventory.userId, userId)));
 }
 
 export async function deleteInventoryItem(id: number, userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  await db.delete(foodInventory)
-    .where(and(eq(foodInventory.id, id), eq(foodInventory.userId, userId)));
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  await db.delete(s.foodInventory)
+    .where(and(eq(s.foodInventory.id, id), eq(s.foodInventory.userId, userId)));
+}
+
+// ============= FreshGuard produce (per-user pantry + history) =============
+
+export async function listProduceScans(userId: number, limit = 50) {
+  const ctx = await getCtx();
+  if (!ctx) return [];
+  const { db, s } = ctx;
+  return db.select().from(s.produceScans)
+    .where(eq(s.produceScans.userId, userId))
+    .orderBy(desc(s.produceScans.createdAt), desc(s.produceScans.id))
+    .limit(limit);
+}
+
+export async function addProduceScan(scan: InsertProduceScan) {
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  const result = await db.insert(s.produceScans).values(scan);
+  return insertedId(ctx, result);
+}
+
+export async function clearProduceScans(userId: number) {
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  await db.delete(s.produceScans).where(eq(s.produceScans.userId, userId));
+}
+
+export async function listProduceInventory(userId: number) {
+  const ctx = await getCtx();
+  if (!ctx) return [];
+  const { db, s } = ctx;
+  return db.select().from(s.produceInventory)
+    .where(eq(s.produceInventory.userId, userId))
+    .orderBy(desc(s.produceInventory.id));
+}
+
+export async function addProduceInventoryItem(item: InsertProduceInventoryItem) {
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  const result = await db.insert(s.produceInventory).values(item);
+  return insertedId(ctx, result);
+}
+
+/** Returns true when a row owned by this user was deleted. */
+export async function deleteProduceInventoryItem(id: number, userId: number) {
+  const ctx = await getCtx();
+  if (!ctx) throw new Error("Database not available");
+  const { db, s } = ctx;
+  const result = await db.delete(s.produceInventory)
+    .where(and(eq(s.produceInventory.id, id), eq(s.produceInventory.userId, userId)));
+  return affectedRows(ctx, result) > 0;
 }

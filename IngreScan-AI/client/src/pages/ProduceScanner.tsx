@@ -1,13 +1,24 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/brand/PageHeader";
 import { StatusTag } from "@/components/brand/StatusTag";
+import { EthyleneAlerts } from "@/components/features/EthyleneAlerts";
+import { ShelfScan } from "@/components/features/ShelfScan";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { useState, useEffect, useRef } from "react";
+import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { toLocalDateInput } from "@/lib/utils";
+import {
+  classifyOnDevice,
+  ensureOnDeviceModel,
+  getOnDeviceState,
+  isOnDeviceSupported,
+  subscribeOnDevice,
+  type OnDeviceState,
+} from "@/lib/onDeviceProduce";
 import {
   Sparkles,
   Upload,
@@ -26,6 +37,9 @@ import {
   Cherry,
   Salad,
   ScanLine,
+  Cpu,
+  Cloud,
+  Loader2,
 } from "lucide-react";
 
 interface PredictionResult {
@@ -94,6 +108,35 @@ interface HistoryItem {
   created_at: string;
 }
 
+type InspectionEngine = "device" | "server";
+const ENGINE_PREF_KEY = "ingrescan.produce.engine";
+
+function readEnginePreference(): InspectionEngine {
+  try {
+    return window.localStorage.getItem(ENGINE_PREF_KEY) === "server" ? "server" : "device";
+  } catch {
+    return "device";
+  }
+}
+
+function writeEnginePreference(engine: InspectionEngine) {
+  try {
+    window.localStorage.setItem(ENGINE_PREF_KEY, engine);
+  } catch {
+    // storage unavailable (private mode, blocked): the choice just is not remembered
+  }
+}
+
+/** Everything one inspection needs: where the image bytes come from, and how to ask the server instead. */
+interface InspectionSource {
+  getBlob: () => Promise<Blob>;
+  callServer: () => Promise<PredictionResult>;
+  /** Image URL to store with the result when the on-device path produced it (samples only). */
+  imageUrl?: string;
+  successMessage: (data: PredictionResult) => string;
+  failureMessage: string;
+}
+
 export default function ProduceScanner() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -103,6 +146,15 @@ export default function ProduceScanner() {
   const [historyList, setHistoryList] = useState<HistoryItem[]>([]);
   const [isAddingToInventory, setIsAddingToInventory] = useState(false);
   const [activeTab, setActiveTab] = useState("scan");
+  const [scanMode, setScanMode] = useState<"single" | "shelf">("single");
+
+  // On-device inference (ONNX Runtime Web) is the default; the Flask service is the automatic fallback.
+  const deviceSupported = useRef(isOnDeviceSupported()).current;
+  const [enginePref, setEnginePref] = useState<InspectionEngine>(() => (deviceSupported ? readEnginePreference() : "server"));
+  const [deviceState, setDeviceState] = useState<OnDeviceState>(getOnDeviceState());
+  const [deviceBroken, setDeviceBroken] = useState(false);
+  const [lastRun, setLastRun] = useState<{ engine: InspectionEngine; ms: number } | null>(null);
+  const wantsDevice = deviceSupported && enginePref === "device" && !deviceBroken;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -113,6 +165,24 @@ export default function ProduceScanner() {
     loadInventory();
     loadHistory();
   }, []);
+
+  useEffect(() => subscribeOnDevice(setDeviceState), []);
+
+  // Start downloading the model as soon as the page opens (unless the user asked the browser to save data).
+  useEffect(() => {
+    if (!wantsDevice) return;
+    const saveData = (navigator as unknown as { connection?: { saveData?: boolean } }).connection?.saveData;
+    if (saveData) return;
+    ensureOnDeviceModel().catch(() => {
+      // the status line shows the error; the first inspection falls back to the server
+    });
+  }, [wantsDevice]);
+
+  const chooseEngine = (engine: InspectionEngine) => {
+    setEnginePref(engine);
+    writeEnginePreference(engine);
+    if (engine === "device") setDeviceBroken(false); // an explicit choice retries on-device inference
+  };
 
   const loadSamples = async () => {
     try {
@@ -126,13 +196,17 @@ export default function ProduceScanner() {
     }
   };
 
+  // Pantry and history are stored per user in MySQL (tRPC); the Flask service only classifies images.
+  const utils = trpc.useUtils();
+  const recordScan = trpc.produce.recordScan.useMutation();
+  const addInventoryMutation = trpc.produce.addInventory.useMutation();
+  const deleteInventoryMutation = trpc.produce.deleteInventory.useMutation();
+  const clearHistoryMutation = trpc.produce.clearHistory.useMutation();
+
   const loadInventory = async () => {
     try {
-      const res = await fetch("/api/freshguard/inventory");
-      if (res.ok) {
-        const data = await res.json();
-        setInventory(Array.isArray(data) ? data : []);
-      }
+      const data = await utils.produce.listInventory.fetch();
+      setInventory(Array.isArray(data) ? (data as InventoryItem[]) : []);
     } catch {
       // ignore
     }
@@ -140,13 +214,28 @@ export default function ProduceScanner() {
 
   const loadHistory = async () => {
     try {
-      const res = await fetch("/api/freshguard/history");
-      if (res.ok) {
-        const data = await res.json();
-        setHistoryList(Array.isArray(data) ? data : []);
-      }
+      const data = await utils.produce.listHistory.fetch();
+      setHistoryList(Array.isArray(data) ? (data as HistoryItem[]) : []);
     } catch {
       // ignore
+    }
+  };
+
+  /** Save a successful classification to this user's history (never blocks showing the result). */
+  const saveScanToHistory = async (data: PredictionResult) => {
+    try {
+      await recordScan.mutateAsync({
+        fruit: data.fruit,
+        fruitName: data.fruit_kr,
+        freshness: data.freshness_status,
+        freshnessLabel: data.freshness_kr,
+        pFresh: data.p_fresh,
+        confidence: data.confidence,
+        imageUrl: data.image_url ?? "",
+      });
+      await loadHistory();
+    } catch {
+      toast.error("Result shown, but it could not be saved to your history.");
     }
   };
 
@@ -164,57 +253,91 @@ export default function ProduceScanner() {
     reader.onload = () => {
       const base64 = reader.result as string;
       setSelectedImage(base64);
-      analyzeBase64(base64);
+      void analyzeFile(file, base64);
     };
     reader.onerror = () => toast.error("Could not read the selected file");
     reader.readAsDataURL(file);
   };
 
-  const analyzeBase64 = async (base64Img: string) => {
+  /**
+   * Run one inspection on-device when enabled, otherwise (or if that fails) on the server.
+   * Both paths feed the same result state, history and pantry code.
+   */
+  const inspect = async (source: InspectionSource) => {
     setIsAnalyzing(true);
     setResult(null);
     try {
-      const res = await fetch("/api/freshguard/predict", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: base64Img }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Failed to analyze image" }));
-        throw new Error(err.error || "Analysis failed");
+      let data: PredictionResult | null = null;
+      if (wantsDevice) {
+        try {
+          const started = performance.now();
+          const blob = await source.getBlob();
+          const run = await classifyOnDevice(blob);
+          data = { ...run.result, image_url: source.imageUrl ?? run.result.image_url };
+          setLastRun({ engine: "device", ms: Math.round(performance.now() - started) });
+        } catch (err: any) {
+          setDeviceBroken(true);
+          toast.warning(
+            `On-device inspection is unavailable (${err?.message || "unknown error"}). Using the server instead.`,
+          );
+        }
       }
-      const data: PredictionResult = await res.json();
+      if (!data) {
+        const started = performance.now();
+        data = await source.callServer();
+        setLastRun({ engine: "server", ms: Math.round(performance.now() - started) });
+      }
       setResult(data);
-      loadHistory();
-      toast.success(`Identified ${data.fruit_kr} as ${data.freshness_kr}.`);
+      void saveScanToHistory(data);
+      toast.success(source.successMessage(data));
     } catch (err: any) {
-      toast.error(err.message || "Failed to analyze produce freshness");
+      toast.error(err.message || source.failureMessage);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
+  const analyzeFile = (file: File, base64Img: string) =>
+    inspect({
+      getBlob: async () => file,
+      callServer: async () => {
+        const res = await fetch("/api/freshguard/predict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64Img }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Failed to analyze image" }));
+          throw new Error(err.error || "Analysis failed");
+        }
+        return (await res.json()) as PredictionResult;
+      },
+      successMessage: (data) => `Identified ${data.fruit_kr} as ${data.freshness_kr}.`,
+      failureMessage: "Failed to analyze produce freshness",
+    });
+
   const analyzeSample = async (sampleFilename: string, sampleUrl: string) => {
-    setIsAnalyzing(true);
     setSelectedImage(sampleUrl);
-    setResult(null);
-    try {
-      const res = await fetch(`/api/freshguard/predict?sample=${encodeURIComponent(sampleFilename)}`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => null);
-        throw new Error(err?.error || "Failed to load sample prediction");
-      }
-      const data: PredictionResult = await res.json();
-      setResult(data);
-      loadHistory();
-      toast.success(`Identified sample: ${data.fruit_kr}.`);
-    } catch (err: any) {
-      toast.error(err.message || "Sample analysis failed");
-    } finally {
-      setIsAnalyzing(false);
-    }
+    await inspect({
+      getBlob: async () => {
+        const res = await fetch(sampleUrl);
+        if (!res.ok) throw new Error(`could not load the sample image (${res.status})`);
+        return await res.blob();
+      },
+      callServer: async () => {
+        const res = await fetch(`/api/freshguard/predict?sample=${encodeURIComponent(sampleFilename)}`, {
+          method: "POST",
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => null);
+          throw new Error(err?.error || "Failed to load sample prediction");
+        }
+        return (await res.json()) as PredictionResult;
+      },
+      imageUrl: sampleUrl,
+      successMessage: (data) => `Identified sample: ${data.fruit_kr}.`,
+      failureMessage: "Sample analysis failed",
+    });
   };
 
   const addToInventory = async () => {
@@ -225,31 +348,21 @@ export default function ProduceScanner() {
       expiry.setDate(expiry.getDate() + (result.shelf_life_days || 3));
       const expiryStr = toLocalDateInput(expiry);
 
-      const res = await fetch("/api/freshguard/inventory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: result.fruit_kr,
-          fruit: result.fruit,
-          freshness_status: result.freshness_status,
-          p_fresh: result.p_fresh,
-          confidence: result.confidence,
-          image_url: result.image_url,
-          shelf_life_days: result.shelf_life_days,
-          storage_tips: result.storage_tips,
-          expiry_date: expiryStr,
-        }),
+      await addInventoryMutation.mutateAsync({
+        name: result.fruit_kr,
+        fruit: result.fruit,
+        freshness: result.freshness_status,
+        pFresh: result.p_fresh,
+        confidence: result.confidence,
+        imageUrl: result.image_url ?? "",
+        storageTip: result.storage_tips,
+        expiryDate: expiryStr,
       });
-
-      if (res.ok) {
-        toast.success(`Saved ${result.fruit_kr} to Fridge Inventory!`);
-        loadInventory();
-        setActiveTab("inventory");
-      } else {
-        toast.error("Failed to add to inventory");
-      }
-    } catch {
-      toast.error("Failed to add to inventory");
+      toast.success(`Saved ${result.fruit_kr} to Fridge Inventory!`);
+      await loadInventory();
+      setActiveTab("inventory");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to add to inventory");
     } finally {
       setIsAddingToInventory(false);
     }
@@ -257,29 +370,21 @@ export default function ProduceScanner() {
 
   const deleteInventoryItem = async (id: number) => {
     try {
-      const res = await fetch(`/api/freshguard/inventory/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        toast.success("Item removed from inventory");
-        loadInventory();
-      } else {
-        toast.error("Failed to delete item");
-      }
-    } catch {
-      toast.error("Failed to delete item");
+      await deleteInventoryMutation.mutateAsync({ id });
+      toast.success("Item removed from inventory");
+      await loadInventory();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete item");
     }
   };
 
   const clearHistory = async () => {
     try {
-      const res = await fetch("/api/freshguard/history", { method: "DELETE" });
-      if (res.ok) {
-        toast.success("History cleared");
-        loadHistory();
-      } else {
-        toast.error("Failed to clear history");
-      }
-    } catch {
-      toast.error("Failed to clear history");
+      await clearHistoryMutation.mutateAsync();
+      toast.success("History cleared");
+      await loadHistory();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to clear history");
     }
   };
 
@@ -313,6 +418,30 @@ export default function ProduceScanner() {
         : status === "rotten"
           ? "[&>[data-slot=progress-indicator]]:bg-signal-red-orange"
           : "[&>[data-slot=progress-indicator]]:bg-graphite";
+
+  const providerLabel = deviceState.kind === "ready" ? (deviceState.provider === "webgpu" ? "WebGPU" : "CPU") : "";
+  const engineStatusText = !deviceSupported
+    ? "Using server (on-device not supported here)"
+    : enginePref === "server"
+      ? "Using server"
+      : deviceBroken
+        ? "Using server (on-device unavailable)"
+        : deviceState.kind === "loading"
+          ? `Loading on-device model ${deviceState.percent}%`
+          : deviceState.kind === "ready"
+            ? `Runs on this device (${providerLabel})`
+            : deviceState.kind === "error"
+              ? "Using server (on-device unavailable)"
+              : "On-device model not loaded yet";
+  const engineHelpText = !deviceSupported
+    ? "This browser lacks WebAssembly or image decoding support, so photos are sent to the server."
+    : wantsDevice
+      ? lastRun?.engine === "device"
+        ? `Last inspection took ${lastRun.ms} ms. Your photo stayed on this device.`
+        : "Photos are analysed in your browser and are not uploaded. Works offline once the model is downloaded."
+      : lastRun?.engine === "server"
+        ? `Last inspection took ${lastRun.ms} ms on the server.`
+        : "Photos are uploaded to the FreshGuard server for analysis.";
 
   const supportedProduce = [
     "Apple",
@@ -369,7 +498,36 @@ export default function ProduceScanner() {
           </TabsList>
 
           {/* TAB 1: AI SCANNER */}
-          <TabsContent value="scan">
+          <TabsContent value="scan" className="space-y-6">
+            <div className="flex gap-2" role="group" aria-label="Scan mode" data-testid="scan-mode">
+              <Button
+                size="sm"
+                variant={scanMode === "single" ? "dark" : "outline"}
+                aria-pressed={scanMode === "single"}
+                onClick={() => setScanMode("single")}
+                data-testid="scan-mode-single"
+              >
+                <Apple className="h-4 w-4" /> Single item
+              </Button>
+              <Button
+                size="sm"
+                variant={scanMode === "shelf" ? "dark" : "outline"}
+                aria-pressed={scanMode === "shelf"}
+                onClick={() => setScanMode("shelf")}
+                data-testid="scan-mode-shelf"
+              >
+                <Refrigerator className="h-4 w-4" /> Scan a whole shelf
+              </Button>
+            </div>
+            {scanMode === "shelf" ? (
+              <ShelfScan
+                onAdded={async () => {
+                  await loadInventory();
+                  setActiveTab("inventory");
+                }}
+                onUseSingle={() => setScanMode("single")}
+              />
+            ) : (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
               {/* Left Column: Upload & Camera & Samples */}
               <div className="lg:col-span-5">
@@ -386,6 +544,52 @@ export default function ProduceScanner() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-5">
+                    {/* Inspection engine: on this device (default) or on the server */}
+                    <div className="space-y-2 rounded-2xl bg-fog p-3" data-testid="engine-status">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p
+                          className="flex min-w-0 items-center gap-2 text-sm font-bold text-graphite"
+                          role="status"
+                          aria-live="polite"
+                          data-testid="engine-status-text"
+                        >
+                          {wantsDevice && deviceState.kind === "loading" ? (
+                            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ember-orange" />
+                          ) : wantsDevice ? (
+                            <Cpu className="h-4 w-4 shrink-0 text-verdant-green" />
+                          ) : (
+                            <Cloud className="h-4 w-4 shrink-0 text-graphite" />
+                          )}
+                          <span className="truncate">{engineStatusText}</span>
+                        </p>
+                        <div className="flex gap-1" role="group" aria-label="Inspection engine">
+                          <Button
+                            size="sm"
+                            variant={enginePref === "device" && deviceSupported ? "dark" : "outline"}
+                            aria-pressed={enginePref === "device" && deviceSupported}
+                            disabled={!deviceSupported}
+                            onClick={() => chooseEngine("device")}
+                            data-testid="engine-device"
+                          >
+                            On device
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={enginePref === "server" || !deviceSupported ? "dark" : "outline"}
+                            aria-pressed={enginePref === "server" || !deviceSupported}
+                            onClick={() => chooseEngine("server")}
+                            data-testid="engine-server"
+                          >
+                            Server
+                          </Button>
+                        </div>
+                      </div>
+                      {wantsDevice && deviceState.kind === "loading" && (
+                        <Progress value={deviceState.percent} className="h-1.5 bg-white [&>[data-slot=progress-indicator]]:bg-ember-orange" />
+                      )}
+                      <p className="text-xs text-muted-foreground">{engineHelpText}</p>
+                    </div>
+
                     {/* Image Preview Box */}
                     <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-fog">
                       {selectedImage ? (
@@ -498,7 +702,11 @@ export default function ProduceScanner() {
                       <div>
                         <h3 className="text-lg font-bold text-graphite">AI Inspecting Freshness...</h3>
                         <p className="text-sm text-muted-foreground">
-                          Running EfficientNet-B0 multitask neural classification
+                          {wantsDevice && deviceState.kind === "loading"
+                            ? `Downloading the on-device model (${deviceState.percent}%)`
+                            : wantsDevice
+                              ? "Running EfficientNet-B0 on this device"
+                              : "Running EfficientNet-B0 multitask neural classification"}
                         </p>
                       </div>
                     </div>
@@ -643,6 +851,7 @@ export default function ProduceScanner() {
                   </section>
               </div>
             </div>
+            )}
           </TabsContent>
 
           {/* TAB 2: INVENTORY */}
@@ -658,6 +867,8 @@ export default function ProduceScanner() {
                 <RotateCcw className="h-4 w-4" /> Refresh
               </Button>
             </div>
+
+            <EthyleneAlerts />
 
             {inventory.length === 0 ? (
               <div className="rounded-3xl bg-white p-8 text-center md:p-12">
