@@ -34,13 +34,13 @@ function parseReasons(json: string | null): string[] {
 }
 
 type StoredItem = { label: string | null; fruitType: string; freshness: string; pFresh: number; confidence: number };
-type StoredBatch = { vendor: string; lotId: string | null; createdAt: Date };
+type StoredBatch = { vendor: string; lotId: string | null; createdAt: Date; declaredSampleSize?: number | null };
 
 /** Rebuild the auditable summary from stored photos, so the grading rule can never drift from the numbers. */
 function summaryFor(batch: StoredBatch, items: StoredItem[]) {
   return summarizeBatch(
     items.map((i) => ({ freshness_status: i.freshness, p_fresh: i.pFresh, confidence: i.confidence, fruit: i.fruitType, photoId: i.label ?? undefined })),
-    { vendor: batch.vendor, lotId: batch.lotId ?? undefined, receivedAt: batch.createdAt.toISOString() }
+    { vendor: batch.vendor, lotId: batch.lotId ?? undefined, sampleSize: batch.declaredSampleSize ?? undefined, receivedAt: batch.createdAt.toISOString() }
   );
 }
 
@@ -91,6 +91,7 @@ export const qcRouter = router({
           vendor: input.vendor,
           lotId: input.lotId ?? null,
           notes: input.notes ?? null,
+          declaredSampleSize: input.sampleSize ?? null,
           verdict: summary.verdict,
           total: input.items.length,
           gradeA: summary.counts.A,
