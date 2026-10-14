@@ -165,6 +165,11 @@ export function AIChatBox({
     }
   };
 
+  // Keep the newest message (and loading indicator) in view
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages.length, isLoading]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedInput = input.trim();
@@ -191,7 +196,7 @@ export function AIChatBox({
     <div
       ref={containerRef}
       className={cn(
-        "flex flex-col bg-card text-card-foreground rounded-lg border shadow-sm",
+        "flex flex-col overflow-hidden rounded-3xl border border-border bg-card text-card-foreground",
         className
       )}
       style={{ height }}
@@ -201,9 +206,11 @@ export function AIChatBox({
         {displayMessages.length === 0 ? (
           <div className="flex h-full flex-col p-4">
             <div className="flex flex-1 flex-col items-center justify-center gap-6 text-muted-foreground">
-              <div className="flex flex-col items-center gap-3">
-                <Sparkles className="size-12 opacity-20" />
-                <p className="text-sm">{emptyStateMessage}</p>
+              <div className="flex flex-col items-center gap-3 text-center">
+                <span className="grid size-14 place-items-center rounded-2xl bg-fog" aria-hidden="true">
+                  <Sparkles className="size-6 text-ember-orange" />
+                </span>
+                <p className="text-sm font-medium">{emptyStateMessage}</p>
               </div>
 
               {suggestedPrompts && suggestedPrompts.length > 0 && (
@@ -213,7 +220,7 @@ export function AIChatBox({
                       key={index}
                       onClick={() => onSendMessage(prompt)}
                       disabled={isLoading}
-                      className="rounded-lg border border-border bg-card px-4 py-2 text-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                      className="min-h-11 rounded-3xl bg-fog px-4 py-2 text-sm font-bold text-graphite transition-colors hover:bg-[#ebebeb] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {prompt}
                     </button>
@@ -224,7 +231,7 @@ export function AIChatBox({
           </div>
         ) : (
           <ScrollArea className="h-full">
-            <div className="flex flex-col space-y-4 p-4">
+            <div className="flex flex-col space-y-4 p-4 md:p-6">
               {displayMessages.map((message, index) => {
                 // Apply min-height to last message only if NOT loading (when loading, the loading indicator gets it)
                 const isLastMessage = index === displayMessages.length - 1;
@@ -247,33 +254,33 @@ export function AIChatBox({
                     }
                   >
                     {message.role === "assistant" && (
-                      <div className="size-8 shrink-0 mt-1 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Sparkles className="size-4 text-primary" />
+                      <div className="mt-1 grid size-8 shrink-0 place-items-center rounded-xl bg-fog" aria-hidden="true">
+                        <Sparkles className="size-4 text-ember-orange" />
                       </div>
                     )}
 
                     <div
                       className={cn(
-                        "max-w-[80%] rounded-lg px-4 py-2.5",
+                        "min-w-0 max-w-[85%] break-words rounded-3xl px-4 py-3 sm:max-w-[80%]",
                         message.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-foreground"
+                          ? "rounded-tr-lg bg-graphite text-white"
+                          : "rounded-tl-lg bg-fog text-graphite"
                       )}
                     >
                       {message.role === "assistant" ? (
-                        <div className="prose prose-sm dark:prose-invert max-w-none">
+                        <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed text-graphite">
                           <Streamdown>{message.content}</Streamdown>
                         </div>
                       ) : (
-                        <p className="whitespace-pre-wrap text-sm">
+                        <p className="whitespace-pre-wrap text-sm font-medium">
                           {message.content}
                         </p>
                       )}
                     </div>
 
                     {message.role === "user" && (
-                      <div className="size-8 shrink-0 mt-1 rounded-full bg-secondary flex items-center justify-center">
-                        <User className="size-4 text-secondary-foreground" />
+                      <div className="mt-1 grid size-8 shrink-0 place-items-center rounded-xl bg-fog" aria-hidden="true">
+                        <User className="size-4 text-graphite" />
                       </div>
                     )}
                   </div>
@@ -289,10 +296,10 @@ export function AIChatBox({
                       : undefined
                   }
                 >
-                  <div className="size-8 shrink-0 mt-1 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Sparkles className="size-4 text-primary" />
+                  <div className="mt-1 grid size-8 shrink-0 place-items-center rounded-xl bg-fog" aria-hidden="true">
+                    <Sparkles className="size-4 text-ember-orange" />
                   </div>
-                  <div className="rounded-lg bg-muted px-4 py-2.5">
+                  <div className="rounded-3xl rounded-tl-lg bg-fog px-4 py-3">
                     <Loader2 className="size-4 animate-spin text-muted-foreground" />
                   </div>
                 </div>
@@ -306,7 +313,7 @@ export function AIChatBox({
       <form
         ref={inputAreaRef}
         onSubmit={handleSubmit}
-        className="flex gap-2 p-4 border-t bg-background/50 items-end"
+        className="flex items-end gap-2 border-t border-border bg-white p-3 md:p-4"
       >
         <Textarea
           ref={textareaRef}
@@ -314,14 +321,15 @@ export function AIChatBox({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="flex-1 max-h-32 resize-none min-h-9"
+          className="max-h-32 min-h-11 flex-1 resize-none py-2.5"
           rows={1}
         />
         <Button
           type="submit"
           size="icon"
           disabled={!input.trim() || isLoading}
-          className="shrink-0 h-[38px] w-[38px]"
+          className="shrink-0"
+          aria-label="Send message"
         >
           {isLoading ? (
             <Loader2 className="size-4 animate-spin" />

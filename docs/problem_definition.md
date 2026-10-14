@@ -1,14 +1,14 @@
-# 문제 정의 및 해결 전략
+# Problem Definition and Solution Strategy
 
-## 핵심 문제
-1. 시각적으로 신선도를 판단하기 어렵다
-2. 식재료 관리가 비효율적이다
-3. 적절한 소비 타이밍 판단 어려움
-4. 앱/AI 기반 자동화 솔루션 부족
+## Core Problems
+1. Freshness is hard to judge visually
+2. Ingredient management is inefficient
+3. It is hard to judge the right time to consume food
+4. Lack of app/AI-based automated solutions
 
-## FreshGuard의 해결 전략
-- EfficientNet 기반 신선도 판별
-- 과일 종류(10종) + 신선도(2종: fresh/rotten) 멀티태스크 모델
-- 신선도 확률 기반 3단계(fresh / normal / rotten) 후처리 규칙 적용
-- 서버 기반 분석 후 앱에서 바로 결과 제공
-- 향후 조리법 추천 및 다중 재료 분석 확장 가능
+## FreshGuard's Solution Strategy
+- EfficientNet-based freshness assessment
+- Multitask model for fruit type (10 types) + freshness (2 classes: fresh/rotten)
+- Post-processing rule that maps the freshness probability to 3 levels (fresh / normal / rotten)
+- Server-side analysis with results delivered directly in the app
+- Extensible in the future to recipe recommendations and multi-ingredient analysis

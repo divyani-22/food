@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, float } from "drizzle-orm/mysql-core";
+import { index, uniqueIndex, int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, float } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -33,7 +33,9 @@ export const userProfiles = mysqlTable("user_profiles", {
   dietType: mysqlEnum("diet_type", ["veg", "non_veg", "vegan", "keto", "other"]),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, t => ({
+  userIdUnique: uniqueIndex("user_profiles_user_id_unique").on(t.userId),
+}));
 
 export type UserProfile = typeof userProfiles.$inferSelect;
 export type InsertUserProfile = typeof userProfiles.$inferInsert;
@@ -48,7 +50,9 @@ export const medicalConditions = mysqlTable("medical_conditions", {
   diagnosedDate: timestamp("diagnosed_date"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, t => ({
+  userIdIdx: index("medical_conditions_user_id_idx").on(t.userId),
+}));
 
 export type MedicalCondition = typeof medicalConditions.$inferSelect;
 export type InsertMedicalCondition = typeof medicalConditions.$inferInsert;
@@ -68,7 +72,9 @@ export const medications = mysqlTable("medications", {
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, t => ({
+  userIdIdx: index("medications_user_id_idx").on(t.userId),
+}));
 
 export type Medication = typeof medications.$inferSelect;
 export type InsertMedication = typeof medications.$inferInsert;
@@ -89,7 +95,9 @@ export const foodScans = mysqlTable("food_scans", {
   analysisComplete: boolean("analysis_complete").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, t => ({
+  userIdIdx: index("food_scans_user_id_idx").on(t.userId),
+}));
 
 export type FoodScan = typeof foodScans.$inferSelect;
 export type InsertFoodScan = typeof foodScans.$inferInsert;
@@ -99,7 +107,7 @@ export type InsertFoodScan = typeof foodScans.$inferInsert;
  */
 export const scanIngredients = mysqlTable("scan_ingredients", {
   id: int("id").autoincrement().primaryKey(),
-  scanId: int("scan_id").notNull(),
+  scanId: int("scan_id").notNull().references(() => foodScans.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
   scientificName: varchar("scientific_name", { length: 255 }),
   category: varchar("category", { length: 100 }),
@@ -110,7 +118,9 @@ export const scanIngredients = mysqlTable("scan_ingredients", {
   personalizedRisk: text("personalized_risk"),
   sources: text("sources"), // JSON array of source URLs
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, t => ({
+  scanIdIdx: index("scan_ingredients_scan_id_idx").on(t.scanId),
+}));
 
 export type ScanIngredient = typeof scanIngredients.$inferSelect;
 export type InsertScanIngredient = typeof scanIngredients.$inferInsert;
@@ -120,13 +130,15 @@ export type InsertScanIngredient = typeof scanIngredients.$inferInsert;
  */
 export const alternatives = mysqlTable("alternatives", {
   id: int("id").autoincrement().primaryKey(),
-  scanId: int("scan_id").notNull(),
+  scanId: int("scan_id").notNull().references(() => foodScans.id, { onDelete: "cascade" }),
   productName: varchar("product_name", { length: 255 }).notNull(),
   reason: text("reason").notNull(),
   scientificJustification: text("scientific_justification"),
   sources: text("sources"), // JSON array
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, t => ({
+  scanIdIdx: index("alternatives_scan_id_idx").on(t.scanId),
+}));
 
 export type Alternative = typeof alternatives.$inferSelect;
 export type InsertAlternative = typeof alternatives.$inferInsert;
@@ -137,11 +149,14 @@ export type InsertAlternative = typeof alternatives.$inferInsert;
 export const chatMessages = mysqlTable("chat_messages", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("user_id").notNull(),
-  scanId: int("scan_id"), // optional, if chat is related to a specific scan
+  scanId: int("scan_id").references(() => foodScans.id, { onDelete: "cascade" }), // optional, if chat is related to a specific scan
   role: mysqlEnum("role", ["user", "assistant"]).notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, t => ({
+  userIdIdx: index("chat_messages_user_id_idx").on(t.userId),
+  scanIdIdx: index("chat_messages_scan_id_idx").on(t.scanId),
+}));
 
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type InsertChatMessage = typeof chatMessages.$inferInsert;
@@ -185,7 +200,9 @@ export const foodInventory = mysqlTable("food_inventory", {
   status: mysqlEnum("status", ["fresh", "expiring_soon", "expired", "consumed"]).default("fresh").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, t => ({
+  userIdIdx: index("food_inventory_user_id_idx").on(t.userId),
+}));
 
 export type FoodInventoryItem = typeof foodInventory.$inferSelect;
 export type InsertFoodInventoryItem = typeof foodInventory.$inferInsert;

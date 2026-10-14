@@ -1,6 +1,7 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
+import { ENV } from "./env";
 import { sdk } from "./sdk";
 
 export type TrpcContext = {
@@ -21,8 +22,10 @@ export async function createContext(
     user = null;
   }
 
-  // If running locally without OAuth session, provide a local user so all features work
-  if (!user) {
+  // If running locally without OAuth session, provide a local user so all features work.
+  // NEVER do this in production: it would give every anonymous visitor a shared admin account.
+  const allowLocalFallback = !ENV.isProduction;
+  if (!user && allowLocalFallback) {
     try {
       const dbInstance = await db.getDb();
       if (dbInstance) {
@@ -45,7 +48,7 @@ export async function createContext(
     }
   }
 
-  if (!user) {
+  if (!user && allowLocalFallback) {
     user = {
       id: 1,
       openId: "local-dev-user",

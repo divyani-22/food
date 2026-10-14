@@ -1,0 +1,3 @@
+-- Remove chat messages pointing at scans that no longer exist so the foreign key can be added.
+DELETE FROM `chat_messages` WHERE `scan_id` IS NOT NULL AND `scan_id` NOT IN (SELECT `id` FROM `food_scans`);--> statement-breakpoint
+ALTER TABLE `chat_messages` ADD CONSTRAINT `chat_messages_scan_id_food_scans_id_fk` FOREIGN KEY (`scan_id`) REFERENCES `food_scans`(`id`) ON DELETE cascade ON UPDATE no action;

@@ -446,12 +446,28 @@ function generateFallbackResponse(params: InvokeParams): InvokeResult {
   };
 }
 
+const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS) || 60_000;
+
+export class LLMUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LLMUnavailableError";
+  }
+}
+
+/** Local keyword engine is allowed outside production, or when explicitly enabled. */
+export function isLocalFallbackAllowed(): boolean {
+  return process.env.NODE_ENV !== "production" || process.env.ALLOW_LOCAL_LLM_FALLBACK === "true";
+}
+
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const apiKey = getApiKey();
 
-  // If no external API key is provided, use the intelligent built-in nutrition analyzer
+  // No API key: the built-in keyword engine is a demo/offline mode only. It must never
+  // masquerade as real analysis in production unless explicitly opted in.
   if (!apiKey) {
-    return generateFallbackResponse(params);
+    if (isLocalFallbackAllowed()) return generateFallbackResponse(params);
+    throw new LLMUnavailableError("AI service is not configured. Set OPENAI_API_KEY (or the Forge API key).");
   }
 
   const {
@@ -502,24 +518,27 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.response_format = normalizedResponseFormat;
   }
 
+  let response: Response;
   try {
-    const response = await fetch(resolveApiUrl(), {
+    response = await fetch(resolveApiUrl(), {
       method: "POST",
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
     });
-
-    if (!response.ok) {
-      console.warn(`[LLM] API call failed (${response.status}), falling back to local nutrition engine`);
-      return generateFallbackResponse(params);
-    }
-
-    return (await response.json()) as InvokeResult;
   } catch (error) {
-    console.warn("[LLM] Network error contacting API, falling back to local nutrition engine:", error);
-    return generateFallbackResponse(params);
+    console.error("[LLM] Request failed:", error);
+    throw new LLMUnavailableError("AI service is unreachable or timed out. Please try again.");
   }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.error(`[LLM] API call failed (${response.status}): ${detail.slice(0, 300)}`);
+    throw new LLMUnavailableError(`AI service returned an error (${response.status}). Please try again.`);
+  }
+
+  return (await response.json()) as InvokeResult;
 }

@@ -7,64 +7,118 @@ import { z } from "zod";
 import * as db from "./db";
 import { storagePut } from "./storage";
 import { invokeLLM } from "./_core/llm";
+import fs from "fs";
+import { randomBytes } from "crypto";
+import path from "path";
+import {
+  clampRiskScore,
+  computeBmi,
+  computeExpiry,
+  firstCategory,
+  getLLMText,
+  normalizeGrade,
+  normalizeNova,
+  parseAllergens,
+  parseLLMJson,
+  parseTimestampInput,
+  sanitizeAlternative,
+  sanitizeFileName,
+  sanitizeIngredient,
+} from "./logic";
+
+const MAX_UPLOAD_BYTES = 16 * 1024 * 1024;
+
+/** Look up a scan owned by the caller or throw NOT_FOUND (prevents cross-user access). */
+async function requireOwnedScan(scanId: number, userId: number) {
+  const scan = await db.getFoodScan(scanId, userId);
+  if (!scan) throw new TRPCError({ code: "NOT_FOUND", message: "Scan not found" });
+  return scan;
+}
+
+/** Parse a date input for a TIMESTAMP column or throw BAD_REQUEST. */
+function requireDate(value: string | Date): Date {
+  const d = parseTimestampInput(value);
+  if (!d) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid date" });
+  return d;
+}
+
+/** Local uploads are stored as relative /uploads/... URLs the LLM cannot fetch; inline them. */
+async function resolveImageForLLM(url: string): Promise<string> {
+  if (!url.startsWith("/uploads/")) return url;
+  const uploadsDir = path.resolve(process.cwd(), "uploads");
+  const file = path.resolve(uploadsDir, path.basename(url));
+  if (path.dirname(file) !== uploadsDir) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid image URL" });
+  try {
+    const buf = await fs.promises.readFile(file);
+    const ext = path.extname(file).slice(1).toLowerCase();
+    const mime = ext === "jpg" ? "jpeg" : ext || "png";
+    return `data:image/${mime};base64,${buf.toString("base64")}`;
+  } catch {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Image not found" });
+  }
+}
 
 
 // ============= Input Schemas =============
 
 const userProfileSchema = z.object({
-  age: z.number().optional(),
+  age: z.number().int().min(0).max(130).optional(),
   gender: z.enum(["male", "female", "other"]).optional(),
-  height: z.number().optional(),
-  weight: z.number().optional(),
-  bmi: z.number().optional(),
+  height: z.number().int().min(30).max(300).optional(), // cm (int column)
+  weight: z.number().int().min(1).max(700).optional(), // kg (int column)
+  bmi: z.number().min(0).max(200).optional(),
   exerciseFrequency: z.enum(["sedentary", "light", "moderate", "active", "very_active"]).optional(),
   dietType: z.enum(["veg", "non_veg", "vegan", "keto", "other"]).optional(),
 });
 
 const medicalConditionSchema = z.object({
-  condition: z.string(),
+  condition: z.string().trim().min(1).max(2000),
   diagnosedDate: z.date().optional(),
-  notes: z.string().optional(),
+  notes: z.string().max(5000).optional(),
 });
 
 const medicationSchema = z.object({
-  name: z.string(),
-  dosage: z.string().optional(),
-  frequency: z.string().optional(),
+  name: z.string().trim().min(1).max(255),
+  dosage: z.string().max(100).optional(),
+  frequency: z.string().max(100).optional(),
   startDate: z.date().optional(),
   endDate: z.date().optional(),
   isCurrent: z.boolean().default(true),
-  notes: z.string().optional(),
+  notes: z.string().max(5000).optional(),
 });
 
+// Zod 4 applies .default() even inside .partial(), which would silently reset isCurrent to true
+// on every partial update. Use an explicit optional instead.
+const medicationUpdateSchema = medicationSchema.extend({ isCurrent: z.boolean().optional() }).partial();
+
 const createScanSchema = z.object({
-  productName: z.string().optional(),
+  productName: z.string().max(255).optional(),
   inputType: z.enum(["text", "image"]),
-  rawIngredients: z.string().optional(),
-  imageUrl: z.string().optional(),
-  imageKey: z.string().optional(),
+  rawIngredients: z.string().max(20000).optional(),
+  imageUrl: z.string().max(2000).optional(),
+  imageKey: z.string().max(2000).optional(),
 });
 
 const createInventoryItemSchema = z.object({
-  title: z.string().min(1),
-  category: z.string().default("Other"),
-  quantity: z.string().default("1"),
+  title: z.string().trim().min(1).max(255),
+  category: z.string().max(100).default("Other"),
+  quantity: z.string().max(100).default("1"),
   storageLocation: z.enum(["fridge", "freezer", "pantry"]).default("fridge"),
-  foodImageUrl: z.string().optional(),
-  barcode: z.string().optional(),
+  foodImageUrl: z.string().max(2000).optional(),
+  barcode: z.string().max(64).optional(),
   expiryDate: z.string().or(z.date()),
-  notes: z.string().optional(),
+  notes: z.string().max(5000).optional(),
 });
 
 const updateInventoryItemSchema = z.object({
-  id: z.number(),
-  title: z.string().optional(),
-  category: z.string().optional(),
-  quantity: z.string().optional(),
+  id: z.number().int(),
+  title: z.string().trim().min(1).max(255).optional(),
+  category: z.string().max(100).optional(),
+  quantity: z.string().max(100).optional(),
   storageLocation: z.enum(["fridge", "freezer", "pantry"]).optional(),
-  foodImageUrl: z.string().optional(),
+  foodImageUrl: z.string().max(2000).optional(),
   expiryDate: z.string().or(z.date()).optional(),
-  notes: z.string().optional(),
+  notes: z.string().max(5000).optional(),
   status: z.enum(["fresh", "expiring_soon", "expired", "consumed"]).optional(),
 });
 
@@ -92,11 +146,7 @@ export const appRouter = router({
       .input(userProfileSchema)
       .mutation(async ({ ctx, input }) => {
         // Calculate BMI if height and weight provided
-        let bmi = input.bmi;
-        if (input.height && input.weight && !bmi) {
-          const heightInMeters = input.height / 100;
-          bmi = input.weight / (heightInMeters * heightInMeters);
-        }
+        const bmi = input.bmi ?? computeBmi(input.height, input.weight);
 
         return db.upsertUserProfile({
           userId: ctx.user.id,
@@ -119,7 +169,7 @@ export const appRouter = router({
       }),
 
     deleteMedicalCondition: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number().int() }))
       .mutation(async ({ ctx, input }) => {
         return db.deleteMedicalCondition(input.id, ctx.user.id);
       }),
@@ -142,14 +192,14 @@ export const appRouter = router({
     updateMedication: protectedProcedure
       .input(z.object({
         id: z.number(),
-        updates: medicationSchema.partial(),
+        updates: medicationUpdateSchema,
       }))
       .mutation(async ({ ctx, input }) => {
         return db.updateMedication(input.id, ctx.user.id, input.updates);
       }),
 
     deleteMedication: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number().int() }))
       .mutation(async ({ ctx, input }) => {
         return db.deleteMedication(input.id, ctx.user.id);
       }),
@@ -161,11 +211,13 @@ export const appRouter = router({
       .input(z.object({
         fileName: z.string(),
         fileData: z.string(), // base64
-        mimeType: z.string(),
+        mimeType: z.string().regex(/^image\/[a-zA-Z0-9.+-]+$/, "Only image uploads are allowed"),
       }))
       .mutation(async ({ ctx, input }) => {
         const buffer = Buffer.from(input.fileData, 'base64');
-        const fileKey = `scans/${ctx.user.id}/${Date.now()}-${input.fileName}`;
+        if (buffer.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Empty file" });
+        if (buffer.length > MAX_UPLOAD_BYTES) throw new TRPCError({ code: "BAD_REQUEST", message: "File too large (max 16MB)" });
+        const fileKey = `scans/${ctx.user.id}/${Date.now()}-${randomBytes(8).toString("hex")}-${sanitizeFileName(input.fileName)}`;
         const { url } = await storagePut(fileKey, buffer, input.mimeType);
         return { url, fileKey };
       }),
@@ -177,14 +229,14 @@ export const appRouter = router({
           userId: ctx.user.id,
           ...input,
         });
+        if (!scanId) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create scan" });
         return { scanId };
       }),
 
     getScan: protectedProcedure
       .input(z.object({ scanId: z.number() }))
       .query(async ({ ctx, input }) => {
-        const scan = await db.getFoodScan(input.scanId, ctx.user.id);
-        if (!scan) throw new Error("Scan not found");
+        const scan = await requireOwnedScan(input.scanId, ctx.user.id);
         
         const ingredients = await db.getScanIngredients(input.scanId);
         const alternatives = await db.getAlternatives(input.scanId);
@@ -193,17 +245,19 @@ export const appRouter = router({
       }),
 
     getUserScans: protectedProcedure
-      .input(z.object({ limit: z.number().default(50) }))
+      .input(z.object({ limit: z.number().int().min(1).max(200).default(50) }))
       .query(async ({ ctx, input }) => {
         return db.getUserScans(ctx.user.id, input.limit);
       }),
 
     processOCR: protectedProcedure
       .input(z.object({
-        scanId: z.number(),
-        imageUrl: z.string(),
+        scanId: z.number().int(),
+        imageUrl: z.string().min(1).max(2000),
       }))
       .mutation(async ({ ctx, input }) => {
+        await requireOwnedScan(input.scanId, ctx.user.id);
+        const imageUrl = await resolveImageForLLM(input.imageUrl);
         // Use LLM with vision to extract ingredients from image
         const response = await invokeLLM({
           messages: [
@@ -221,7 +275,7 @@ export const appRouter = router({
                 {
                   type: "image_url",
                   image_url: {
-                    url: input.imageUrl,
+                    url: imageUrl,
                     detail: "high"
                   }
                 }
@@ -230,9 +284,8 @@ export const appRouter = router({
           ],
         });
 
-        const ocrText = typeof response.choices[0].message.content === 'string'
-          ? response.choices[0].message.content
-          : JSON.stringify(response.choices[0].message.content);
+        const ocrText = getLLMText(response).trim();
+        if (!ocrText) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not extract ingredients from the image" });
         
         // Update scan with OCR results
         await db.updateFoodScan(input.scanId, ctx.user.id, {
@@ -248,10 +301,11 @@ export const appRouter = router({
   analysis: router({
     analyzeIngredients: protectedProcedure
       .input(z.object({
-        scanId: z.number(),
-        ingredients: z.string(),
+        scanId: z.number().int(),
+        ingredients: z.string().trim().min(1, "Ingredients are required").max(20000),
       }))
       .mutation(async ({ ctx, input }) => {
+        await requireOwnedScan(input.scanId, ctx.user.id);
         // Get user profile for personalized analysis
         const userProfile = await db.getUserProfile(ctx.user.id);
         const medicalConditions = await db.getMedicalConditions(ctx.user.id);
@@ -347,30 +401,29 @@ Return the analysis with consumer education focus as a JSON array with this stru
           }
         });
 
-        const content = typeof response.choices[0].message.content === 'string'
-          ? response.choices[0].message.content
-          : JSON.stringify(response.choices[0].message.content);
-        const analysisResult = JSON.parse(content);
+        let analysisResult: any;
+        try {
+          analysisResult = parseLLMJson(getLLMText(response));
+        } catch (err) {
+          console.error("[Analysis] Unparseable LLM response:", err);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI analysis returned an invalid response. Please try again." });
+        }
+        const parsedIngredients = (Array.isArray(analysisResult?.ingredients) ? analysisResult.ingredients : [])
+          .map(sanitizeIngredient)
+          .filter((i: any): i is NonNullable<typeof i> => i !== null);
+        if (parsedIngredients.length === 0) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI analysis returned no ingredients. Please try again." });
+        }
 
-        // Save ingredients to database
-        for (const ingredient of analysisResult.ingredients) {
-          await db.addScanIngredient({
-            scanId: input.scanId,
-            name: ingredient.name,
-            scientificName: ingredient.scientificName,
-            category: ingredient.category,
-            riskLevel: ingredient.riskLevel as any,
-            shortTermEffects: ingredient.shortTermEffects,
-            longTermEffects: ingredient.longTermEffects,
-            sideEffects: ingredient.sideEffects,
-            personalizedRisk: ingredient.personalizedRisk,
-            sources: JSON.stringify(ingredient.sources),
-          });
+        // Replace any previous analysis so re-running does not duplicate rows
+        await db.deleteScanIngredients(input.scanId);
+        for (const ingredient of parsedIngredients) {
+          await db.addScanIngredient({ scanId: input.scanId, ...ingredient });
         }
 
         // Update scan with risk score
         await db.updateFoodScan(input.scanId, ctx.user.id, {
-          riskScore: Math.round(analysisResult.overallRiskScore),
+          riskScore: clampRiskScore(analysisResult.overallRiskScore),
           analysisComplete: true,
         });
 
@@ -379,12 +432,11 @@ Return the analysis with consumer education focus as a JSON array with this stru
 
     suggestAlternatives: protectedProcedure
       .input(z.object({
-        scanId: z.number(),
-        productName: z.string(),
+        scanId: z.number().int(),
+        productName: z.string().trim().min(1).max(255),
       }))
       .mutation(async ({ ctx, input }) => {
-        const scan = await db.getFoodScan(input.scanId, ctx.user.id);
-        if (!scan) throw new Error("Scan not found");
+        const scan = await requireOwnedScan(input.scanId, ctx.user.id);
 
         const ingredients = await db.getScanIngredients(input.scanId);
         const userProfile = await db.getUserProfile(ctx.user.id);
@@ -444,23 +496,24 @@ Return as JSON array:
           }
         });
 
-        const altContent = typeof response.choices[0].message.content === 'string'
-          ? response.choices[0].message.content
-          : JSON.stringify(response.choices[0].message.content);
-        const result = JSON.parse(altContent);
+        let result: any;
+        try {
+          result = parseLLMJson(getLLMText(response));
+        } catch (err) {
+          console.error("[Alternatives] Unparseable LLM response:", err);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI returned an invalid response. Please try again." });
+        }
+        const alts = (Array.isArray(result?.alternatives) ? result.alternatives : [])
+          .map(sanitizeAlternative)
+          .filter((a: any): a is NonNullable<typeof a> => a !== null);
 
-        // Save alternatives to database
-        for (const alt of result.alternatives) {
-          await db.addAlternative({
-            scanId: input.scanId,
-            productName: alt.productName,
-            reason: alt.reason,
-            scientificJustification: alt.scientificJustification,
-            sources: JSON.stringify(alt.sources),
-          });
+        // Replace previous suggestions so repeated requests do not pile up duplicates
+        if (alts.length > 0) await db.deleteAlternatives(input.scanId);
+        for (const alt of alts) {
+          await db.addAlternative({ scanId: input.scanId, ...alt });
         }
 
-        return result.alternatives;
+        return alts;
       }),
   }),
 
@@ -468,10 +521,13 @@ Return as JSON array:
   chat: router({
     sendMessage: protectedProcedure
       .input(z.object({
-        message: z.string(),
-        scanId: z.number().optional(),
+        message: z.string().trim().min(1).max(4000),
+        scanId: z.number().int().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        // Verify scan ownership first (otherwise another user's scan data leaks into the prompt)
+        const scan = input.scanId !== undefined ? await requireOwnedScan(input.scanId, ctx.user.id) : undefined;
+
         // Save user message
         await db.addChatMessage({
           userId: ctx.user.id,
@@ -490,8 +546,7 @@ Return as JSON array:
 
         // Get scan context if provided
         let scanContext = "";
-        if (input.scanId) {
-          const scan = await db.getFoodScan(input.scanId, ctx.user.id);
+        if (input.scanId !== undefined) {
           const ingredients = await db.getScanIngredients(input.scanId);
           scanContext = `\n\nCurrent Scan Context:\nProduct: ${scan?.productName || 'Unknown'}\nIngredients: ${ingredients.map(i => i.name).join(', ')}`;
         }
@@ -531,9 +586,8 @@ Be helpful, accurate, educational, and personalized to the user's health profile
         ];
 
         const response = await invokeLLM({ messages });
-        const assistantMessage = typeof response.choices[0].message.content === 'string' 
-          ? response.choices[0].message.content 
-          : JSON.stringify(response.choices[0].message.content);
+        const assistantMessage = getLLMText(response).trim();
+        if (!assistantMessage) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI returned an empty response. Please try again." });
 
         // Save assistant message
         await db.addChatMessage({
@@ -548,8 +602,8 @@ Be helpful, accurate, educational, and personalized to the user's health profile
 
     getHistory: protectedProcedure
       .input(z.object({
-        scanId: z.number().optional(),
-        limit: z.number().default(100),
+        scanId: z.number().int().optional(),
+        limit: z.number().int().min(1).max(500).default(100),
       }))
       .query(async ({ ctx, input }) => {
         return db.getChatHistory(ctx.user.id, input.scanId, input.limit);
@@ -562,37 +616,19 @@ Be helpful, accurate, educational, and personalized to the user's health profile
       const items = await db.getUserInventory(ctx.user.id);
       const now = new Date();
       return items.map((item) => {
-        const diffMs = new Date(item.expiryDate).getTime() - now.getTime();
-        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        const { daysLeft, status } = computeExpiry(item.expiryDate, now);
         if (item.status === "consumed") {
-          return {
-            ...item,
-            daysLeft: diffDays,
-          };
+          return { ...item, daysLeft };
         }
-        let calculatedStatus: "fresh" | "expiring_soon" | "expired" = "fresh";
-        if (diffDays <= 0) {
-          calculatedStatus = "expired";
-        } else if (diffDays <= 3) {
-          calculatedStatus = "expiring_soon";
-        }
-        return {
-          ...item,
-          daysLeft: diffDays,
-          status: calculatedStatus,
-        };
+        return { ...item, daysLeft, status };
       });
     }),
 
     add: protectedProcedure
       .input(createInventoryItemSchema)
       .mutation(async ({ ctx, input }) => {
-        const expDate = new Date(input.expiryDate);
-        const now = new Date();
-        const diffDays = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        let status: "fresh" | "expiring_soon" | "expired" = "fresh";
-        if (diffDays <= 0) status = "expired";
-        else if (diffDays <= 3) status = "expiring_soon";
+        const expDate = requireDate(input.expiryDate);
+        const { status } = computeExpiry(expDate);
 
         const id = await db.addInventoryItem({
           userId: ctx.user.id,
@@ -616,21 +652,21 @@ Be helpful, accurate, educational, and personalized to the user's health profile
         const { id, expiryDate, ...rest } = input;
         const updates: any = { ...rest };
         if (expiryDate) {
-          updates.expiryDate = new Date(expiryDate);
+          updates.expiryDate = requireDate(expiryDate);
         }
         await db.updateInventoryItem(id, ctx.user.id, updates);
         return { success: true };
       }),
 
     delete: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number().int() }))
       .mutation(async ({ ctx, input }) => {
         await db.deleteInventoryItem(input.id, ctx.user.id);
         return { success: true };
       }),
 
     consume: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number().int() }))
       .mutation(async ({ ctx, input }) => {
         await db.updateInventoryItem(input.id, ctx.user.id, { status: "consumed" });
         return { success: true };
@@ -640,15 +676,18 @@ Be helpful, accurate, educational, and personalized to the user's health profile
   // ============= Open Food Facts Router =============
   openFoodFacts: router({
     getByBarcode: publicProcedure
-      .input(z.object({ barcode: z.string() }))
+      .input(z.object({ barcode: z.string().max(64) }))
       .query(async ({ input }) => {
         const barcode = input.barcode.trim();
-        if (!barcode) return null;
+        if (!/^\d{4,20}$/.test(barcode)) return null; // barcodes are numeric; avoids odd URL paths
+        
         try {
           const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json`, {
             headers: { "User-Agent": "IngreScanAI/1.0" },
+            signal: AbortSignal.timeout(10000),
           });
-          if (!response.ok) return null;
+          if (response.status === 404) return null;
+          if (!response.ok) throw new Error(`Open Food Facts responded ${response.status}`);
           const data = await response.json();
           if (data.status === 0 || !data.product) return null;
           const p = data.product;
@@ -656,13 +695,13 @@ Be helpful, accurate, educational, and personalized to the user's health profile
             barcode: p.code || barcode,
             productName: p.product_name || p.product_name_en || p.generic_name || "Unknown Product",
             brand: p.brands || p.brand_owner || "Generic",
-            category: p.categories?.split(",")[0]?.trim() || "Food",
+            category: firstCategory(p.categories),
             imageUrl: p.image_front_url || p.image_url || p.image_small_url || null,
             ingredientsText: p.ingredients_text || p.ingredients_text_en || "",
-            nutriscoreGrade: p.nutriscore_grade ? p.nutriscore_grade.toUpperCase() : null,
-            novaGroup: p.nova_group || null,
-            ecoscoreGrade: p.ecoscore_grade ? p.ecoscore_grade.toUpperCase() : null,
-            allergens: p.allergens ? p.allergens.split(",").map((s: string) => s.trim().replace(/^en:/, "")).filter(Boolean) : [],
+            nutriscoreGrade: normalizeGrade(p.nutriscore_grade),
+            novaGroup: normalizeNova(p.nova_group),
+            ecoscoreGrade: normalizeGrade(p.ecoscore_grade),
+            allergens: parseAllergens(p.allergens),
             nutriments: {
               energyKcal: p.nutriments?.["energy-kcal_100g"] ?? p.nutriments?.["energy-kcal"] ?? null,
               fat: p.nutriments?.fat_100g ?? p.nutriments?.fat ?? null,
@@ -675,12 +714,15 @@ Be helpful, accurate, educational, and personalized to the user's health profile
           };
         } catch (err) {
           console.error("[OpenFoodFacts] Barcode fetch error:", err);
-          return null;
+          throw new TRPCError({
+            code: "SERVICE_UNAVAILABLE",
+            message: "Open Food Facts is unreachable right now. Please try again in a moment.",
+          });
         }
       }),
 
     search: publicProcedure
-      .input(z.object({ query: z.string(), pageSize: z.number().default(12) }))
+      .input(z.object({ query: z.string().max(200), pageSize: z.number().int().min(1).max(50).default(12) }))
       .query(async ({ input }) => {
         const q = input.query.trim();
         if (!q) return [];
@@ -691,28 +733,29 @@ Be helpful, accurate, educational, and personalized to the user's health profile
               "User-Agent": "IngreScanAI - WebApp - 1.0 - (https://github.com/shivrajpatare/IngreScan-AI)",
               "Accept": "application/json",
             },
+            signal: AbortSignal.timeout(15000),
           });
-          if (!response.ok) return [];
+          if (!response.ok) throw new Error(`Open Food Facts responded ${response.status}`);
           const text = await response.text();
-          if (!text.trim().startsWith("{")) {
-            console.warn("[OpenFoodFacts] Received non-JSON response from search API");
-            return [];
-          }
+          if (!text.trim().startsWith("{")) throw new Error("Open Food Facts returned a non-JSON response");
           const data = JSON.parse(text);
           if (!data.products || !Array.isArray(data.products)) return [];
-          return data.products.map((p: any) => ({
-            barcode: p.code || p._id || "",
+          return data.products.filter((p: any) => p && typeof p === "object").map((p: any) => ({
+            barcode: String(p.code || p._id || ""),
             productName: p.product_name || p.product_name_en || p.generic_name || "Food Product",
             brand: p.brands || "",
-            category: p.categories?.split(",")[0]?.trim() || "Food",
+            category: firstCategory(p.categories),
             imageUrl: p.image_front_small_url || p.image_front_url || p.image_url || null,
             ingredientsText: p.ingredients_text || p.ingredients_text_en || "",
-            nutriscoreGrade: p.nutriscore_grade ? p.nutriscore_grade.toUpperCase() : null,
-            novaGroup: p.nova_group || null,
+            nutriscoreGrade: normalizeGrade(p.nutriscore_grade),
+            novaGroup: normalizeNova(p.nova_group),
           }));
         } catch (err) {
           console.error("[OpenFoodFacts] Search error:", err);
-          return [];
+          throw new TRPCError({
+            code: "SERVICE_UNAVAILABLE",
+            message: "Open Food Facts search is unavailable right now. Please try again in a moment.",
+          });
         }
       }),
   }),

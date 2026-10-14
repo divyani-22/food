@@ -15,6 +15,27 @@
       "when": 1762328757040,
       "tag": "0001_optimal_lady_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1791935691800,
+      "tag": "0002_loving_synch",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1791935963625,
+      "tag": "0003_perfect_rhino",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1791936152323,
+      "tag": "0004_mighty_vindicator",
+      "breakpoints": true
     }
   ]
 }

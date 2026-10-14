@@ -1,20 +1,21 @@
 import DashboardLayout from "@/components/DashboardLayout";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/brand/PageHeader";
+import { StatusTag } from "@/components/brand/StatusTag";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
+import { toLocalDateInput } from "@/lib/utils";
 import {
   AlertCircle,
+  ArrowRight,
   Barcode,
-  CheckCircle2,
-  ExternalLink,
   Flame,
   Globe,
   Info,
   Leaf,
-  Plus,
+  Loader2,
+  Package,
   Refrigerator,
   Search,
   ShieldAlert,
@@ -25,12 +26,12 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 
 const SAMPLE_BARCODES = [
-  { code: "8901030895470", name: "Maggi 2-Minute Noodles", flag: "🇮🇳" },
-  { code: "3017620422003", name: "Nutella Hazelnut Spread", flag: "🌍" },
-  { code: "737628064502", name: "Thai Kitchen Rice Noodles", flag: "🌏" },
-  { code: "8901491101833", name: "Lay's Classic Salted Chips", flag: "🇮🇳" },
-  { code: "5449000000996", name: "Coca-Cola Original", flag: "🌍" },
-  { code: "8901262010047", name: "Amul Butter Pasteurized", flag: "🇮🇳" },
+  { code: "8901030895470", name: "Maggi 2-Minute Noodles", region: "India" },
+  { code: "3017620422003", name: "Nutella Hazelnut Spread", region: "Global" },
+  { code: "737628064502", name: "Thai Kitchen Rice Noodles", region: "Asia" },
+  { code: "8901491101833", name: "Lay's Classic Salted Chips", region: "India" },
+  { code: "5449000000996", name: "Coca-Cola Original", region: "Global" },
+  { code: "8901262010047", name: "Amul Butter Pasteurized", region: "India" },
 ];
 
 export default function OpenFoodFactsExplorer() {
@@ -38,6 +39,8 @@ export default function OpenFoodFactsExplorer() {
   const [barcodeInput, setBarcodeInput] = useState("8901030895470");
   const [activeBarcode, setActiveBarcode] = useState("8901030895470");
   const [searchQuery, setSearchQuery] = useState("");
+  // Only the submitted query drives the API call (not every keystroke)
+  const [submittedQuery, setSubmittedQuery] = useState("");
   const [activeTab, setActiveTab] = useState("barcode");
 
   // tRPC query for single barcode
@@ -45,20 +48,23 @@ export default function OpenFoodFactsExplorer() {
     data: product,
     isLoading: isProductLoading,
     isError: isProductError,
+    error: productError,
     refetch: refetchProduct,
   } = trpc.openFoodFacts.getByBarcode.useQuery(
     { barcode: activeBarcode },
-    { enabled: Boolean(activeBarcode) }
+    { enabled: Boolean(activeBarcode), retry: false }
   );
 
   // tRPC query for product search
   const {
     data: searchResults = [],
     isLoading: isSearchLoading,
+    isError: isSearchError,
+    error: searchError,
     refetch: refetchSearch,
   } = trpc.openFoodFacts.search.useQuery(
-    { query: searchQuery },
-    { enabled: Boolean(searchQuery && activeTab === "search") }
+    { query: submittedQuery },
+    { enabled: Boolean(submittedQuery && activeTab === "search"), retry: false }
   );
 
   // tRPC mutations
@@ -72,6 +78,10 @@ export default function OpenFoodFactsExplorer() {
       toast.error("Please enter a barcode number");
       return;
     }
+    if (!/^\d{4,20}$/.test(barcodeInput.trim())) {
+      toast.error("Barcodes contain only digits (usually 8 or 13). Please check the number.");
+      return;
+    }
     setActiveBarcode(barcodeInput.trim());
   };
 
@@ -81,7 +91,12 @@ export default function OpenFoodFactsExplorer() {
       toast.error("Please enter a product name to search");
       return;
     }
-    refetchSearch();
+    const q = searchQuery.trim();
+    if (q === submittedQuery) {
+      refetchSearch();
+    } else {
+      setSubmittedQuery(q);
+    }
   };
 
   // 1-Click Bridge to IngreScan-AI
@@ -128,7 +143,7 @@ export default function OpenFoodFactsExplorer() {
         storageLocation: "pantry",
         foodImageUrl: product.imageUrl || undefined,
         barcode: product.barcode,
-        expiryDate: expiry.toISOString().split("T")[0],
+        expiryDate: toLocalDateInput(expiry),
         notes: `Imported via Open Food Facts (Nutri-Score: ${product.nutriscoreGrade || "N/A"})`,
       });
 
@@ -138,163 +153,181 @@ export default function OpenFoodFactsExplorer() {
     }
   };
 
+
+  // Nutri-Score / Eco-Score grades and NOVA groups keep their familiar
+  // green → red order, mapped onto the brand palette (white letter on solid fill).
   const getNutriscoreColor = (grade: string | null) => {
     switch (grade) {
       case "A":
-        return "bg-emerald-700 text-white";
+        return "bg-verdant-green text-white";
       case "B":
-        return "bg-emerald-500 text-white";
+        return "bg-sky-blue text-white";
       case "C":
-        return "bg-yellow-500 text-black";
+        return "bg-amber-ink text-white";
       case "D":
-        return "bg-amber-600 text-white";
+        return "bg-ember-orange text-white";
       case "E":
-        return "bg-rose-600 text-white";
+        return "bg-alert-red text-white";
       default:
-        return "bg-muted text-muted-foreground";
+        return "bg-muted-foreground text-white";
     }
   };
 
   const getNovaColor = (group: number | null) => {
     switch (group) {
       case 1:
-        return "bg-emerald-600 text-white";
+        return "bg-verdant-green text-white";
       case 2:
-        return "bg-blue-600 text-white";
+        return "bg-sky-blue text-white";
       case 3:
-        return "bg-amber-600 text-white";
+        return "bg-amber-ink text-white";
       case 4:
-        return "bg-rose-600 text-white";
+        return "bg-signal-red-orange text-white";
       default:
-        return "bg-muted text-muted-foreground";
+        return "bg-muted-foreground text-white";
     }
   };
 
+  const scoreTileClass = "flex min-w-0 flex-col gap-4 rounded-3xl bg-fog p-5";
+  const scoreTitleClass = "flex items-center justify-between gap-2 text-sm font-bold text-graphite";
+  const gradeBadgeClass =
+    "grid h-14 w-14 shrink-0 place-items-center rounded-full text-2xl font-extrabold leading-none";
+
   return (
     <DashboardLayout>
-      <div className="container py-8 space-y-8 max-w-7xl">
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-3xl">🌐🔍</span>
-              <h1 className="text-3xl font-bold tracking-tight">Open Food Facts Explorer</h1>
-            </div>
-            <p className="text-muted-foreground mt-1">
-              Global food database integration with 3M+ packaged products. Scan barcodes, check Nutri-Score, NOVA Ultra-Processing ratings, and analyze with IngreScan-AI.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
+      <div className="space-y-8 md:space-y-10">
+        <PageHeader
+          eyebrow="Global food database"
+          title="Open Food Facts Explorer"
+          description="Global food database integration with 3M+ packaged products. Scan barcodes, check Nutri-Score, NOVA Ultra-Processing ratings, and analyze with IngreScan-AI."
+          actions={
             <Button
               variant="outline"
-              className="gap-2"
+              className="w-full sm:w-auto"
               onClick={() => setLocation("/fridge")}
             >
-              <Refrigerator className="h-4 w-4 text-emerald-600" />
+              <Refrigerator className="h-4 w-4" />
               Go to Fridge Tracker
             </Button>
-          </div>
-        </div>
+          }
+        />
 
         {/* Tab Selection */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid grid-cols-2 max-w-md">
-            <TabsTrigger value="barcode" className="gap-2">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-6">
+          <TabsList className="grid w-full grid-cols-2 bg-white sm:max-w-md">
+            <TabsTrigger value="barcode" className="px-2 data-[state=active]:bg-graphite data-[state=active]:text-white">
               <Barcode className="h-4 w-4" /> Barcode Lookup
             </TabsTrigger>
-            <TabsTrigger value="search" className="gap-2">
-              <Search className="h-4 w-4" /> Global Product Search
+            <TabsTrigger value="search" className="px-2 data-[state=active]:bg-graphite data-[state=active]:text-white">
+              <Search className="h-4 w-4" />
+              <span className="sm:hidden">Product Search</span>
+              <span className="hidden sm:inline">Global Product Search</span>
             </TabsTrigger>
           </TabsList>
 
           {/* TAB 1: Barcode Lookup */}
           <TabsContent value="barcode" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Barcode className="h-5 w-5 text-emerald-600" />
-                  Scan or Enter Barcode
-                </CardTitle>
-                <CardDescription>
-                  Enter an EAN-13, UPC, or Indian GTIN barcode to fetch verified food data from Open Food Facts.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <form onSubmit={handleBarcodeSubmit} className="flex gap-3">
-                  <div className="relative flex-1">
-                    <Barcode className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                    <Input
-                      placeholder="e.g., 8901030895470"
-                      value={barcodeInput}
-                      onChange={(e) => setBarcodeInput(e.target.value)}
-                      className="pl-10 h-11 text-base font-mono"
-                    />
-                  </div>
-                  <Button type="submit" size="lg" className="bg-emerald-600 hover:bg-emerald-700 gap-2">
-                    <Search className="h-4 w-4" /> Search Barcode
-                  </Button>
-                </form>
-
-                {/* Sample Barcodes */}
-                <div>
-                  <span className="text-xs text-muted-foreground font-medium">Quick Demo Barcodes:</span>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {SAMPLE_BARCODES.map((s) => (
-                      <Button
-                        key={s.code}
-                        variant="secondary"
-                        size="sm"
-                        className="text-xs h-8 gap-1.5"
-                        onClick={() => {
-                          setBarcodeInput(s.code);
-                          setActiveBarcode(s.code);
-                        }}
-                      >
-                        <span>{s.flag}</span>
-                        <span className="font-semibold">{s.name}</span>
-                        <span className="font-mono text-muted-foreground text-[10px]">({s.code})</span>
-                      </Button>
-                    ))}
-                  </div>
+            <section className="space-y-6 rounded-3xl bg-white p-5 md:p-7">
+              <div className="flex items-start gap-4">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-fog">
+                  <Barcode className="h-5 w-5 text-ember-orange" />
+                </span>
+                <div className="min-w-0 space-y-1">
+                  <h2 className="text-lg font-bold text-graphite">Scan or Enter Barcode</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Enter an EAN-13, UPC, or Indian GTIN barcode to fetch verified food data from Open Food Facts.
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+
+              <form onSubmit={handleBarcodeSubmit} className="flex flex-col gap-3 sm:flex-row">
+                <div className="relative flex-1">
+                  <Barcode className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="e.g., 8901030895470"
+                    value={barcodeInput}
+                    onChange={(e) => setBarcodeInput(e.target.value)}
+                    className="pl-12 font-mono text-base"
+                    aria-label="Barcode number"
+                    inputMode="numeric"
+                  />
+                </div>
+                <Button type="submit">
+                  <Search className="h-4 w-4" /> Search Barcode
+                </Button>
+              </form>
+
+              {/* Sample Barcodes */}
+              <div>
+                <p className="text-sm font-bold text-graphite">Quick Demo Barcodes:</p>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {SAMPLE_BARCODES.map((s) => (
+                    <button
+                      key={s.code}
+                      type="button"
+                      className={`flex min-h-11 min-w-0 items-center justify-between gap-3 rounded-2xl px-4 py-2.5 text-left transition-colors focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 ${
+                        activeBarcode === s.code ? "bg-fog ring-1 ring-graphite/15" : "bg-fog hover:bg-[#ebebeb]"
+                      }`}
+                      onClick={() => {
+                        setBarcodeInput(s.code);
+                        setActiveBarcode(s.code);
+                      }}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-bold text-graphite">{s.name}</span>
+                        <span className="block font-mono text-xs text-muted-foreground">({s.code})</span>
+                      </span>
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-3xl bg-white px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
+                        <Globe className="h-3 w-3" />
+                        {s.region}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
 
             {/* Product Details Display */}
             {isProductLoading ? (
-              <div className="text-center py-16 text-muted-foreground space-y-2">
-                <div className="inline-block animate-spin text-3xl">⏳</div>
-                <p>Querying Open Food Facts database for barcode {activeBarcode}...</p>
+              <div className="flex flex-col items-center gap-3 rounded-3xl bg-white px-5 py-16 text-center text-muted-foreground">
+                <Loader2 className="h-7 w-7 animate-spin text-ember-orange" />
+                <p className="text-sm">Querying Open Food Facts database for barcode {activeBarcode}...</p>
+              </div>
+            ) : isProductError ? (
+              <div role="alert" className="flex flex-col items-center rounded-3xl bg-white px-5 py-14 text-center">
+                <span className="grid h-14 w-14 place-items-center rounded-3xl bg-fog">
+                  <AlertCircle className="h-7 w-7 text-signal-red-orange" />
+                </span>
+                <p className="mt-5 font-bold text-graphite">Couldn&rsquo;t reach Open Food Facts</p>
+                <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                  {productError?.message ?? "Please check your connection and try again."}
+                </p>
+                <Button variant="outline" className="mt-6" onClick={() => refetchProduct()}>
+                  Try again
+                </Button>
               </div>
             ) : product ? (
-              <Card className="overflow-hidden border-2 border-emerald-500/20 shadow-lg">
-                <div className="bg-gradient-to-r from-emerald-500/10 via-background to-blue-500/10 p-6 border-b">
-                  <div className="flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
-                    <div className="flex gap-5 items-center">
+              <article className="overflow-hidden rounded-3xl bg-white">
+                <div className="border-b border-border p-5 md:p-7">
+                  <div className="flex flex-col items-start justify-between gap-6 lg:flex-row lg:items-center">
+                    <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
                       {product.imageUrl ? (
                         <img
                           src={product.imageUrl}
                           alt={product.productName}
-                          className="h-28 w-28 object-contain rounded-xl bg-white border p-1 shadow-sm"
+                          className="h-24 w-24 shrink-0 rounded-2xl border border-border bg-white object-contain p-1 sm:h-28 sm:w-28"
                         />
                       ) : (
-                        <div className="h-28 w-28 rounded-xl bg-muted border flex items-center justify-center text-4xl">
-                          🥫
+                        <div className="grid h-24 w-24 shrink-0 place-items-center rounded-2xl bg-fog sm:h-28 sm:w-28">
+                          <Package className="h-10 w-10 text-ember-orange" />
                         </div>
                       )}
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="font-mono text-xs">
-                            Barcode: {product.barcode}
-                          </Badge>
-                          {product.brand && (
-                            <Badge variant="secondary" className="text-xs">
-                              {product.brand}
-                            </Badge>
-                          )}
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <StatusTag className="font-mono">Barcode: {product.barcode}</StatusTag>
+                          {product.brand && <StatusTag tone="brand">{product.brand}</StatusTag>}
                         </div>
-                        <h2 className="text-2xl font-bold tracking-tight">
+                        <h2 className="fn-heading-sm break-words text-graphite">
                           {product.productName}
                         </h2>
                         <p className="text-sm text-muted-foreground">
@@ -304,11 +337,10 @@ export default function OpenFoodFactsExplorer() {
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                    <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto lg:shrink-0">
                       <Button
                         onClick={handleAnalyzeWithAI}
                         disabled={createScanMutation.isPending || analyzeMutation.isPending}
-                        className="bg-emerald-600 hover:bg-emerald-700 gap-2 shadow"
                       >
                         <Sparkles className="h-4 w-4" />
                         Analyze with IngreScan-AI
@@ -318,300 +350,307 @@ export default function OpenFoodFactsExplorer() {
                         variant="outline"
                         onClick={handleAddToFridge}
                         disabled={addToInventoryMutation.isPending}
-                        className="gap-2"
                       >
-                        <Refrigerator className="h-4 w-4 text-emerald-600" />
+                        <Refrigerator className="h-4 w-4" />
                         Add to Fridge Tracker
                       </Button>
                     </div>
                   </div>
                 </div>
 
-                <CardContent className="p-6 space-y-6">
+                <div className="space-y-8 p-5 md:p-7">
                   {/* Scores Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:gap-4">
                     {/* Nutri-Score */}
-                    <Card className="bg-muted/40 border">
-                      <CardHeader className="p-4 pb-2">
-                        <CardTitle className="text-xs uppercase font-semibold text-muted-foreground flex items-center justify-between">
-                          Nutri-Score
-                          <Info className="h-3.5 w-3.5" />
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-4 pt-0">
-                        {product.nutriscoreGrade ? (
-                          <div className="flex items-center gap-3">
-                            <span
-                              className={`text-2xl font-extrabold px-3.5 py-1 rounded-lg ${getNutriscoreColor(
-                                product.nutriscoreGrade
-                              )}`}
-                            >
-                              {product.nutriscoreGrade}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              Nutritional quality grade (A = Highest, E = Lowest)
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">Not calculated</span>
-                        )}
-                      </CardContent>
-                    </Card>
+                    <div className={scoreTileClass}>
+                      <p className={scoreTitleClass}>
+                        Nutri-Score
+                        <Info className="h-4 w-4 text-muted-foreground" />
+                      </p>
+                      {product.nutriscoreGrade ? (
+                        <div className="flex items-center gap-4">
+                          <span className={`${gradeBadgeClass} ${getNutriscoreColor(product.nutriscoreGrade)}`}>
+                            {product.nutriscoreGrade}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            Nutritional quality grade (A = Highest, E = Lowest)
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Not calculated</span>
+                      )}
+                    </div>
 
                     {/* NOVA Group */}
-                    <Card className="bg-muted/40 border">
-                      <CardHeader className="p-4 pb-2">
-                        <CardTitle className="text-xs uppercase font-semibold text-muted-foreground flex items-center justify-between">
-                          NOVA Classification
-                          <ShieldAlert className="h-3.5 w-3.5" />
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-4 pt-0">
-                        {product.novaGroup ? (
-                          <div className="flex items-center gap-3">
-                            <span
-                              className={`text-2xl font-extrabold px-3.5 py-1 rounded-lg ${getNovaColor(
-                                product.novaGroup
-                              )}`}
-                            >
-                              {product.novaGroup}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {product.novaGroup === 4
-                                ? "Ultra-Processed Food (High UPF)"
-                                : product.novaGroup === 3
-                                ? "Processed Food"
-                                : product.novaGroup === 2
-                                ? "Culinary Ingredient"
-                                : "Unprocessed / Whole Food"}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">Not classified</span>
-                        )}
-                      </CardContent>
-                    </Card>
+                    <div className={scoreTileClass}>
+                      <p className={scoreTitleClass}>
+                        NOVA Classification
+                        <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+                      </p>
+                      {product.novaGroup ? (
+                        <div className="flex items-center gap-4">
+                          <span className={`${gradeBadgeClass} ${getNovaColor(product.novaGroup)}`}>
+                            {product.novaGroup}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            {product.novaGroup === 4
+                              ? "Ultra-Processed Food (High UPF)"
+                              : product.novaGroup === 3
+                              ? "Processed Food"
+                              : product.novaGroup === 2
+                              ? "Culinary Ingredient"
+                              : "Unprocessed / Whole Food"}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Not classified</span>
+                      )}
+                    </div>
 
                     {/* Eco-Score */}
-                    <Card className="bg-muted/40 border">
-                      <CardHeader className="p-4 pb-2">
-                        <CardTitle className="text-xs uppercase font-semibold text-muted-foreground flex items-center justify-between">
-                          Eco-Score
-                          <Leaf className="h-3.5 w-3.5 text-emerald-600" />
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-4 pt-0">
-                        {product.ecoscoreGrade ? (
-                          <div className="flex items-center gap-3">
-                            <span
-                              className={`text-2xl font-extrabold px-3.5 py-1 rounded-lg ${getNutriscoreColor(
-                                product.ecoscoreGrade
-                              )}`}
-                            >
-                              {product.ecoscoreGrade}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              Environmental impact score
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">Eco-Score N/A</span>
-                        )}
-                      </CardContent>
-                    </Card>
+                    <div className={scoreTileClass}>
+                      <p className={scoreTitleClass}>
+                        Eco-Score
+                        <Leaf className="h-4 w-4 text-verdant-green" />
+                      </p>
+                      {product.ecoscoreGrade ? (
+                        <div className="flex items-center gap-4">
+                          <span className={`${gradeBadgeClass} ${getNutriscoreColor(product.ecoscoreGrade)}`}>
+                            {product.ecoscoreGrade}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            Environmental impact score
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Eco-Score N/A</span>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Nutrition per 100g Table */}
-                  <Card className="border">
-                    <CardHeader className="p-4 pb-2">
-                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <Flame className="h-4 w-4 text-amber-500" />
-                        Nutrition Facts (per 100g / 100ml)
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0">
-                      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3 text-center">
-                        <div className="p-2.5 rounded-lg bg-muted/50 border">
-                          <p className="text-xs text-muted-foreground">Energy</p>
-                          <p className="font-bold text-sm mt-0.5">
-                            {product.nutriments.energyKcal ? `${product.nutriments.energyKcal} kcal` : "—"}
+                  {/* Nutrition per 100g */}
+                  <section className="space-y-4">
+                    <h3 className="flex items-center gap-2 text-base font-bold text-graphite">
+                      <Flame className="h-4 w-4 text-sunset-orange" />
+                      Nutrition Facts (per 100g / 100ml)
+                    </h3>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+                      {[
+                        {
+                          label: "Energy",
+                          value: product.nutriments.energyKcal != null ? `${product.nutriments.energyKcal} kcal` : "—",
+                          dot: null,
+                        },
+                        {
+                          label: "Total Fat",
+                          value: product.nutriments.fat != null ? `${product.nutriments.fat}g` : "—",
+                          dot: null,
+                        },
+                        {
+                          label: "Sat. Fat",
+                          value: product.nutriments.saturatedFat != null ? `${product.nutriments.saturatedFat}g` : "—",
+                          dot: "bg-signal-red-orange",
+                        },
+                        {
+                          label: "Sugars",
+                          value: product.nutriments.sugars != null ? `${product.nutriments.sugars}g` : "—",
+                          dot: "bg-sunset-orange",
+                        },
+                        {
+                          label: "Salt / Sodium",
+                          value: product.nutriments.salt != null ? `${product.nutriments.salt}g` : "—",
+                          dot: null,
+                        },
+                        {
+                          label: "Protein",
+                          value: product.nutriments.proteins != null ? `${product.nutriments.proteins}g` : "—",
+                          dot: "bg-verdant-green",
+                        },
+                        {
+                          label: "Dietary Fiber",
+                          value: product.nutriments.fiber != null ? `${product.nutriments.fiber}g` : "—",
+                          dot: null,
+                        },
+                      ].map((n) => (
+                        <div key={n.label} className="min-w-0 rounded-2xl bg-fog p-3.5">
+                          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            {n.dot && <span className={`h-2 w-2 shrink-0 rounded-full ${n.dot}`} aria-hidden="true" />}
+                            <span className="truncate">{n.label}</span>
                           </p>
+                          <p className="fn-metric mt-2 text-lg text-graphite">{n.value}</p>
                         </div>
-                        <div className="p-2.5 rounded-lg bg-muted/50 border">
-                          <p className="text-xs text-muted-foreground">Total Fat</p>
-                          <p className="font-bold text-sm mt-0.5">
-                            {product.nutriments.fat !== null ? `${product.nutriments.fat}g` : "—"}
-                          </p>
-                        </div>
-                        <div className="p-2.5 rounded-lg bg-muted/50 border">
-                          <p className="text-xs text-muted-foreground">Sat. Fat</p>
-                          <p className="font-bold text-sm mt-0.5 text-rose-600">
-                            {product.nutriments.saturatedFat !== null ? `${product.nutriments.saturatedFat}g` : "—"}
-                          </p>
-                        </div>
-                        <div className="p-2.5 rounded-lg bg-muted/50 border">
-                          <p className="text-xs text-muted-foreground">Sugars</p>
-                          <p className="font-bold text-sm mt-0.5 text-amber-600">
-                            {product.nutriments.sugars !== null ? `${product.nutriments.sugars}g` : "—"}
-                          </p>
-                        </div>
-                        <div className="p-2.5 rounded-lg bg-muted/50 border">
-                          <p className="text-xs text-muted-foreground">Salt / Sodium</p>
-                          <p className="font-bold text-sm mt-0.5">
-                            {product.nutriments.salt !== null ? `${product.nutriments.salt}g` : "—"}
-                          </p>
-                        </div>
-                        <div className="p-2.5 rounded-lg bg-muted/50 border">
-                          <p className="text-xs text-muted-foreground">Protein</p>
-                          <p className="font-bold text-sm mt-0.5 text-emerald-600">
-                            {product.nutriments.proteins !== null ? `${product.nutriments.proteins}g` : "—"}
-                          </p>
-                        </div>
-                        <div className="p-2.5 rounded-lg bg-muted/50 border">
-                          <p className="text-xs text-muted-foreground">Dietary Fiber</p>
-                          <p className="font-bold text-sm mt-0.5">
-                            {product.nutriments.fiber !== null ? `${product.nutriments.fiber}g` : "—"}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      ))}
+                    </div>
+                  </section>
 
                   {/* Ingredients Section */}
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-semibold flex items-center justify-between">
-                      <span>Ingredients List (as declared on package)</span>
+                  <section className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-x-4">
+                      <h3 className="text-base font-bold text-graphite">
+                        Ingredients List (as declared on package)
+                      </h3>
                       <Button
                         variant="link"
-                        size="sm"
-                        className="text-xs text-emerald-600 p-0 h-auto"
+                        className="h-11 px-0 text-sm"
                         onClick={handleAnalyzeWithAI}
                       >
-                        Deep AI Analysis →
+                        Deep AI Analysis <ArrowRight className="h-4 w-4" />
                       </Button>
-                    </h3>
-                    <div className="p-4 rounded-xl bg-muted/30 border text-sm leading-relaxed">
+                    </div>
+                    <div className="rounded-2xl bg-fog p-4 text-sm leading-relaxed text-graphite md:p-5">
                       {product.ingredientsText || "No ingredient list specified on this product entry."}
                     </div>
 
                     {product.allergens && product.allergens.length > 0 && (
                       <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <span className="text-xs font-semibold text-rose-600 flex items-center gap-1">
-                          <AlertCircle className="h-3.5 w-3.5" /> Contains Allergens:
+                        <span className="flex items-center gap-1.5 text-sm font-bold text-graphite">
+                          <AlertCircle className="h-4 w-4 text-signal-red-orange" /> Contains Allergens:
                         </span>
                         {product.allergens.map((alg: string) => (
-                          <Badge key={alg} variant="destructive" className="text-xs capitalize">
+                          <StatusTag key={alg} tone="negative" className="capitalize">
                             {alg}
-                          </Badge>
+                          </StatusTag>
                         ))}
                       </div>
                     )}
-                  </div>
-                </CardContent>
-              </Card>
+                  </section>
+                </div>
+              </article>
             ) : (
-              <div className="text-center py-16 px-4 bg-muted/30 rounded-2xl border border-dashed text-muted-foreground space-y-2">
-                <p>No product found for barcode &ldquo;{activeBarcode}&rdquo;.</p>
-                <p className="text-xs">Try searching by product name in the next tab or use one of the demo barcodes.</p>
+              <div className="flex flex-col items-center rounded-3xl bg-white px-5 py-14 text-center">
+                <span className="grid h-14 w-14 place-items-center rounded-3xl bg-fog">
+                  <Barcode className="h-7 w-7 text-ember-orange" />
+                </span>
+                <p className="mt-5 break-words font-bold text-graphite">
+                  No product found for barcode &ldquo;{activeBarcode}&rdquo;.
+                </p>
+                <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                  Try searching by product name in the next tab or use one of the demo barcodes.
+                </p>
               </div>
             )}
           </TabsContent>
 
           {/* TAB 2: Global Search */}
           <TabsContent value="search" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Search className="h-5 w-5 text-emerald-600" />
-                  Search Global Food Catalog
-                </CardTitle>
-                <CardDescription>
-                  Search millions of packaged foods by brand or name (e.g., Maggi, Amul, Oreo, Lays, Nutella).
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSearchSubmit} className="flex gap-3">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                    <Input
-                      placeholder="e.g., Maggi Noodles or Amul Butter..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10 h-11 text-base"
-                    />
-                  </div>
-                  <Button type="submit" size="lg" className="bg-emerald-600 hover:bg-emerald-700 gap-2">
-                    <Search className="h-4 w-4" /> Search
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
+            <section className="space-y-6 rounded-3xl bg-white p-5 md:p-7">
+              <div className="flex items-start gap-4">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-fog">
+                  <Search className="h-5 w-5 text-ember-orange" />
+                </span>
+                <div className="min-w-0 space-y-1">
+                  <h2 className="text-lg font-bold text-graphite">Search Global Food Catalog</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Search millions of packaged foods by brand or name (e.g., Maggi, Amul, Oreo, Lays, Nutella).
+                  </p>
+                </div>
+              </div>
+              <form onSubmit={handleSearchSubmit} className="flex flex-col gap-3 sm:flex-row">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="e.g., Maggi Noodles or Amul Butter..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-12 text-base"
+                    aria-label="Product name"
+                  />
+                </div>
+                <Button type="submit">
+                  <Search className="h-4 w-4" /> Search
+                </Button>
+              </form>
+            </section>
 
             {isSearchLoading ? (
-              <div className="text-center py-16 text-muted-foreground space-y-2">
-                <div className="inline-block animate-spin text-3xl">⏳</div>
-                <p>Searching Open Food Facts...</p>
+              <div className="flex flex-col items-center gap-3 rounded-3xl bg-white px-5 py-16 text-center text-muted-foreground">
+                <Loader2 className="h-7 w-7 animate-spin text-ember-orange" />
+                <p className="text-sm">Searching Open Food Facts...</p>
+              </div>
+            ) : isSearchError ? (
+              <div role="alert" className="flex flex-col items-center rounded-3xl bg-white px-5 py-14 text-center">
+                <span className="grid h-14 w-14 place-items-center rounded-3xl bg-fog">
+                  <AlertCircle className="h-7 w-7 text-signal-red-orange" />
+                </span>
+                <p className="mt-5 font-bold text-graphite">Search is unavailable</p>
+                <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                  {searchError?.message ?? "Please check your connection and try again."}
+                </p>
+                <Button variant="outline" className="mt-6" onClick={() => refetchSearch()}>
+                  Try again
+                </Button>
               </div>
             ) : searchResults.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {searchResults.map((item: any) => (
-                  <Card key={item.barcode} className="overflow-hidden flex flex-col justify-between hover:shadow-md transition-all">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start gap-3">
-                        {item.imageUrl ? (
-                          <img
-                            src={item.imageUrl}
-                            alt={item.productName}
-                            className="h-16 w-16 object-contain rounded-lg border bg-white p-1"
-                          />
-                        ) : (
-                          <div className="h-16 w-16 rounded-lg bg-muted border flex items-center justify-center text-2xl">
-                            🥫
-                          </div>
-                        )}
-                        <div className="flex-1">
-                          <CardTitle className="text-base font-bold line-clamp-1">
-                            {item.productName}
-                          </CardTitle>
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                            {item.brand || "Generic"} • {item.category}
-                          </p>
-                          <div className="flex items-center gap-2 mt-2">
-                            {item.nutriscoreGrade && (
-                              <Badge className={`text-xs ${getNutriscoreColor(item.nutriscoreGrade)}`}>
-                                Nutri-Score {item.nutriscoreGrade}
-                              </Badge>
-                            )}
-                            {item.novaGroup && (
-                              <Badge className={`text-xs ${getNovaColor(item.novaGroup)}`}>
-                                NOVA {item.novaGroup}
-                              </Badge>
-                            )}
-                          </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3">
+                {searchResults.map((item: any, idx: number) => (
+                  <article
+                    key={`${item.barcode}-${idx}`}
+                    className="flex min-w-0 flex-col rounded-3xl border border-border bg-white"
+                  >
+                    <div className="flex items-start gap-4 p-5 pb-3">
+                      {item.imageUrl ? (
+                        <img
+                          src={item.imageUrl}
+                          alt={item.productName}
+                          className="h-16 w-16 shrink-0 rounded-2xl border border-border bg-white object-contain p-1"
+                        />
+                      ) : (
+                        <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-fog">
+                          <Package className="h-7 w-7 text-ember-orange" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <h3 className="line-clamp-1 text-base font-bold text-graphite">
+                          {item.productName}
+                        </h3>
+                        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                          {item.brand || "Generic"} · {item.category}
+                        </p>
+                        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                          {item.nutriscoreGrade && (
+                            <span className="inline-flex items-center gap-1.5 rounded-3xl bg-fog py-1 pl-1 pr-2.5 text-xs font-bold text-graphite">
+                              <span
+                                className={`grid h-5 w-5 place-items-center rounded-full text-[11px] font-extrabold ${getNutriscoreColor(item.nutriscoreGrade)}`}
+                              >
+                                {item.nutriscoreGrade}
+                              </span>
+                              Nutri-Score {item.nutriscoreGrade}
+                            </span>
+                          )}
+                          {item.novaGroup && (
+                            <span className="inline-flex items-center gap-1.5 rounded-3xl bg-fog py-1 pl-1 pr-2.5 text-xs font-bold text-graphite">
+                              <span
+                                className={`grid h-5 w-5 place-items-center rounded-full text-[11px] font-extrabold ${getNovaColor(item.novaGroup)}`}
+                              >
+                                {item.novaGroup}
+                              </span>
+                              NOVA {item.novaGroup}
+                            </span>
+                          )}
                         </div>
                       </div>
-                    </CardHeader>
-                    <CardContent className="pb-3 text-xs text-muted-foreground line-clamp-2">
+                    </div>
+                    <p className="line-clamp-2 px-5 pb-4 text-xs leading-relaxed text-muted-foreground">
                       {item.ingredientsText || "No ingredient text available."}
-                    </CardContent>
-                    <div className="p-3 border-t bg-muted/20 flex items-center justify-between gap-2 mt-auto">
+                    </p>
+                    <div className="mt-auto flex items-center justify-between gap-2 border-t border-border px-3 py-2">
                       <Button
-                        variant="secondary"
-                        size="sm"
-                        className="text-xs h-8 gap-1"
+                        variant="ghost"
+                        className="px-3"
+                        disabled={!item.barcode}
                         onClick={() => {
                           setBarcodeInput(item.barcode);
                           setActiveBarcode(item.barcode);
                           setActiveTab("barcode");
                         }}
                       >
-                        <Barcode className="h-3.5 w-3.5" /> View Barcode
+                        <Barcode className="h-4 w-4" /> View Barcode
                       </Button>
 
                       {item.ingredientsText && (
                         <Button
-                          size="sm"
-                          className="text-xs h-8 bg-emerald-600 hover:bg-emerald-700 gap-1"
+                          variant="dark"
+                          className="px-4"
                           onClick={async () => {
                             const toastId = toast.loading("Analyzing with IngreScan-AI...");
                             try {
@@ -632,16 +671,16 @@ export default function OpenFoodFactsExplorer() {
                             }
                           }}
                         >
-                          <Sparkles className="h-3.5 w-3.5" /> AI Scan
+                          <Sparkles className="h-4 w-4" /> AI Scan
                         </Button>
                       )}
                     </div>
-                  </Card>
+                  </article>
                 ))}
               </div>
-            ) : searchQuery ? (
-              <div className="text-center py-16 text-muted-foreground">
-                No products found for &ldquo;{searchQuery}&rdquo;. Try another term.
+            ) : submittedQuery ? (
+              <div className="rounded-3xl bg-white px-5 py-16 text-center text-sm text-muted-foreground">
+                No products found for &ldquo;{submittedQuery}&rdquo;. Try another term.
               </div>
             ) : null}
           </TabsContent>

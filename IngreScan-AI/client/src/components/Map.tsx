@@ -4,8 +4,8 @@
  * CRITICAL: SDK Loading Pattern (MUST use this exact approach)
  * ============================================================
  * 
- * ❌ WRONG: script.src = url  (gets blocked by ad blockers)
- * ✅ CORRECT: fetch(url).then(text => script.textContent = text)
+ * WRONG: script.src = url  (gets blocked by ad blockers)
+ * CORRECT: fetch(url).then(text => script.textContent = text)
  * 
  * const API_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY;
  * const FORGE_BASE_URL = import.meta.env.VITE_FRONTEND_FORGE_API_URL;
@@ -72,6 +72,10 @@ export function MapView({
   const map = useRef<any>(null);
 
   useEffect(() => {
+    let checkGoogle: ReturnType<typeof setInterval> | undefined;
+    let giveUp: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+
     if (!window.google) {
       const scriptUrl = `${MAPS_PROXY_URL}/maps/api/js?key=${API_KEY}&libraries=places,drawing,geometry,visualization,marker`;
       
@@ -84,18 +88,19 @@ export function MapView({
           return response.text();
         })
         .then(scriptContent => {
+          if (cancelled) return;
           const script = document.createElement('script');
           script.textContent = scriptContent;
           document.head.appendChild(script);
           
-          const checkGoogle = setInterval(() => {
+          checkGoogle = setInterval(() => {
             if (window.google && window.google.maps) {
               clearInterval(checkGoogle);
-              initMap();
+              if (!cancelled) initMap();
             }
           }, 100);
           
-          setTimeout(() => clearInterval(checkGoogle), 10000);
+          giveUp = setTimeout(() => clearInterval(checkGoogle), 10000);
         })
         .catch(error => console.error('Failed to fetch Google Maps script:', error));
     } else {
@@ -122,6 +127,12 @@ export function MapView({
         onMapReady(map.current);
       }
     }
+
+    return () => {
+      cancelled = true;
+      if (checkGoogle) clearInterval(checkGoogle);
+      if (giveUp) clearTimeout(giveUp);
+    };
   }, []);
 
   useEffect(() => {

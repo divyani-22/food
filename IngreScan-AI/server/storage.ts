@@ -38,6 +38,9 @@ async function buildDownloadUrl(
     method: "GET",
     headers: buildAuthHeaders(apiKey),
   });
+  if (!response.ok) {
+    throw new Error(`Storage download URL request failed (${response.status} ${response.statusText})`);
+  }
   return (await response.json()).url;
 }
 
@@ -81,6 +84,7 @@ export async function storagePut(
     const sanitizedName = key.replace(/[^a-zA-Z0-9._-]/g, "_");
     const filePath = path.resolve(uploadsDir, sanitizedName);
     const buf = typeof data === "string" ? Buffer.from(data) : Buffer.from(data);
+    await fs.promises.mkdir(uploadsDir, { recursive: true });
     await fs.promises.writeFile(filePath, buf);
     return { key, url: `/uploads/${sanitizedName}` };
   }

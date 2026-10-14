@@ -4,6 +4,25 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-sans: var(--font-sans-stack);
+  --radius-3xl: var(--radius-fn);
+  --color-ember-orange: var(--fn-ember-orange);
+  --color-verdant-green: var(--fn-verdant-green);
+  --color-signal-red-orange: var(--fn-signal-red-orange);
+  --color-sky-blue: var(--fn-sky-blue);
+  --color-mist-blue: var(--fn-mist-blue);
+  --color-sunset-orange: var(--fn-sunset-orange);
+  --color-amber-ink: var(--fn-amber);
+  --color-alert-red: var(--fn-alert-red);
+  --color-plum: var(--fn-plum);
+  --color-iris: var(--fn-iris);
+  --color-graphite: var(--fn-graphite);
+  --color-charcoal: var(--fn-charcoal);
+  --color-fog: var(--fn-fog);
+  --color-paper-white: var(--fn-paper-white);
+  --color-positive: var(--positive);
+  --color-caution: var(--caution);
+  --color-negative: var(--negative);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -43,82 +62,140 @@
 }
 
 :root {
-  --primary: oklch(0.55 0.15 145);
-  --primary-foreground: oklch(0.98 0.01 145);
-  --sidebar-primary: oklch(0.55 0.15 145);
-  --sidebar-primary-foreground: oklch(0.98 0.01 145);
-  --chart-1: oklch(0.75 0.12 145);
-  --chart-2: oklch(0.65 0.14 160);
-  --chart-3: oklch(0.55 0.15 145);
-  --chart-4: oklch(0.65 0.16 35);
-  --chart-5: oklch(0.60 0.18 25);
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.98 0.001 286.375);
-  --secondary-foreground: oklch(0.4 0.015 65);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.141 0.005 285.823);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+  /* ------------------------------------------------------------------
+   * Foodnoms-derived design tokens (Refero style reference).
+   * Raw brand tokens first, then the semantic shadcn tokens mapped onto
+   * them. Roles follow the reference — see client/DESIGN.md.
+   * ------------------------------------------------------------------ */
+  --fn-ember-orange: #ff5406;      /* brand button, logo, active nav, large accent headings */
+  --fn-verdant-green: #00b33f;     /* positive / fresh / progress */
+  --fn-signal-red-orange: #ff3400; /* negative / overage / high risk */
+  --fn-sky-blue: #00a9dd;          /* data category */
+  --fn-mist-blue: #72a2c5;         /* secondary data */
+  --fn-sunset-orange: #ff6d00;     /* caution / secondary emphasis */
+  --fn-amber: #945300;             /* small warm data text (AA on white) */
+  --fn-alert-red: #ff001e;         /* severe */
+  --fn-plum: #bd4be5;              /* data category */
+  --fn-iris: #5856de;              /* data category */
+  --fn-graphite: #2f2f2f;          /* text, dark buttons */
+  --fn-charcoal: #000000;
+  --fn-fog: #f5f5f5;               /* alternate surface */
+  --fn-paper-white: #ffffff;       /* canvas */
+
+  /* Derived neutrals (graphite family, not new chroma) */
+  --fn-ink-muted: #6b6b6b;         /* 5.3:1 on white, 4.8:1 on fog */
+  --fn-hairline: #ebebeb;
+
+  --radius: 14px;                  /* nested/small elements (menu items, chips inside cards) */
+  --radius-fn: 26px;               /* signature radius: buttons, cards, inputs, tags */
+
+  --background: var(--fn-paper-white);
+  --foreground: var(--fn-graphite);
+  --card: var(--fn-paper-white);
+  --card-foreground: var(--fn-graphite);
+  --popover: var(--fn-paper-white);
+  --popover-foreground: var(--fn-graphite);
+  --primary: var(--fn-ember-orange);
+  --primary-foreground: var(--fn-paper-white);
+  --secondary: var(--fn-fog);
+  --secondary-foreground: var(--fn-graphite);
+  --muted: var(--fn-fog);
+  --muted-foreground: var(--fn-ink-muted);
+  --accent: var(--fn-fog);
+  --accent-foreground: var(--fn-graphite);
+  --destructive: var(--fn-signal-red-orange);
+  --destructive-foreground: var(--fn-paper-white);
+  --border: var(--fn-hairline);
+  --input: var(--fn-hairline);
+  --ring: var(--fn-ember-orange);
+
+  --positive: var(--fn-verdant-green);
+  --caution: var(--fn-sunset-orange);
+  --negative: var(--fn-signal-red-orange);
+
+  /* Data palette (charts / categories only) */
+  --chart-1: var(--fn-ember-orange);
+  --chart-2: var(--fn-verdant-green);
+  --chart-3: var(--fn-sky-blue);
+  --chart-4: var(--fn-plum);
+  --chart-5: var(--fn-iris);
+
+  --sidebar: var(--fn-paper-white);
+  --sidebar-foreground: var(--fn-graphite);
+  --sidebar-primary: var(--fn-ember-orange);
+  --sidebar-primary-foreground: var(--fn-paper-white);
+  --sidebar-accent: var(--fn-fog);
+  --sidebar-accent-foreground: var(--fn-graphite);
+  --sidebar-border: var(--fn-hairline);
+  --sidebar-ring: var(--fn-ember-orange);
+
+  --font-sans-stack: "Aquawax Pro", "Nunito Sans", "DM Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+/* The product is light-only (Foodnoms is a light system); .dark is kept graphite-based for completeness. */
 .dark {
-  --primary: oklch(0.65 0.14 145);
-  --primary-foreground: oklch(0.98 0.01 145);
-  --sidebar-primary: oklch(0.65 0.14 145);
-  --sidebar-primary-foreground: oklch(0.98 0.01 145);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: oklch(0.75 0.12 145);
-  --chart-2: oklch(0.65 0.14 160);
-  --chart-3: oklch(0.55 0.15 145);
-  --chart-4: oklch(0.65 0.16 35);
-  --chart-5: oklch(0.60 0.18 25);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  --background: #1f1f1f;
+  --foreground: #f5f5f5;
+  --card: var(--fn-graphite);
+  --card-foreground: #f5f5f5;
+  --popover: var(--fn-graphite);
+  --popover-foreground: #f5f5f5;
+  --primary: var(--fn-ember-orange);
+  --primary-foreground: #ffffff;
+  --secondary: #3a3a3a;
+  --secondary-foreground: #f5f5f5;
+  --muted: #3a3a3a;
+  --muted-foreground: #b5b5b5;
+  --accent: #3a3a3a;
+  --accent-foreground: #f5f5f5;
+  --destructive: var(--fn-signal-red-orange);
+  --destructive-foreground: #ffffff;
+  --border: #3a3a3a;
+  --input: #3a3a3a;
+  --ring: var(--fn-ember-orange);
+  --sidebar: #1f1f1f;
+  --sidebar-foreground: #f5f5f5;
+  --sidebar-accent: #3a3a3a;
+  --sidebar-accent-foreground: #f5f5f5;
+  --sidebar-border: #3a3a3a;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans-stack);
+    font-weight: 500;
+    font-feature-settings: "kern";
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1, h2, h3, h4 {
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  button, a, input, select, textarea, [role="button"] {
+    touch-action: manipulation;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--fn-ember-orange) 22%, white);
+    color: var(--fn-graphite);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -155,6 +232,95 @@
     padding-right: 1rem;
   }
 
+
+  /* ---------- Foodnoms type scale (DESIGN.md › Type Scale) ---------- */
+  .fn-display {
+    font-size: clamp(2.5rem, 6vw + 0.5rem, 3.75rem); /* 40px phone → 60px desktop */
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .fn-heading {
+    font-size: clamp(1.625rem, 2vw + 1rem, 1.875rem); /* 26 → 30px */
+    line-height: 1.2;
+    font-weight: 700;
+  }
+  .fn-heading-sm {
+    font-size: 1.375rem; /* 22px */
+    line-height: 1.2;
+    font-weight: 700;
+  }
+  .fn-subheading {
+    font-size: 1.0625rem; /* 17px body-lg on phone */
+    line-height: 1.6;
+    font-weight: 500;
+  }
+  @media (min-width: 768px) {
+    .fn-subheading { font-size: 1.25rem; line-height: 1.6; } /* 20px */
+  }
+  .fn-eyebrow {
+    font-size: 0.875rem;
+    line-height: 1.2;
+    font-weight: 700;
+    color: var(--fn-ember-orange);
+  }
+  /* Data numerals */
+  .fn-metric {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+
+  /* ---------- Surfaces ---------- */
+  .fn-surface {
+    background: var(--fn-fog);
+    border-radius: var(--radius-fn);
+  }
+  .fn-section {
+    padding-top: 4rem;
+    padding-bottom: 4rem;
+  }
+  @media (min-width: 768px) {
+    .fn-section { padding-top: 6rem; padding-bottom: 6rem; } /* 96px section gap */
+  }
+
+  /* ---------- Status dot tag (Food Log Entry pattern: dot + graphite text on fog) ---------- */
+  .fn-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: var(--radius-fn);
+    background: var(--fn-fog);
+    color: var(--fn-graphite);
+    padding: 0.25rem 0.7rem;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  .fn-tag::before {
+    content: "";
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: var(--fn-tag-dot, var(--fn-ink-muted));
+    flex-shrink: 0;
+  }
+  .fn-tag[data-tone="positive"] { --fn-tag-dot: var(--fn-verdant-green); }
+  .fn-tag[data-tone="caution"]  { --fn-tag-dot: var(--fn-sunset-orange); }
+  .fn-tag[data-tone="negative"] { --fn-tag-dot: var(--fn-signal-red-orange); }
+  .fn-tag[data-tone="severe"]   { --fn-tag-dot: var(--fn-alert-red); }
+  .fn-tag[data-tone="info"]     { --fn-tag-dot: var(--fn-sky-blue); }
+  .fn-tag[data-tone="brand"]    { --fn-tag-dot: var(--fn-ember-orange); }
+  .fn-tag[data-tone="plum"]     { --fn-tag-dot: var(--fn-plum); }
+  .fn-tag[data-tone="iris"]     { --fn-tag-dot: var(--fn-iris); }
+
+  /* Respect iPhone home-indicator area for the mobile tab bar */
+  .fn-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
   .flex {
     min-height: 0;
     min-width: 0;
@@ -171,7 +337,7 @@
     .container {
       padding-left: 2rem; /* 32px - desktop padding */
       padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
+      max-width: 1200px; /* Foodnoms page max-width */
     }
   }
 }

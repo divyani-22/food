@@ -1,21 +1,21 @@
-# FreshGuard 프로젝트 배경 및 동기
+# FreshGuard Project Background and Motivation
 
-## 1. 프로젝트 배경
-- 1인 가구 증가 → 식재료 관리 어려움 증가
-- 대량 구매 후 보관 부주의로 인해 음식물 폐기 증가
-- 냉장고 속 식재료 상태를 실시간으로 관리하기 어려움
+## 1. Project Background
+- Growth in single-person households → food ingredients are harder to manage
+- Bulk buying followed by careless storage leads to more food being thrown away
+- It is hard to keep track of the condition of ingredients in the refrigerator in real time
 
-## 2. 문제 정의
-- 신선식품 상태를 육안으로 판단하기 어려움
-- 정확한 신선도 판별 기술 부족
-- 유통기한 기반 조리/소비 관리의 어려움
+## 2. Problem Definition
+- The condition of fresh produce is hard to judge by eye
+- Lack of accurate freshness-assessment technology
+- Difficulty managing cooking/consumption based on expiration dates
 
-## 3. 연구 근거
-한국농촌경제연구원(2024)의 ‘식품소비행태조사 기초분석보고서’에 따르면  
-1인 가구는 부적절한 보관으로 인해 상한 음식물의 비율이 높음.
+## 3. Research Evidence
+According to the Korea Rural Economic Institute (2024) "Basic Analysis Report on the Food Consumption Behavior Survey",  
+single-person households have a higher proportion of food that spoils due to improper storage.
 
-## 4. FreshGuard가 해결하는 문제
-- 사진 기반 신선도 판별 자동화
-- 식재료 관리 효율화
-- 음식물 쓰레기 감소
-- 생활 편의성 증대
+## 4. Problems FreshGuard Solves
+- Automated, photo-based freshness assessment
+- More efficient ingredient management
+- Reduced food waste
+- Greater everyday convenience
