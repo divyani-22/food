@@ -8,6 +8,7 @@ import * as db from "./db";
 import { storagePut } from "./storage";
 import { invokeLLM } from "./_core/llm";
 import fs from "fs";
+import { randomBytes } from "crypto";
 import path from "path";
 import {
   clampRiskScore,
@@ -216,7 +217,7 @@ export const appRouter = router({
         const buffer = Buffer.from(input.fileData, 'base64');
         if (buffer.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Empty file" });
         if (buffer.length > MAX_UPLOAD_BYTES) throw new TRPCError({ code: "BAD_REQUEST", message: "File too large (max 16MB)" });
-        const fileKey = `scans/${ctx.user.id}/${Date.now()}-${sanitizeFileName(input.fileName)}`;
+        const fileKey = `scans/${ctx.user.id}/${Date.now()}-${randomBytes(8).toString("hex")}-${sanitizeFileName(input.fileName)}`;
         const { url } = await storagePut(fileKey, buffer, input.mimeType);
         return { url, fileKey };
       }),

@@ -9,6 +9,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { createRateLimiter } from "./rateLimit";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -51,8 +52,16 @@ async function startServer() {
     app.use("/freshguard/static", express.static(freshguardStaticDir));
   }
 
-  app.all("/api/freshguard/*", async (req, res) => {
+  const freshguardLimiter = createRateLimiter({ windowMs: 60_000, max: 60 });
+  app.all("/api/freshguard/*", freshguardLimiter, async (req, res) => {
     try {
+      // Only signed-in users may reach the FreshGuard backend (same auth as tRPC).
+      const { user } = await createContext({ req, res } as any);
+      if (!user) {
+        res.status(401).json({ error: "Authentication required." });
+        return;
+      }
+
       const targetPath = req.url.replace(/^\/api\/freshguard/, "/api");
       const targetUrl = `http://127.0.0.1:5000${targetPath}`;
 

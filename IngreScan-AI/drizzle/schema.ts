@@ -149,7 +149,7 @@ export type InsertAlternative = typeof alternatives.$inferInsert;
 export const chatMessages = mysqlTable("chat_messages", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("user_id").notNull(),
-  scanId: int("scan_id"), // optional, if chat is related to a specific scan
+  scanId: int("scan_id").references(() => foodScans.id, { onDelete: "cascade" }), // optional, if chat is related to a specific scan
   role: mysqlEnum("role", ["user", "assistant"]).notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

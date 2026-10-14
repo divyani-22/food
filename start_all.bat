@@ -12,8 +12,18 @@ cd /d "%~dp0"
 echo [*] Starting FreshGuard Flask AI backend...
 start "FreshGuard AI (:5000)" cmd /k "python app.py"
 
-echo [*] Waiting 3 seconds for AI model to load...
-timeout /t 3 /nobreak >nul
+echo [*] Waiting for AI model to load (up to 90 seconds)...
+set /a tries=0
+:waitloop
+curl -s -o nul http://127.0.0.1:5000/api/samples && goto ready
+set /a tries+=1
+if %tries% geq 45 (
+  echo [!] FreshGuard did not respond in time; continuing anyway.
+  goto ready
+)
+timeout /t 2 /nobreak >nul
+goto waitloop
+:ready
 
 echo [*] Starting IngreScan Unified Web Application...
 cd IngreScan-AI

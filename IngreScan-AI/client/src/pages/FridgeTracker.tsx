@@ -23,7 +23,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { toLocalDateInput } from "@/lib/utils";
+import { localExpiry, toLocalDateInput } from "@/lib/utils";
 import {
   AlertTriangle,
   Barcode,
@@ -161,7 +161,9 @@ export default function FridgeTracker() {
 
   // Filtered Items
   const activeItems = useMemo(() => {
-    return items.filter((item) => item.status !== "consumed");
+    return items
+      .filter((item) => item.status !== "consumed")
+      .map((item) => ({ ...item, ...localExpiry(item.expiryDate) }));
   }, [items]);
 
   const filteredItems = useMemo(() => {
@@ -501,7 +503,7 @@ export default function FridgeTracker() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredItems.map((item: any) => {
               const daysLeft = item.daysLeft ?? 0;
-              const isExpired = item.status === "expired" || daysLeft <= 0;
+              const isExpired = item.status === "expired" || daysLeft < 0;
               const isExpiringSoon = !isExpired && (item.status === "expiring_soon" || daysLeft <= 3);
 
               return (

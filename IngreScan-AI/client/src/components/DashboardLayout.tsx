@@ -27,6 +27,11 @@ import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
+const PATH_ALIASES: Record<string, string[]> = {
+  "/fridge": ["/expiry"],
+  "/openfoodfacts": ["/barcode"],
+};
+
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Scan, label: "Packaged Scanner", path: "/scanner" },
@@ -226,7 +231,7 @@ function DashboardLayoutContent({
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">
               {menuItems.map(item => {
-                const isActive = location === item.path;
+                const isActive = location === item.path || (PATH_ALIASES[item.path] ?? []).includes(location);
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton

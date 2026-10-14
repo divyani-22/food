@@ -87,7 +87,7 @@ describe("input validation", () => {
   });
   it("uploadImage sanitises file name and rejects non-images", async () => {
     await caller.scanner.uploadImage({ fileName: "../../evil.png", fileData: Buffer.from("abc").toString("base64"), mimeType: "image/png" });
-    expect((storagePut as any).mock.calls[0][0]).toMatch(/^scans\/5\/\d+-evil\.png$/);
+    expect((storagePut as any).mock.calls[0][0]).toMatch(/^scans\/5\/\d+-[0-9a-f]{16}-evil\.png$/);
     await expect(caller.scanner.uploadImage({ fileName: "a.exe", fileData: "AAAA", mimeType: "application/x-msdownload" })).rejects.toThrow();
   });
 });

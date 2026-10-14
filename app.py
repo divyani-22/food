@@ -77,6 +77,29 @@ def init_db():
 
 init_db()
 
+UPLOAD_MAX_AGE_DAYS = 7
+
+def prune_uploads(max_age_days: int = UPLOAD_MAX_AGE_DAYS):
+    """Delete old uploaded scan images that no inventory item or history row references."""
+    try:
+        with closing(sqlite3.connect(DB_PATH)) as conn:
+            referenced = set()
+            for table in ("inventory", "scan_history"):
+                for (url,) in conn.execute(f"SELECT image_url FROM {table} WHERE image_url IS NOT NULL"):
+                    referenced.add(os.path.basename(str(url)))
+        cutoff = time.time() - max_age_days * 86400
+        removed = 0
+        for f in UPLOAD_FOLDER.iterdir():
+            if f.is_file() and f.name != ".gitkeep" and f.name not in referenced and f.stat().st_mtime < cutoff:
+                f.unlink()
+                removed += 1
+        return removed
+    except Exception as e:
+        print(f"[!] Upload cleanup skipped: {e}")
+        return 0
+
+prune_uploads()
+
 # --- Fruit Knowledge Base ---
 FRUIT_INFO = {
     "apple": {

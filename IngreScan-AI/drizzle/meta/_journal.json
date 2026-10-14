@@ -29,6 +29,13 @@
       "when": 1791935963625,
       "tag": "0003_perfect_rhino",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1791936152323,
+      "tag": "0004_mighty_vindicator",
+      "breakpoints": true
     }
   ]
 }

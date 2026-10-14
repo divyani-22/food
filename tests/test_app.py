@@ -231,3 +231,22 @@ def test_samples_and_fruits(client):
     files = [s["filename"] for s in client.get("/api/samples").get_json()]
     assert files == sorted(files)
     assert client.get("/").status_code == 200
+
+
+def test_prune_uploads_removes_only_old_unreferenced(client, appmod):
+    import os, sqlite3, time
+    up = appmod.UPLOAD_FOLDER
+    up.mkdir(exist_ok=True)
+    old_free, old_kept, fresh_new = up / "a.jpg", up / "b.jpg", up / "c.jpg"
+    for f in (old_free, old_kept, fresh_new):
+        f.write_bytes(b"x")
+    old = time.time() - 30 * 86400
+    os.utime(old_free, (old, old))
+    os.utime(old_kept, (old, old))
+    with sqlite3.connect(appmod.DB_PATH) as conn:
+        conn.execute(
+            "INSERT INTO inventory (name, fruit_type, freshness, p_fresh, confidence, image_url, expiry_date, days_left, storage_tip)"
+            " VALUES ('n','apple','fresh',90,90,'/static/uploads/b.jpg','2099-01-01',10,'')"
+        )
+    assert appmod.prune_uploads(7) == 1
+    assert not old_free.exists() and old_kept.exists() and fresh_new.exists()

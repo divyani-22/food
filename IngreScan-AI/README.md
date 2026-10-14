@@ -109,6 +109,13 @@ pnpm dev
 
 The application will be available at `http://localhost:3000`
 
+## ⚙️ Authentication & AI configuration
+
+- **Local development** (`NODE_ENV` not `production`): with no OAuth portal configured, requests run as a local dev user, and the sign-in buttons simply open `/dashboard`.
+- **Production** requires `VITE_OAUTH_PORTAL_URL` and `VITE_APP_ID` (sessions are rejected if their `appId` differs from `VITE_APP_ID`), plus `JWT_SECRET`. Without them there is no login flow and anonymous requests are rejected.
+- **AI**: set `OPENAI_API_KEY` (or the Forge key). If the configured API fails, requests now error instead of returning canned analysis. Without any key the built-in keyword engine is used only outside production, unless `ALLOW_LOCAL_LLM_FALLBACK=true`. `LLM_TIMEOUT_MS` (default 60000) sets the request timeout.
+- **FreshGuard proxy** (`/api/freshguard/*`) requires a signed-in user and is rate limited to 60 requests/minute per IP.
+
 ## 🗂️ Project Structure
 
 ```
