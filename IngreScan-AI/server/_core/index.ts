@@ -74,7 +74,7 @@ async function startServer() {
         return;
       }
       if (route === "/api/predict") parsed.searchParams.set("persist", "0");
-      const targetUrl = `http://127.0.0.1:5000${parsed.pathname}${parsed.search}`;
+      const targetUrl = `${process.env.FRESHGUARD_URL ?? "http://127.0.0.1:5000"}${parsed.pathname}${parsed.search}`;
 
       const headers: Record<string, string> = {};
       if (req.headers["content-type"]) {

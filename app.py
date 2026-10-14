@@ -79,6 +79,7 @@ def init_db():
 init_db()
 
 UPLOAD_MAX_AGE_DAYS = 7
+FRESHGUARD_PORT = int(os.environ.get("FRESHGUARD_PORT", "5000"))
 
 def prune_uploads(max_age_days: int = UPLOAD_MAX_AGE_DAYS):
     """Delete old uploaded scan images that no inventory item or history row references."""
@@ -447,6 +448,6 @@ def get_samples():
 if __name__ == "__main__":
     print("\n" + "="*50)
     print(" FreshGuard (produce freshness AI service)")
-    print(" Running on http://127.0.0.1:5000")
+    print(f" Running on http://127.0.0.1:{FRESHGUARD_PORT}")
     print("="*50 + "\n")
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(host="127.0.0.1", port=FRESHGUARD_PORT, debug=False)
