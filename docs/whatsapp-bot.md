@@ -103,24 +103,32 @@ const metaResult = await processMetaWebhook(
 
 ## 4. Environment variables (names only)
 
-Read these in the wiring layer and pass them in as plain objects. The core never reads `process.env`.
+These are read by `server/whatsappConfig.ts` and `server/whatsappRuntime.ts` and passed to the core as plain objects. The core never reads `process.env`.
 
 ```
-# --- .env.example entries to add (placeholders only) ---
-WHATSAPP_PROVIDER=twilio                 # twilio | meta
-WHATSAPP_PUBLIC_BASE_URL=https://your-public-host.example   # no trailing slash
-WHATSAPP_ALLOW_SCHEME_VARIANTS=false     # true only behind a scheme-rewriting proxy
-WHATSAPP_REMINDER_TEMPLATE_NAME=pantry_expiry_reminder
-WHATSAPP_REMINDER_TEMPLATE_LANG=en
-WHATSAPP_MAX_MEDIA_BYTES=8388608
+# Public address of this server (no trailing slash). Needed for Twilio signature checks.
+PUBLIC_BASE_URL=https://your-public-host.example
+WHATSAPP_BOT_NUMBER=+14155238886         # number users message; shown in the web app
+WHATSAPP_PROVIDER=twilio                 # twilio | meta; only matters when both are configured (used for reminders)
+WHATSAPP_TRUST_SCHEME_VARIANTS=false     # "true" only behind a proxy that rewrites http/https
+WHATSAPP_REMINDER_TEMPLATE=pantry_expiry_reminder
+WHATSAPP_REMINDER_LANGUAGE=en
+WHATSAPP_REMINDERS=on                    # "off" disables the reminder scheduler
+WHATSAPP_USE_EMOJI=false                 # "true" adds emoji markers to bot replies
 
-# Twilio
+# Optional tuning
+WHATSAPP_RATE_BURST=8                    # messages allowed in a burst per phone
+WHATSAPP_RATE_PER_MINUTE=10              # sustained messages per minute per phone
+WHATSAPP_REMINDER_INTERVAL_MS=600000     # scheduler tick, minimum 1000
+TRUST_PROXY=1                            # set when behind ngrok or a load balancer
+
+# Twilio (all three of SID, token and FROM are needed to enable it)
 TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TWILIO_AUTH_TOKEN=your_twilio_auth_token
 TWILIO_WHATSAPP_FROM=+14155238886        # sandbox number, or your approved sender
-TWILIO_CONTENT_SID_PANTRY_REMINDER=HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   # Content SID of the approved template
+TWILIO_REMINDER_CONTENT_SID=HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   # Content SID of the approved template
 
-# Meta WhatsApp Cloud API
+# Meta WhatsApp Cloud API (all four are needed to enable it)
 META_APP_SECRET=your_meta_app_secret
 META_VERIFY_TOKEN=a_long_random_string_you_choose
 META_ACCESS_TOKEN=your_system_user_access_token
@@ -137,7 +145,7 @@ Use a long-lived System User token for Meta (temporary tokens expire in about 24
 2. From your phone, send `join <your-phrase>` to the sandbox number. Each tester must do this; sandbox sessions need re-joining after 72 hours.
 3. Start the app and a tunnel (section 6).
 4. In the sandbox settings set "When a message comes in" to `https://<tunnel-host>/api/whatsapp/twilio`, method POST.
-5. Set `WHATSAPP_PUBLIC_BASE_URL` to exactly `https://<tunnel-host>` and restart.
+5. Set `PUBLIC_BASE_URL` to exactly `https://<tunnel-host>` and restart.
 6. Send `HELP` from your phone. You should get the connect-your-account guidance.
 
 For production use a Twilio WhatsApp sender (Meta business verification required) and register the reminder template as a Content Template (section 7).
@@ -163,7 +171,7 @@ Webhook URLs (replace the host with the one ngrok prints):
 - Twilio: `https://<id>.ngrok-free.app/api/whatsapp/twilio`
 - Meta: `https://<id>.ngrok-free.app/api/whatsapp/meta` (GET for verification, POST for events)
 
-The free ngrok host changes on every start: update the provider console and `WHATSAPP_PUBLIC_BASE_URL` each time. If Twilio signature checks fail only locally, the first thing to compare is the exact URL string (scheme, host, path, query).
+The free ngrok host changes on every start: update the provider console and `PUBLIC_BASE_URL` each time. If Twilio signature checks fail only locally, the first thing to compare is the exact URL string (scheme, host, path, query).
 
 ## 7. The 24-hour customer-service window and the reminder template
 
