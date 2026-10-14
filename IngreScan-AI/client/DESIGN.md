@@ -33,6 +33,8 @@ Tokens live in `src/index.css` (`--fn-*` raw tokens → shadcn semantic tokens �
 Rule: **never chromatic text on a chromatic background.** Status = colored dot/icon + graphite text on Fog or white
 (`<StatusTag tone="positive">Fresh</StatusTag>`). White text on a solid brand fill (buttons) is fine.
 
+Nutri-Score / Eco-Score badges (solid fill, white letter): A verdant-green, B sky-blue, C amber-ink, D ember-orange, E alert-red. NOVA: 1 verdant-green, 2 sky-blue, 3 amber-ink, 4 signal-red-orange.
+
 Replace Tailwind palette colors (`green-600`, `emerald-*`, `amber-*`, `red-*`, `blue-*`, `purple-*`, …) with the roles above.
 Tinted backgrounds like `bg-green-50` become `bg-fog` (+ colored icon/dot).
 

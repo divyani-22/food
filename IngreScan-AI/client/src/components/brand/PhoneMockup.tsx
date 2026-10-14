@@ -187,9 +187,9 @@ export function ProductScreen() {
   const grades = [
     ["A", "var(--fn-verdant-green)"],
     ["B", "var(--fn-sky-blue)"],
-    ["C", "var(--fn-sunset-orange)"],
+    ["C", "var(--fn-amber)"],
     ["D", "var(--fn-ember-orange)"],
-    ["E", "var(--fn-signal-red-orange)"],
+    ["E", "var(--fn-alert-red)"],
   ];
   return (
     <>
