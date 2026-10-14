@@ -10,6 +10,8 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { createRateLimiter } from "./rateLimit";
+import { assertRuntimeConfig } from "./env";
+import { initDatabase } from "./database";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -31,6 +33,9 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  assertRuntimeConfig();
+  // Opens the database; for embedded SQLite this also applies pending migrations (fails fast on error).
+  await initDatabase();
   const app = express();
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads
@@ -63,7 +68,7 @@ async function startServer() {
       }
 
       // Only the stateless classification endpoints are reachable from the web app. Pantry and history
-      // are stored per user in MySQL (tRPC "produce" router), never in the Flask service's shared SQLite.
+      // are stored per user in the app database (tRPC "produce" router), never in the Flask service's shared SQLite.
       const parsed = new URL(req.url.replace(/^\/api\/freshguard/, "/api"), "http://internal");
       const route = parsed.pathname.replace(/\/+$/, "");
       const allowed =
@@ -141,4 +146,7 @@ process.on("unhandledRejection", (reason) => {
   console.error("[Unhandled Rejection]", reason);
 });
 
-startServer().catch(console.error);
+startServer().catch(err => {
+  console.error("[Startup] Fatal:", err instanceof Error ? err.message : err);
+  process.exit(1);
+});

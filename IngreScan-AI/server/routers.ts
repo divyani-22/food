@@ -10,6 +10,7 @@ import { invokeLLM } from "./_core/llm";
 import fs from "fs";
 import { randomBytes } from "crypto";
 import path from "path";
+import { fetchOffProduct, isWellFormedBarcode, searchOffProducts } from "./lib/offClient";
 import {
   clampRiskScore,
   computeBmi,
@@ -805,39 +806,11 @@ Be helpful, accurate, educational, and personalized to the user's health profile
       .input(z.object({ barcode: z.string().max(64) }))
       .query(async ({ input }) => {
         const barcode = input.barcode.trim();
-        if (!/^\d{4,20}$/.test(barcode)) return null; // barcodes are numeric; avoids odd URL paths
-        
+        // Only malformed input is rejected here. Check digits are validated (and overridable) on the client
+        // because real Open Food Facts data contains some codes with invalid check digits.
+        if (!isWellFormedBarcode(barcode)) return null;
         try {
-          const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json`, {
-            headers: { "User-Agent": "IngreScanAI/1.0" },
-            signal: AbortSignal.timeout(10000),
-          });
-          if (response.status === 404) return null;
-          if (!response.ok) throw new Error(`Open Food Facts responded ${response.status}`);
-          const data = await response.json();
-          if (data.status === 0 || !data.product) return null;
-          const p = data.product;
-          return {
-            barcode: p.code || barcode,
-            productName: p.product_name || p.product_name_en || p.generic_name || "Unknown Product",
-            brand: p.brands || p.brand_owner || "Generic",
-            category: firstCategory(p.categories),
-            imageUrl: p.image_front_url || p.image_url || p.image_small_url || null,
-            ingredientsText: p.ingredients_text || p.ingredients_text_en || "",
-            nutriscoreGrade: normalizeGrade(p.nutriscore_grade),
-            novaGroup: normalizeNova(p.nova_group),
-            ecoscoreGrade: normalizeGrade(p.ecoscore_grade),
-            allergens: parseAllergens(p.allergens),
-            nutriments: {
-              energyKcal: p.nutriments?.["energy-kcal_100g"] ?? p.nutriments?.["energy-kcal"] ?? null,
-              fat: p.nutriments?.fat_100g ?? p.nutriments?.fat ?? null,
-              saturatedFat: p.nutriments?.["saturated-fat_100g"] ?? p.nutriments?.["saturated-fat"] ?? null,
-              sugars: p.nutriments?.sugars_100g ?? p.nutriments?.sugars ?? null,
-              salt: p.nutriments?.salt_100g ?? p.nutriments?.salt ?? null,
-              proteins: p.nutriments?.proteins_100g ?? p.nutriments?.proteins ?? null,
-              fiber: p.nutriments?.fiber_100g ?? p.nutriments?.fiber ?? null,
-            },
-          };
+          return await fetchOffProduct(barcode);
         } catch (err) {
           console.error("[OpenFoodFacts] Barcode fetch error:", err);
           throw new TRPCError({
@@ -853,29 +826,7 @@ Be helpful, accurate, educational, and personalized to the user's health profile
         const q = input.query.trim();
         if (!q) return [];
         try {
-          const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=${input.pageSize}`;
-          const response = await fetch(url, {
-            headers: {
-              "User-Agent": "IngreScanAI - WebApp - 1.0 - (https://github.com/shivrajpatare/IngreScan-AI)",
-              "Accept": "application/json",
-            },
-            signal: AbortSignal.timeout(15000),
-          });
-          if (!response.ok) throw new Error(`Open Food Facts responded ${response.status}`);
-          const text = await response.text();
-          if (!text.trim().startsWith("{")) throw new Error("Open Food Facts returned a non-JSON response");
-          const data = JSON.parse(text);
-          if (!data.products || !Array.isArray(data.products)) return [];
-          return data.products.filter((p: any) => p && typeof p === "object").map((p: any) => ({
-            barcode: String(p.code || p._id || ""),
-            productName: p.product_name || p.product_name_en || p.generic_name || "Food Product",
-            brand: p.brands || "",
-            category: firstCategory(p.categories),
-            imageUrl: p.image_front_small_url || p.image_front_url || p.image_url || null,
-            ingredientsText: p.ingredients_text || p.ingredients_text_en || "",
-            nutriscoreGrade: normalizeGrade(p.nutriscore_grade),
-            novaGroup: normalizeNova(p.nova_group),
-          }));
+          return await searchOffProducts(q, input.pageSize);
         } catch (err) {
           console.error("[OpenFoodFacts] Search error:", err);
           throw new TRPCError({

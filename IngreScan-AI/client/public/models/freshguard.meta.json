@@ -59,15 +59,35 @@
   "export_verification": {
     "images": [
       "apple.jpg",
+      "apple_crop",
+      "apple_rot90",
+      "apple_small",
+      "apple_jpeg35",
       "banana.jpg",
+      "banana_crop",
+      "banana_rot90",
+      "banana_small",
+      "banana_jpeg35",
       "orange.jpg",
+      "orange_crop",
+      "orange_rot90",
+      "orange_small",
+      "orange_jpeg35",
       "strawberry.jpg",
-      "tomato.jpg"
+      "strawberry_crop",
+      "strawberry_rot90",
+      "strawberry_small",
+      "strawberry_jpeg35",
+      "tomato.jpg",
+      "tomato_crop",
+      "tomato_rot90",
+      "tomato_small",
+      "tomato_jpeg35"
     ],
-    "max_abs_logit_diff": 1.33514404296875e-05,
+    "max_abs_logit_diff": 2.3126602172851562e-05,
     "tolerance": 0.001
   },
-  "exported_at": "2026-10-14T05:32:20Z",
+  "exported_at": "2026-10-14T05:38:51Z",
   "versions": {
     "torch": "2.14.1+cu130",
     "onnx": "1.23.2",

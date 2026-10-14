@@ -1,8 +1,8 @@
-// Real end-to-end run: real browser, real Express + tRPC server, real MariaDB. No mocks.
+// Real end-to-end run: real browser, real Express + tRPC server, real database (MySQL/MariaDB via DATABASE_URL, otherwise embedded SQLite). No mocks.
 import { chromium } from "playwright";
-import { execSync } from "child_process";
+import { sql } from "./lib/db.mjs";
 
-const BASE = "http://localhost:3000";
+const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const args = ["--ignore-certificate-errors"];
 if (process.env.HTTPS_PROXY) args.push(`--proxy-server=${process.env.HTTPS_PROXY}`, "--proxy-bypass-list=localhost;127.0.0.1");
 const browser = await chromium.launch({ args });
@@ -10,7 +10,6 @@ const results = [];
 let OFF_STATE = "not run";
 const consoleErrors = [];
 const badResponses = [];
-const sql = (q) => execSync(`mysql -N ingrescan -e "${q.replace(/"/g, '\\"')}"`).toString().trim();
 
 // Idempotent: remove data created by earlier runs of this suite (only E2E/test rows).
 for (const q of [
@@ -204,22 +203,22 @@ await step("Open Food Facts: invalid barcode shows error state", async () => {
 });
 
 // ---------- Fresh produce (Flask via proxy) ----------
-await step("Produce: classify sample (real model), history is stored in MySQL", async () => {
+await step("Produce: classify sample (real model), history is stored in the database", async () => {
   await page.goto(BASE + "/produce", { waitUntil: "networkidle" });
   await page.getByRole("button", { name: /^Apple$/ }).first().click();
   await page.getByText(/Identification Confidence/).waitFor({ timeout: 30000 });
   await page.waitForTimeout(1000);
-  expect(sql("select count(*) from produce_scans where user_id=1") === "1", "history row in MySQL for the user");
+  expect(sql("select count(*) from produce_scans where user_id=1") === "1", "history row in the database for the user");
   expect(sql("select fruit_name from produce_scans where user_id=1") === "Apple", "English name stored");
 });
 await step("Produce: save to pantry stores a per-user row and shows in the Pantry tab", async () => {
   await page.getByRole("button", { name: /Save to Fridge/i }).click();
   await page.getByRole("tab", { name: /Fridge Pantry \(1\)/ }).waitFor({ timeout: 10000 });
-  expect(sql("select count(*) from produce_inventory where user_id=1") === "1", "pantry row in MySQL");
+  expect(sql("select count(*) from produce_inventory where user_id=1") === "1", "pantry row in the database");
   expect(/^\d{4}-\d{2}-\d{2}$/.test(sql("select expiry_date from produce_inventory where user_id=1")), "expiry date stored");
   await page.getByText("Apple").first().waitFor();
 });
-await step("Produce: data survives a reload (read back from MySQL)", async () => {
+await step("Produce: data survives a reload (read back from the database)", async () => {
   await page.reload({ waitUntil: "networkidle" });
   await page.getByRole("tab", { name: /Fridge Pantry \(1\)/ }).waitFor({ timeout: 10000 });
   await page.getByRole("tab", { name: /History/ }).click();
@@ -233,7 +232,7 @@ await step("Produce: remove pantry item and clear history", async () => {
   await page.getByRole("tab", { name: /History/ }).click();
   await page.getByRole("button", { name: /Clear History/ }).click();
   await page.waitForTimeout(1200);
-  expect(sql("select count(*) from produce_scans where user_id=1") === "0", "history cleared in MySQL");
+  expect(sql("select count(*) from produce_scans where user_id=1") === "0", "history cleared in the database");
 });
 
 // ---------- Mobile shell ----------

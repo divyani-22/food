@@ -1,8 +1,8 @@
-// Verifies FreshGuard pantry/history are stored per user in MySQL, via the real HTTP API.
-// Needs: web app on :3000 started with VITE_APP_ID=e2e-app and JWT_SECRET=dev-only-secret, Flask on :5000, MariaDB.
+// Verifies FreshGuard pantry/history are stored per user in the app database, via the real HTTP API.
+// Needs: web app on :3000 (override with BASE_URL) started with VITE_APP_ID=e2e-app and JWT_SECRET=dev-only-secret, Flask on :5000 (FLASK_URL), and DATABASE_URL (mysql://...) or SQLITE_PATH pointing at the app's database.
 // Run from the repo root:  node e2e/produce-isolation.mjs
 import { createRequire } from "module";
-import { execSync } from "child_process";
+import { sql } from "./lib/db.mjs";
 const require = createRequire(new URL("../IngreScan-AI/package.json", import.meta.url));
 const { SignJWT } = require("jose");
 const superjson = require("superjson");
@@ -10,7 +10,6 @@ const superjson = require("superjson");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const SECRET = new TextEncoder().encode(process.env.JWT_SECRET ?? "dev-only-secret");
 const APP_ID = process.env.VITE_APP_ID ?? "e2e-app";
-const sql = (q) => execSync(`mysql -N ingrescan -e "${q}"`).toString().trim();
 
 const results = [];
 const check = (name, ok, detail = "") => { results.push([ok ? "PASS" : "FAIL", name, detail]); };
@@ -59,7 +58,7 @@ const add = await trpc(alice, "produce.addInventory", { name: pred.fruit_kr, fru
 check("Alice: addInventory succeeds", add.status === 200 && add.data?.id > 0, JSON.stringify(add.error ?? add.data));
 const itemId = add.data?.id;
 
-check("MySQL: rows are stored under Alice's user id", sql(`select count(*) from produce_inventory where user_id=${aliceId}`) === "1" && sql(`select count(*) from produce_scans where user_id=${aliceId}`) === "1");
+check("DB: rows are stored under Alice's user id", sql(`select count(*) from produce_inventory where user_id=${aliceId}`) === "1" && sql(`select count(*) from produce_scans where user_id=${aliceId}`) === "1");
 check("Flask's own SQLite history is unchanged by the web app (persist=0)", (await flaskHistoryCount()) === flaskBefore, `${flaskBefore} -> ${await flaskHistoryCount()}`);
 
 const aliceInv = await trpc(alice, "produce.listInventory");

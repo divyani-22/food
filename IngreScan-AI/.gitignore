@@ -105,3 +105,9 @@ temp/
 *.db
 *.sqlite
 *.sqlite3
+
+# Embedded SQLite database and dev secret (zero-config mode)
+data/
+*.db-wal
+*.db-shm
+*.db-journal

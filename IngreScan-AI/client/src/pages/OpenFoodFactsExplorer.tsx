@@ -18,10 +18,14 @@ import {
   Package,
   Refrigerator,
   Search,
+  ScanLine,
   ShieldAlert,
   Sparkles,
+  X,
 } from "lucide-react";
 import { useState } from "react";
+import { BarcodeScanner, type ScannedBarcode } from "@/components/BarcodeScanner";
+import { checkBarcode } from "@/lib/barcode";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
@@ -42,6 +46,7 @@ export default function OpenFoodFactsExplorer() {
   // Only the submitted query drives the API call (not every keystroke)
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [activeTab, setActiveTab] = useState("barcode");
+  const [showScanner, setShowScanner] = useState(false);
 
   // tRPC query for single barcode
   const {
@@ -82,7 +87,19 @@ export default function OpenFoodFactsExplorer() {
       toast.error("Barcodes contain only digits (usually 8 or 13). Please check the number.");
       return;
     }
+    const check = checkBarcode(barcodeInput);
+    if (!check.ok && check.reason === "bad_checksum") {
+      toast.warning("The check digit of this barcode does not match, so the number may be mistyped. Looking it up anyway.");
+    }
     setActiveBarcode(barcodeInput.trim());
+  };
+
+  // Camera / photo scan: fill the input with the code that is looked up, then query it right away.
+  const handleScanned = (b: ScannedBarcode) => {
+    setBarcodeInput(b.lookupCode);
+    setActiveBarcode(b.lookupCode);
+    setShowScanner(false);
+    if (!b.checksumValid) toast.warning("The check digit of this barcode does not match; results may not be what you expect.");
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -255,7 +272,23 @@ export default function OpenFoodFactsExplorer() {
                 <Button type="submit">
                   <Search className="h-4 w-4" /> Search Barcode
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowScanner((v) => !v)}
+                  aria-expanded={showScanner}
+                  data-testid="explorer-scan-toggle"
+                >
+                  {showScanner ? <X className="h-4 w-4" /> : <ScanLine className="h-4 w-4" />}
+                  {showScanner ? "Close scanner" : "Scan with camera / from photo"}
+                </Button>
               </form>
+
+              {showScanner && (
+                <div className="rounded-3xl bg-fog p-4 sm:p-5" data-testid="explorer-scanner">
+                  <BarcodeScanner onDetected={handleScanned} hideManual idPrefix="explorer-barcode" />
+                </div>
+              )}
 
               {/* Sample Barcodes */}
               <div>

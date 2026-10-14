@@ -10,6 +10,14 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { toLocalDateInput } from "@/lib/utils";
 import {
+  classifyOnDevice,
+  ensureOnDeviceModel,
+  getOnDeviceState,
+  isOnDeviceSupported,
+  subscribeOnDevice,
+  type OnDeviceState,
+} from "@/lib/onDeviceProduce";
+import {
   Sparkles,
   Upload,
   Camera,
@@ -27,6 +35,9 @@ import {
   Cherry,
   Salad,
   ScanLine,
+  Cpu,
+  Cloud,
+  Loader2,
 } from "lucide-react";
 
 interface PredictionResult {
@@ -95,6 +106,35 @@ interface HistoryItem {
   created_at: string;
 }
 
+type InspectionEngine = "device" | "server";
+const ENGINE_PREF_KEY = "ingrescan.produce.engine";
+
+function readEnginePreference(): InspectionEngine {
+  try {
+    return window.localStorage.getItem(ENGINE_PREF_KEY) === "server" ? "server" : "device";
+  } catch {
+    return "device";
+  }
+}
+
+function writeEnginePreference(engine: InspectionEngine) {
+  try {
+    window.localStorage.setItem(ENGINE_PREF_KEY, engine);
+  } catch {
+    // storage unavailable (private mode, blocked): the choice just is not remembered
+  }
+}
+
+/** Everything one inspection needs: where the image bytes come from, and how to ask the server instead. */
+interface InspectionSource {
+  getBlob: () => Promise<Blob>;
+  callServer: () => Promise<PredictionResult>;
+  /** Image URL to store with the result when the on-device path produced it (samples only). */
+  imageUrl?: string;
+  successMessage: (data: PredictionResult) => string;
+  failureMessage: string;
+}
+
 export default function ProduceScanner() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -105,6 +145,14 @@ export default function ProduceScanner() {
   const [isAddingToInventory, setIsAddingToInventory] = useState(false);
   const [activeTab, setActiveTab] = useState("scan");
 
+  // On-device inference (ONNX Runtime Web) is the default; the Flask service is the automatic fallback.
+  const deviceSupported = useRef(isOnDeviceSupported()).current;
+  const [enginePref, setEnginePref] = useState<InspectionEngine>(() => (deviceSupported ? readEnginePreference() : "server"));
+  const [deviceState, setDeviceState] = useState<OnDeviceState>(getOnDeviceState());
+  const [deviceBroken, setDeviceBroken] = useState(false);
+  const [lastRun, setLastRun] = useState<{ engine: InspectionEngine; ms: number } | null>(null);
+  const wantsDevice = deviceSupported && enginePref === "device" && !deviceBroken;
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -114,6 +162,24 @@ export default function ProduceScanner() {
     loadInventory();
     loadHistory();
   }, []);
+
+  useEffect(() => subscribeOnDevice(setDeviceState), []);
+
+  // Start downloading the model as soon as the page opens (unless the user asked the browser to save data).
+  useEffect(() => {
+    if (!wantsDevice) return;
+    const saveData = (navigator as unknown as { connection?: { saveData?: boolean } }).connection?.saveData;
+    if (saveData) return;
+    ensureOnDeviceModel().catch(() => {
+      // the status line shows the error; the first inspection falls back to the server
+    });
+  }, [wantsDevice]);
+
+  const chooseEngine = (engine: InspectionEngine) => {
+    setEnginePref(engine);
+    writeEnginePreference(engine);
+    if (engine === "device") setDeviceBroken(false); // an explicit choice retries on-device inference
+  };
 
   const loadSamples = async () => {
     try {
@@ -184,57 +250,91 @@ export default function ProduceScanner() {
     reader.onload = () => {
       const base64 = reader.result as string;
       setSelectedImage(base64);
-      analyzeBase64(base64);
+      void analyzeFile(file, base64);
     };
     reader.onerror = () => toast.error("Could not read the selected file");
     reader.readAsDataURL(file);
   };
 
-  const analyzeBase64 = async (base64Img: string) => {
+  /**
+   * Run one inspection on-device when enabled, otherwise (or if that fails) on the server.
+   * Both paths feed the same result state, history and pantry code.
+   */
+  const inspect = async (source: InspectionSource) => {
     setIsAnalyzing(true);
     setResult(null);
     try {
-      const res = await fetch("/api/freshguard/predict", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: base64Img }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Failed to analyze image" }));
-        throw new Error(err.error || "Analysis failed");
+      let data: PredictionResult | null = null;
+      if (wantsDevice) {
+        try {
+          const started = performance.now();
+          const blob = await source.getBlob();
+          const run = await classifyOnDevice(blob);
+          data = { ...run.result, image_url: source.imageUrl ?? run.result.image_url };
+          setLastRun({ engine: "device", ms: Math.round(performance.now() - started) });
+        } catch (err: any) {
+          setDeviceBroken(true);
+          toast.warning(
+            `On-device inspection is unavailable (${err?.message || "unknown error"}). Using the server instead.`,
+          );
+        }
       }
-      const data: PredictionResult = await res.json();
+      if (!data) {
+        const started = performance.now();
+        data = await source.callServer();
+        setLastRun({ engine: "server", ms: Math.round(performance.now() - started) });
+      }
       setResult(data);
       void saveScanToHistory(data);
-      toast.success(`Identified ${data.fruit_kr} as ${data.freshness_kr}.`);
+      toast.success(source.successMessage(data));
     } catch (err: any) {
-      toast.error(err.message || "Failed to analyze produce freshness");
+      toast.error(err.message || source.failureMessage);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
+  const analyzeFile = (file: File, base64Img: string) =>
+    inspect({
+      getBlob: async () => file,
+      callServer: async () => {
+        const res = await fetch("/api/freshguard/predict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64Img }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Failed to analyze image" }));
+          throw new Error(err.error || "Analysis failed");
+        }
+        return (await res.json()) as PredictionResult;
+      },
+      successMessage: (data) => `Identified ${data.fruit_kr} as ${data.freshness_kr}.`,
+      failureMessage: "Failed to analyze produce freshness",
+    });
+
   const analyzeSample = async (sampleFilename: string, sampleUrl: string) => {
-    setIsAnalyzing(true);
     setSelectedImage(sampleUrl);
-    setResult(null);
-    try {
-      const res = await fetch(`/api/freshguard/predict?sample=${encodeURIComponent(sampleFilename)}`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => null);
-        throw new Error(err?.error || "Failed to load sample prediction");
-      }
-      const data: PredictionResult = await res.json();
-      setResult(data);
-      void saveScanToHistory(data);
-      toast.success(`Identified sample: ${data.fruit_kr}.`);
-    } catch (err: any) {
-      toast.error(err.message || "Sample analysis failed");
-    } finally {
-      setIsAnalyzing(false);
-    }
+    await inspect({
+      getBlob: async () => {
+        const res = await fetch(sampleUrl);
+        if (!res.ok) throw new Error(`could not load the sample image (${res.status})`);
+        return await res.blob();
+      },
+      callServer: async () => {
+        const res = await fetch(`/api/freshguard/predict?sample=${encodeURIComponent(sampleFilename)}`, {
+          method: "POST",
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => null);
+          throw new Error(err?.error || "Failed to load sample prediction");
+        }
+        return (await res.json()) as PredictionResult;
+      },
+      imageUrl: sampleUrl,
+      successMessage: (data) => `Identified sample: ${data.fruit_kr}.`,
+      failureMessage: "Sample analysis failed",
+    });
   };
 
   const addToInventory = async () => {
@@ -316,6 +416,30 @@ export default function ProduceScanner() {
           ? "[&>[data-slot=progress-indicator]]:bg-signal-red-orange"
           : "[&>[data-slot=progress-indicator]]:bg-graphite";
 
+  const providerLabel = deviceState.kind === "ready" ? (deviceState.provider === "webgpu" ? "WebGPU" : "CPU") : "";
+  const engineStatusText = !deviceSupported
+    ? "Using server (on-device not supported here)"
+    : enginePref === "server"
+      ? "Using server"
+      : deviceBroken
+        ? "Using server (on-device unavailable)"
+        : deviceState.kind === "loading"
+          ? `Loading on-device model ${deviceState.percent}%`
+          : deviceState.kind === "ready"
+            ? `Runs on this device (${providerLabel})`
+            : deviceState.kind === "error"
+              ? "Using server (on-device unavailable)"
+              : "On-device model not loaded yet";
+  const engineHelpText = !deviceSupported
+    ? "This browser lacks WebAssembly or image decoding support, so photos are sent to the server."
+    : wantsDevice
+      ? lastRun?.engine === "device"
+        ? `Last inspection took ${lastRun.ms} ms. Your photo stayed on this device.`
+        : "Photos are analysed in your browser and are not uploaded. Works offline once the model is downloaded."
+      : lastRun?.engine === "server"
+        ? `Last inspection took ${lastRun.ms} ms on the server.`
+        : "Photos are uploaded to the FreshGuard server for analysis.";
+
   const supportedProduce = [
     "Apple",
     "Banana",
@@ -388,6 +512,52 @@ export default function ProduceScanner() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-5">
+                    {/* Inspection engine: on this device (default) or on the server */}
+                    <div className="space-y-2 rounded-2xl bg-fog p-3" data-testid="engine-status">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p
+                          className="flex min-w-0 items-center gap-2 text-sm font-bold text-graphite"
+                          role="status"
+                          aria-live="polite"
+                          data-testid="engine-status-text"
+                        >
+                          {wantsDevice && deviceState.kind === "loading" ? (
+                            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ember-orange" />
+                          ) : wantsDevice ? (
+                            <Cpu className="h-4 w-4 shrink-0 text-verdant-green" />
+                          ) : (
+                            <Cloud className="h-4 w-4 shrink-0 text-graphite" />
+                          )}
+                          <span className="truncate">{engineStatusText}</span>
+                        </p>
+                        <div className="flex gap-1" role="group" aria-label="Inspection engine">
+                          <Button
+                            size="sm"
+                            variant={enginePref === "device" && deviceSupported ? "dark" : "outline"}
+                            aria-pressed={enginePref === "device" && deviceSupported}
+                            disabled={!deviceSupported}
+                            onClick={() => chooseEngine("device")}
+                            data-testid="engine-device"
+                          >
+                            On device
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={enginePref === "server" || !deviceSupported ? "dark" : "outline"}
+                            aria-pressed={enginePref === "server" || !deviceSupported}
+                            onClick={() => chooseEngine("server")}
+                            data-testid="engine-server"
+                          >
+                            Server
+                          </Button>
+                        </div>
+                      </div>
+                      {wantsDevice && deviceState.kind === "loading" && (
+                        <Progress value={deviceState.percent} className="h-1.5 bg-white [&>[data-slot=progress-indicator]]:bg-ember-orange" />
+                      )}
+                      <p className="text-xs text-muted-foreground">{engineHelpText}</p>
+                    </div>
+
                     {/* Image Preview Box */}
                     <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-fog">
                       {selectedImage ? (
@@ -500,7 +670,11 @@ export default function ProduceScanner() {
                       <div>
                         <h3 className="text-lg font-bold text-graphite">AI Inspecting Freshness...</h3>
                         <p className="text-sm text-muted-foreground">
-                          Running EfficientNet-B0 multitask neural classification
+                          {wantsDevice && deviceState.kind === "loading"
+                            ? `Downloading the on-device model (${deviceState.percent}%)`
+                            : wantsDevice
+                              ? "Running EfficientNet-B0 on this device"
+                              : "Running EfficientNet-B0 multitask neural classification"}
                         </p>
                       </div>
                     </div>
