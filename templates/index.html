@@ -1,20 +1,20 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FreshGuard - 식재료 신선도 판별 AI</title>
+  <title>FreshGuard - AI Produce Freshness Checker</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;600;700;800&family=Nunito+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
   <script>
     tailwind.config = {
       theme: {
         extend: {
           fontFamily: {
-            sans: ['"Aquawax Pro"', '"Nunito Sans"', '"Noto Sans KR"', 'system-ui', 'sans-serif'],
+            sans: ['"Aquawax Pro"', '"Nunito Sans"', 'system-ui', 'sans-serif'],
           },
           colors: {
             ember: { DEFAULT: '#ff5406', hover: '#e84a00' },
@@ -46,7 +46,7 @@
     }
     html { -webkit-text-size-adjust: 100%; }
     body {
-      font-family: "Aquawax Pro", "Nunito Sans", "Noto Sans KR", system-ui, sans-serif;
+      font-family: "Aquawax Pro", "Nunito Sans", system-ui, sans-serif;
       font-weight: 500;
       background-color: var(--fn-fog);
       color: var(--fn-graphite);
@@ -84,7 +84,7 @@
             FreshGuard
             <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-3xl bg-fog text-graphite">AI Service</span>
           </h1>
-          <p class="text-xs text-muted truncate">식재료 신선도 판별 & 스마트 보관 매니저</p>
+          <p class="text-xs text-muted truncate">Produce freshness checker &amp; smart storage manager</p>
         </div>
       </div>
 
@@ -92,22 +92,22 @@
       <nav class="grid grid-cols-4 sm:flex items-center gap-1 sm:gap-1.5 text-sm font-bold">
         <button onclick="switchTab('scanner')" id="tab-scanner" class="min-h-[44px] px-2 sm:px-4 py-1.5 sm:py-2 rounded-3xl transition-colors flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 bg-ember text-white">
           <i class="fa-solid fa-camera"></i>
-          <span class="text-[11px] sm:text-sm whitespace-nowrap">AI 판별기</span>
+          <span class="text-[11px] sm:text-sm whitespace-nowrap">Scanner</span>
         </button>
         <button onclick="switchTab('inventory')" id="tab-inventory" class="min-h-[44px] px-2 sm:px-4 py-1.5 sm:py-2 rounded-3xl text-muted hover:text-graphite hover:bg-fog transition-colors flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2">
           <span class="flex items-center gap-1.5 sm:contents">
             <i class="fa-solid fa-box-archive"></i>
             <span id="nav-inv-count" class="text-[10px] sm:text-xs leading-none px-1.5 py-0.5 bg-fog rounded-3xl text-graphite font-bold sm:order-last">0</span>
           </span>
-          <span class="text-[11px] sm:text-sm whitespace-nowrap">내 식재료함</span>
+          <span class="text-[11px] sm:text-sm whitespace-nowrap">My Pantry</span>
         </button>
         <button onclick="switchTab('history')" id="tab-history" class="min-h-[44px] px-2 sm:px-4 py-1.5 sm:py-2 rounded-3xl text-muted hover:text-graphite hover:bg-fog transition-colors flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2">
           <i class="fa-solid fa-clock-rotate-left"></i>
-          <span class="text-[11px] sm:text-sm whitespace-nowrap">검사 기록</span>
+          <span class="text-[11px] sm:text-sm whitespace-nowrap">History</span>
         </button>
         <button onclick="switchTab('about')" id="tab-about" class="min-h-[44px] px-2 sm:px-4 py-1.5 sm:py-2 rounded-3xl text-muted hover:text-graphite hover:bg-fog transition-colors flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2">
           <i class="fa-solid fa-circle-info"></i>
-          <span class="text-[11px] sm:text-sm whitespace-nowrap">모델 정보</span>
+          <span class="text-[11px] sm:text-sm whitespace-nowrap">Model</span>
         </button>
       </nav>
     </div>
@@ -126,10 +126,10 @@
             <i class="fa-solid fa-brain text-ember"></i> EfficientNet-B0 Multitask Model
           </span>
           <h2 class="text-[26px] leading-tight sm:text-[34px] font-extrabold tracking-tight text-graphite mb-3">
-            과일·식재료 사진 한 장으로<br/><span class="text-verdant">신선도와 남은 소비기한</span>을 즉시 진단하세요
+            One photo of your produce.<br/><span class="text-verdant">Instant freshness and shelf life</span>
           </h2>
           <p class="text-muted text-[15px] sm:text-[17px] leading-relaxed">
-            10종 과일/채소 인식 및 3단계 신선도(신선·보통·상함) 판별, 최적의 보관 가이드 및 맞춤형 요리 레시피를 제안합니다.
+            Recognizes 10 fruits and vegetables, grades freshness in 3 levels (fresh, normal, rotten), and suggests storage tips and recipe ideas.
           </p>
         </div>
         <div class="hidden sm:block absolute right-10 top-1/2 -translate-y-1/2 text-ember/10 text-[160px] leading-none pointer-events-none" aria-hidden="true">
@@ -145,11 +145,11 @@
           <div class="glass-card rounded-3xl p-5 sm:p-6 space-y-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <h3 class="text-lg font-bold text-graphite flex items-center gap-2.5">
-                <span class="w-9 h-9 rounded-xl bg-fog flex items-center justify-center"><i class="fa-solid fa-camera-retro text-ember text-sm"></i></span> 이미지 입력
+                <span class="w-9 h-9 rounded-xl bg-fog flex items-center justify-center"><i class="fa-solid fa-camera-retro text-ember text-sm"></i></span> Image Input
               </h3>
               <div class="flex items-center gap-1 p-1 rounded-3xl bg-fog text-xs">
-                <button id="btn-mode-file" onclick="setMode('file')" class="min-h-[44px] px-4 rounded-3xl font-bold bg-ember text-white">파일 업로드</button>
-                <button id="btn-mode-cam" onclick="setMode('cam')" class="min-h-[44px] px-4 rounded-3xl font-bold text-muted hover:text-graphite">웹캠 촬영</button>
+                <button id="btn-mode-file" onclick="setMode('file')" class="min-h-[44px] px-4 rounded-3xl font-bold bg-ember text-white">Upload</button>
+                <button id="btn-mode-cam" onclick="setMode('cam')" class="min-h-[44px] px-4 rounded-3xl font-bold text-muted hover:text-graphite">Webcam</button>
               </div>
             </div>
 
@@ -159,8 +159,8 @@
                 <div class="w-14 h-14 rounded-2xl bg-white text-ember flex items-center justify-center text-2xl mb-3 group-hover:scale-105 transition-transform">
                   <i class="fa-solid fa-cloud-arrow-up"></i>
                 </div>
-                <span class="text-sm font-bold text-graphite">이미지 클릭 또는 드래그 & 드롭</span>
-                <span class="text-xs text-muted mt-1">JPG, PNG, WEBP 지원 (최대 16MB)</span>
+                <span class="text-sm font-bold text-graphite">Click or drag &amp; drop an image</span>
+                <span class="text-xs text-muted mt-1">JPG, PNG or WEBP (max 16MB)</span>
                 <input id="image-input" type="file" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
               </label>
             </div>
@@ -171,15 +171,15 @@
                 <video id="webcam-video" autoplay playsinline class="w-full h-full object-cover"></video>
                 <div id="cam-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-white/70 text-sm gap-2">
                   <i class="fa-solid fa-video-slash text-2xl"></i>
-                  <span>카메라가 꺼져 있습니다</span>
+                  <span>Camera is off</span>
                 </div>
               </div>
               <div class="flex gap-2">
                 <button id="btn-start-cam" onclick="startCamera()" class="flex-1 min-h-[44px] py-2.5 rounded-3xl bg-graphite hover:bg-black text-white text-sm font-bold flex items-center justify-center gap-2 transition-colors">
-                  <i class="fa-solid fa-video"></i> 카메라 시작
+                  <i class="fa-solid fa-video"></i> Start Camera
                 </button>
                 <button id="btn-snap-cam" onclick="captureCamera()" disabled class="flex-1 min-h-[44px] py-2.5 rounded-3xl bg-ember hover:bg-ember-hover disabled:opacity-40 disabled:hover:bg-ember text-white text-sm font-bold flex items-center justify-center gap-2 transition-colors">
-                  <i class="fa-solid fa-camera"></i> 사진 촬영 진단
+                  <i class="fa-solid fa-camera"></i> Capture &amp; Scan
                 </button>
               </div>
             </div>
@@ -187,28 +187,28 @@
             <!-- Quick Samples -->
             <div>
               <div class="flex items-center justify-between text-xs text-muted font-bold mb-2.5">
-                <span><i class="fa-solid fa-bolt text-sunset mr-1"></i> 원클릭 샘플로 바로 테스트:</span>
+                <span><i class="fa-solid fa-bolt text-sunset mr-1"></i> Try a sample in one click:</span>
               </div>
               <div id="sample-buttons" class="grid grid-cols-5 gap-2">
                 <button onclick="runSample('apple.jpg')" class="min-w-0 p-1.5 rounded-2xl border border-hairline bg-white hover:border-ember text-center transition-colors group">
                   <img src="/static/samples/apple.jpg" class="w-full h-11 object-cover rounded-xl mb-1" alt="Apple">
-                  <span class="text-[11px] font-bold text-graphite block truncate">사과</span>
+                  <span class="text-[11px] font-bold text-graphite block truncate">Apple</span>
                 </button>
                 <button onclick="runSample('banana.jpg')" class="min-w-0 p-1.5 rounded-2xl border border-hairline bg-white hover:border-ember text-center transition-colors group">
                   <img src="/static/samples/banana.jpg" class="w-full h-11 object-cover rounded-xl mb-1" alt="Banana">
-                  <span class="text-[11px] font-bold text-graphite block truncate">바나나</span>
+                  <span class="text-[11px] font-bold text-graphite block truncate">Banana</span>
                 </button>
                 <button onclick="runSample('orange.jpg')" class="min-w-0 p-1.5 rounded-2xl border border-hairline bg-white hover:border-ember text-center transition-colors group">
                   <img src="/static/samples/orange.jpg" class="w-full h-11 object-cover rounded-xl mb-1" alt="Orange">
-                  <span class="text-[11px] font-bold text-graphite block truncate">오렌지</span>
+                  <span class="text-[11px] font-bold text-graphite block truncate">Orange</span>
                 </button>
                 <button onclick="runSample('strawberry.jpg')" class="min-w-0 p-1.5 rounded-2xl border border-hairline bg-white hover:border-ember text-center transition-colors group">
                   <img src="/static/samples/strawberry.jpg" class="w-full h-11 object-cover rounded-xl mb-1" alt="Strawberry">
-                  <span class="text-[11px] font-bold text-graphite block truncate">딸기</span>
+                  <span class="text-[11px] font-bold text-graphite block truncate">Strawberry</span>
                 </button>
                 <button onclick="runSample('tomato.jpg')" class="min-w-0 p-1.5 rounded-2xl border border-hairline bg-white hover:border-ember text-center transition-colors group">
                   <img src="/static/samples/tomato.jpg" class="w-full h-11 object-cover rounded-xl mb-1" alt="Tomato">
-                  <span class="text-[11px] font-bold text-graphite block truncate">토마토</span>
+                  <span class="text-[11px] font-bold text-graphite block truncate">Tomato</span>
                 </button>
               </div>
             </div>
@@ -224,22 +224,22 @@
             <div class="w-16 h-16 rounded-3xl bg-fog text-ember flex items-center justify-center text-2xl mb-4">
               <i class="fa-solid fa-wand-magic-sparkles"></i>
             </div>
-            <h3 class="text-[22px] font-bold text-graphite mb-1.5">AI 신선도 판별 대기 중</h3>
+            <h3 class="text-[22px] font-bold text-graphite mb-1.5">Ready to Scan</h3>
             <p class="text-sm text-muted max-w-sm mb-5 leading-relaxed">
-              식재료 사진을 업로드하거나 좌측의 샘플을 클릭하면 과일 품종과 신선도 점수가 이곳에 표시됩니다.
+              Upload a photo or pick a sample to see the detected produce and its freshness score here.
             </p>
             <div class="flex flex-wrap items-center justify-center gap-2 text-xs font-bold text-graphite">
-              <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-3xl bg-fog"><i class="fa-solid fa-apple-whole text-ember"></i>10종 과일 지원</span>
-              <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-3xl bg-fog"><i class="fa-solid fa-temperature-half text-verdant"></i>3단계 신선도</span>
-              <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-3xl bg-fog"><i class="fa-solid fa-lightbulb text-sunset"></i>보관 가이드</span>
+              <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-3xl bg-fog"><i class="fa-solid fa-apple-whole text-ember"></i>10 produce types</span>
+              <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-3xl bg-fog"><i class="fa-solid fa-temperature-half text-verdant"></i>3 freshness levels</span>
+              <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-3xl bg-fog"><i class="fa-solid fa-lightbulb text-sunset"></i>Storage tips</span>
             </div>
           </div>
 
           <!-- Loading State -->
           <div id="result-loading" class="hidden glass-card rounded-3xl p-12 h-full flex flex-col items-center justify-center text-center">
             <div class="w-14 h-14 border-4 border-fog border-t-ember rounded-full animate-spin mb-4"></div>
-            <h3 class="text-lg font-bold text-graphite mb-1">EfficientNet AI 모델 분석 중...</h3>
-            <p class="text-xs text-muted">과일 형태학적 특성 및 신선도 지표를 추출하고 있습니다.</p>
+            <h3 class="text-lg font-bold text-graphite mb-1">Analyzing with EfficientNet...</h3>
+            <p class="text-xs text-muted">Extracting shape features and freshness indicators.</p>
           </div>
 
           <!-- Diagnostic Results Card -->
@@ -254,11 +254,11 @@
 
               <div class="flex-1 min-w-0 text-center sm:text-left space-y-2">
                 <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                  <span id="res-emoji" class="text-3xl"></span>
+                  <span id="res-emoji" class="w-10 h-10 rounded-2xl bg-fog text-ember text-lg font-extrabold flex items-center justify-center flex-shrink-0" aria-hidden="true"></span>
                   <h3 id="res-fruit-kr" class="text-[26px] font-extrabold text-graphite"></h3>
-                  <span id="res-fruit-en" class="text-sm font-bold text-muted"></span>
+                  <span id="res-fruit-en" class="hidden"></span>
                   <span class="text-xs px-2.5 py-1 rounded-3xl bg-fog text-graphite font-semibold">
-                    인식 신뢰도 <strong id="res-confidence"></strong>%
+                    Confidence <strong id="res-confidence"></strong>%
                   </span>
                 </div>
 
@@ -267,11 +267,11 @@
                 <!-- Freshness Metric Badge Bar -->
                 <div class="pt-2 flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-2">
                   <div class="flex items-center gap-2">
-                    <span class="text-xs font-bold text-muted">신선도 점수:</span>
+                    <span class="text-xs font-bold text-muted">Freshness score:</span>
                     <span id="res-fresh-score" class="text-2xl font-extrabold tabular-nums text-verdant"></span>
                   </div>
                   <div class="flex items-center gap-2">
-                    <span class="text-xs font-bold text-muted">예상 소비기한:</span>
+                    <span class="text-xs font-bold text-muted">Est. shelf life:</span>
                     <span id="res-shelf-life" class="text-xs font-bold px-3 py-1.5 rounded-3xl bg-fog text-graphite"></span>
                   </div>
                 </div>
@@ -282,7 +282,7 @@
             <div class="space-y-2">
               <div class="flex justify-between text-xs font-bold">
                 <span class="text-graphite flex items-center gap-1.5">
-                  <i class="fa-solid fa-gauge-high text-ember"></i> 신선도 지수 (p_fresh)
+                  <i class="fa-solid fa-gauge-high text-ember"></i> Freshness index (p_fresh)
                 </span>
                 <span id="res-fresh-percent" class="text-graphite font-extrabold tabular-nums"></span>
               </div>
@@ -290,10 +290,10 @@
                 <div id="res-progress-bar" class="h-full rounded-full transition-all duration-700 bg-verdant" style="width: 0%"></div>
               </div>
               <div class="flex justify-between gap-2 text-[10px] text-muted font-semibold px-0.5">
-                <span>0% (상함 / 부패)</span>
-                <span class="hidden sm:inline">30% (보통 구간 진입)</span>
-                <span class="hidden sm:inline">70% (신선 구간 진입)</span>
-                <span class="text-right">100% (최고 신선도)</span>
+                <span>0% (Rotten)</span>
+                <span class="hidden sm:inline">30% (Normal from here)</span>
+                <span class="hidden sm:inline">70% (Fresh from here)</span>
+                <span class="text-right">100% (Peak freshness)</span>
               </div>
             </div>
 
@@ -301,13 +301,13 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <div class="p-4 rounded-2xl bg-fog space-y-1.5">
                 <span class="font-bold text-graphite flex items-center gap-2">
-                  <i class="fa-solid fa-snowflake text-ember"></i> 올바른 보관 가이드
+                  <i class="fa-solid fa-snowflake text-ember"></i> How to Store
                 </span>
                 <p id="res-storage-tips" class="text-muted leading-relaxed text-[13px]"></p>
               </div>
               <div class="p-4 rounded-2xl bg-fog space-y-1.5">
                 <span class="font-bold text-graphite flex items-center gap-2">
-                  <i class="fa-solid fa-utensils text-verdant"></i> 상태별 추천 활용법
+                  <i class="fa-solid fa-utensils text-verdant"></i> Best Uses Now
                 </span>
                 <p id="res-cooking-tips" class="text-muted leading-relaxed text-[13px]"></p>
               </div>
@@ -316,7 +316,7 @@
             <!-- Top Candidates Breakdown -->
             <div class="space-y-2.5">
               <span class="text-xs font-bold text-graphite flex items-center gap-1.5">
-                <i class="fa-solid fa-chart-simple text-muted"></i> 품종별 예측 확률 상위 후보
+                <i class="fa-solid fa-chart-simple text-muted"></i> Top predicted candidates
               </span>
               <div id="res-candidates" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
             </div>
@@ -324,10 +324,10 @@
             <!-- Action Buttons -->
             <div class="pt-1 flex flex-col sm:flex-row gap-2">
               <button id="btn-save-inv" onclick="saveToInventory()" class="flex-1 min-h-[48px] py-3 px-5 rounded-3xl bg-ember hover:bg-ember-hover text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors">
-                <i class="fa-solid fa-plus-circle"></i> 내 냉장고 식재료함에 보관 등록
+                <i class="fa-solid fa-plus-circle"></i> Add to My Pantry
               </button>
               <button onclick="resetScanner()" class="min-h-[48px] py-3 px-5 rounded-3xl bg-fog hover:bg-hairline text-graphite font-bold text-sm flex items-center justify-center gap-2 transition-colors">
-                <i class="fa-solid fa-rotate-right"></i> 다시 판별
+                <i class="fa-solid fa-rotate-right"></i> Scan Again
               </button>
             </div>
 
@@ -345,16 +345,16 @@
       <div class="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
         <div>
           <h2 class="text-[26px] sm:text-[30px] font-bold text-graphite flex items-center gap-3">
-            <span class="w-11 h-11 rounded-2xl bg-white border border-hairline flex items-center justify-center"><i class="fa-solid fa-box-archive text-ember text-base"></i></span> 내 보관 식재료 관리
+            <span class="w-11 h-11 rounded-2xl bg-white border border-hairline flex items-center justify-center"><i class="fa-solid fa-box-archive text-ember text-base"></i></span> My Pantry
           </h2>
-          <p class="text-sm text-muted mt-1.5">AI로 판별하여 등록된 식재료의 신선도와 소비기한을 모니터링합니다.</p>
+          <p class="text-sm text-muted mt-1.5">Track the freshness and shelf life of produce you have scanned and saved.</p>
         </div>
         <div class="flex items-center gap-2 w-full sm:w-auto">
           <div class="flex w-full sm:w-auto bg-white border border-hairline p-1 rounded-3xl text-xs font-bold">
-            <button onclick="filterInventory('all')" id="filter-all" class="flex-1 sm:flex-none min-h-[44px] px-4 rounded-3xl bg-ember text-white">전체</button>
-            <button onclick="filterInventory('fresh')" id="filter-fresh" class="flex-1 sm:flex-none min-h-[44px] px-4 rounded-3xl text-muted hover:text-graphite">신선</button>
-            <button onclick="filterInventory('normal')" id="filter-normal" class="flex-1 sm:flex-none min-h-[44px] px-4 rounded-3xl text-muted hover:text-graphite">보통</button>
-            <button onclick="filterInventory('rotten')" id="filter-rotten" class="flex-1 sm:flex-none min-h-[44px] px-4 rounded-3xl text-muted hover:text-graphite whitespace-nowrap">폐기권장</button>
+            <button onclick="filterInventory('all')" id="filter-all" class="flex-1 sm:flex-none min-h-[44px] px-4 rounded-3xl bg-ember text-white">All</button>
+            <button onclick="filterInventory('fresh')" id="filter-fresh" class="flex-1 sm:flex-none min-h-[44px] px-4 rounded-3xl text-muted hover:text-graphite">Fresh</button>
+            <button onclick="filterInventory('normal')" id="filter-normal" class="flex-1 sm:flex-none min-h-[44px] px-4 rounded-3xl text-muted hover:text-graphite">Normal</button>
+            <button onclick="filterInventory('rotten')" id="filter-rotten" class="flex-1 sm:flex-none min-h-[44px] px-4 rounded-3xl text-muted hover:text-graphite whitespace-nowrap">Discard</button>
           </div>
         </div>
       </div>
@@ -369,10 +369,10 @@
         <div class="w-16 h-16 rounded-3xl bg-fog text-muted flex items-center justify-center text-2xl mx-auto mb-4">
           <i class="fa-solid fa-basket-shopping"></i>
         </div>
-        <h4 class="font-bold text-graphite text-lg mb-1">보관 중인 식재료가 없습니다</h4>
-        <p class="text-sm text-muted mb-5">AI 판별기에서 이미지를 진단한 후 '식재료함에 보관 등록'을 눌러보세요.</p>
+        <h4 class="font-bold text-graphite text-lg mb-1">Your pantry is empty</h4>
+        <p class="text-sm text-muted mb-5">Scan an image in the Scanner, then tap 'Add to My Pantry'.</p>
         <button onclick="switchTab('scanner')" class="min-h-[44px] px-5 rounded-3xl bg-ember text-white font-bold text-sm hover:bg-ember-hover transition-colors">
-          <i class="fa-solid fa-camera mr-1"></i> 신선도 판별하러 가기
+          <i class="fa-solid fa-camera mr-1"></i> Go to Scanner
         </button>
       </div>
 
@@ -384,12 +384,12 @@
       <div class="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
         <div>
           <h2 class="text-[26px] sm:text-[30px] font-bold text-graphite flex items-center gap-3">
-            <span class="w-11 h-11 rounded-2xl bg-white border border-hairline flex items-center justify-center"><i class="fa-solid fa-clock-rotate-left text-ember text-base"></i></span> 최근 검사 기록
+            <span class="w-11 h-11 rounded-2xl bg-white border border-hairline flex items-center justify-center"><i class="fa-solid fa-clock-rotate-left text-ember text-base"></i></span> Scan History
           </h2>
-          <p class="text-sm text-muted mt-1.5">과거에 판별한 식재료 분석 히스토리 목록입니다.</p>
+          <p class="text-sm text-muted mt-1.5">A log of your past freshness scans.</p>
         </div>
         <button onclick="clearHistory()" class="min-h-[44px] px-4 text-sm text-graphite bg-white hover:bg-fog rounded-3xl border border-hairline font-bold transition-colors flex items-center gap-2 flex-shrink-0">
-          <i class="fa-solid fa-trash-can text-signal"></i> 기록 전체 삭제
+          <i class="fa-solid fa-trash-can text-signal"></i> Clear History
         </button>
       </div>
 
@@ -399,12 +399,12 @@
           <table class="w-full text-left text-sm">
             <thead class="bg-fog text-muted text-xs font-bold">
               <tr>
-                <th class="py-3.5 px-4 whitespace-nowrap">사진</th>
-                <th class="py-3.5 px-4 whitespace-nowrap">식재료 종류</th>
-                <th class="py-3.5 px-4 whitespace-nowrap">신선도 판별 결과</th>
-                <th class="py-3.5 px-4 whitespace-nowrap">신선도 확률</th>
-                <th class="py-3.5 px-4 whitespace-nowrap">인식 신뢰도</th>
-                <th class="py-3.5 px-4 whitespace-nowrap">검사 일시</th>
+                <th class="py-3.5 px-4 whitespace-nowrap">Photo</th>
+                <th class="py-3.5 px-4 whitespace-nowrap">Produce</th>
+                <th class="py-3.5 px-4 whitespace-nowrap">Result</th>
+                <th class="py-3.5 px-4 whitespace-nowrap">Freshness</th>
+                <th class="py-3.5 px-4 whitespace-nowrap">Confidence</th>
+                <th class="py-3.5 px-4 whitespace-nowrap">Scanned At</th>
               </tr>
             </thead>
             <tbody id="history-table-body" class="divide-y divide-hairline text-graphite">
@@ -413,7 +413,7 @@
           </table>
         </div>
         <div id="history-empty" class="hidden p-10 text-center text-muted text-sm">
-          검사 기록이 없습니다.
+          No scans yet.
         </div>
       </div>
 
@@ -425,9 +425,9 @@
       <div class="glass-card rounded-3xl p-6 sm:p-10 space-y-6">
         <div>
           <span class="text-sm font-bold text-ember">System Architecture</span>
-          <h2 class="text-[26px] sm:text-[30px] font-bold text-graphite mt-1 leading-tight">FreshGuard AI 모델 구조 및 원리</h2>
+          <h2 class="text-[26px] sm:text-[30px] font-bold text-graphite mt-1 leading-tight">How the FreshGuard Model Works</h2>
           <p class="text-[15px] text-muted mt-2 leading-relaxed">
-            카메라로 촬영한 과일 이미지를 기반으로 10종 과일 분류와 3단계 신선도를 한 번에 예측하는 멀티태스크 딥러닝 파이프라인
+            A multitask deep learning pipeline that classifies 10 types of produce and predicts a 3-level freshness grade from a single photo.
           </p>
         </div>
 
@@ -435,17 +435,17 @@
           <div class="p-5 rounded-3xl bg-fog">
             <span class="text-xs font-bold text-muted">Backbone Network</span>
             <h4 class="text-lg font-bold text-graphite mt-1">EfficientNet-B0</h4>
-            <p class="text-[13px] text-muted mt-1.5 leading-relaxed">ImageNet 사전학습 가중치를 활용하여 가볍고 빠른 연산속도와 높은 정확도를 보장합니다.</p>
+            <p class="text-[13px] text-muted mt-1.5 leading-relaxed">Uses ImageNet-pretrained weights for a lightweight, fast and accurate model.</p>
           </div>
           <div class="p-5 rounded-3xl bg-fog">
             <span class="text-xs font-bold text-muted">Head 1: Fruit Classification</span>
             <h4 class="text-lg font-bold text-graphite mt-1">10-Class Classifier</h4>
-            <p class="text-[13px] text-muted mt-1.5 leading-relaxed">사과, 바나나, 파프리카, 당근, 오이, 망고, 오렌지, 감자, 딸기, 토마토 분류 (F1: 0.993).</p>
+            <p class="text-[13px] text-muted mt-1.5 leading-relaxed">Apple, banana, bell pepper, carrot, cucumber, mango, orange, potato, strawberry and tomato (F1: 0.993).</p>
           </div>
           <div class="p-5 rounded-3xl bg-fog">
             <span class="text-xs font-bold text-muted">Head 2: Freshness Score</span>
             <h4 class="text-lg font-bold text-graphite mt-1">3-Stage Rule Engine</h4>
-            <p class="text-[13px] text-muted mt-1.5 leading-relaxed">p_fresh ≥ 0.7 (신선), ≤ 0.3 (부패), 중간 구간은 보통(소비 적기)으로 매핑 (F1: 0.981).</p>
+            <p class="text-[13px] text-muted mt-1.5 leading-relaxed">p_fresh ≥ 0.7 is fresh, ≤ 0.3 is rotten, and anything in between is normal (use soon) (F1: 0.981).</p>
           </div>
         </div>
 
@@ -453,11 +453,11 @@
         <div class="p-5 sm:p-6 rounded-3xl bg-graphite text-white space-y-3 font-mono text-xs overflow-x-auto">
           <div class="text-[#ff8a50] font-bold"># FreshGuard Multitask Inference Flow:</div>
           <div class="pl-3 border-l-2 border-ember/60 space-y-1.5 text-white/80">
-            <div>1. [Input Image (224×224 RGB)] ➔ EfficientNet-B0 Backbone Feature Extractor</div>
-            <div>2. [Feature Vector (1280-dim)] ➔ Dropout(0.2)</div>
-            <div>3. ├─ Head_fruit(Linear) ➔ 10 Fruit Softmax ➔ argmax (과일 품종 판별)</div>
-            <div>4. └─ Head_fresh(Linear) ➔ 2-Class Softmax ➔ p_fresh 확률 산출</div>
-            <div>5. [Threshold Rule] ➔ fresh (≥0.7) / normal (0.3~0.7) / rotten (≤0.3)</div>
+            <div>1. [Input Image (224×224 RGB)] &rarr; EfficientNet-B0 Backbone Feature Extractor</div>
+            <div>2. [Feature Vector (1280-dim)] &rarr; Dropout(0.2)</div>
+            <div>3. ├─ Head_fruit(Linear) &rarr; 10 Fruit Softmax &rarr; argmax (produce type)</div>
+            <div>4. └─ Head_fresh(Linear) &rarr; 2-Class Softmax &rarr; p_fresh probability</div>
+            <div>5. [Threshold Rule] &rarr; fresh (≥0.7) / normal (0.3~0.7) / rotten (≤0.3)</div>
           </div>
         </div>
 
@@ -476,7 +476,7 @@
     <div class="max-w-[1200px] mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
       <div class="flex items-center gap-2">
         <span class="w-6 h-6 rounded-lg bg-ember text-white flex items-center justify-center text-[11px]"><i class="fa-solid fa-leaf"></i></span>
-        <span class="font-bold text-graphite">FreshGuard (식재료 신선도 판별 AI)</span>
+        <span class="font-bold text-graphite">FreshGuard (AI Produce Freshness Checker)</span>
       </div>
       <div>Localhost Environment • PyTorch EfficientNet-B0 Multitask Engine</div>
     </div>
@@ -485,7 +485,7 @@
   <!-- Toast Notification -->
   <div id="toast" class="fixed bottom-6 right-4 sm:right-6 left-4 sm:left-auto sm:max-w-md z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-graphite text-white px-5 py-3.5 rounded-3xl flex items-center gap-2.5 text-sm font-bold pointer-events-none">
     <i id="toast-icon" class="fa-solid fa-circle-check text-verdant"></i>
-    <span id="toast-msg">알림 메시지</span>
+    <span id="toast-msg">Notification</span>
   </div>
 
   <!-- JavaScript Application Logic -->
@@ -552,10 +552,10 @@
         video.srcObject = webcamStream;
         placeholder.classList.add('hidden');
         snapBtn.disabled = false;
-        startBtn.innerHTML = '<i class="fa-solid fa-stop"></i> 카메라 정지';
+        startBtn.innerHTML = '<i class="fa-solid fa-stop"></i> Stop Camera';
         startBtn.onclick = stopCamera;
       } catch (err) {
-        showToast('웹캠을 실행할 수 없습니다: ' + err.message, 'error');
+        showToast('Unable to start the webcam: ' + err.message, 'error');
       }
     }
 
@@ -569,14 +569,14 @@
       document.getElementById('cam-placeholder').classList.remove('hidden');
       document.getElementById('btn-snap-cam').disabled = true;
       const startBtn = document.getElementById('btn-start-cam');
-      startBtn.innerHTML = '<i class="fa-solid fa-video"></i> 카메라 시작';
+      startBtn.innerHTML = '<i class="fa-solid fa-video"></i> Start Camera';
       startBtn.onclick = startCamera;
     }
 
     function captureCamera() {
       const video = document.getElementById('webcam-video');
       if (!webcamStream || !video.videoWidth) {
-        showToast('카메라가 아직 준비되지 않았습니다.', 'error');
+        showToast('The camera is not ready yet.', 'error');
         return;
       }
       const canvas = document.createElement('canvas');
@@ -625,11 +625,11 @@
         let data = null;
         try { data = await res.json(); } catch (_) { /* non-JSON error body */ }
 
-        if (!res.ok || !data) throw new Error((data && data.error) || '분석 중 오류 발생');
+        if (!res.ok || !data) throw new Error((data && data.error) || 'An error occurred during analysis');
 
         currentPrediction = data;
         renderResult(data);
-        showToast(`${data.fruit_kr} 신선도 분석이 완료되었습니다!`, 'success');
+        showToast(`${data.fruit_kr} freshness analysis complete.`, 'success');
         updateBadgeCount();
       } catch (err) {
         showToast(err.message, 'error');
@@ -647,7 +647,7 @@
       card.classList.remove('hidden');
 
       document.getElementById('res-image').src = data.image_url;
-      document.getElementById('res-emoji').innerText = data.emoji;
+      document.getElementById('res-emoji').innerText = String(data.fruit_kr || data.fruit || '?').charAt(0).toUpperCase();
       document.getElementById('res-fruit-kr').innerText = data.fruit_kr;
       document.getElementById('res-fruit-en').innerText = `(${data.fruit})`;
       document.getElementById('res-confidence').innerText = data.confidence;
@@ -672,7 +672,7 @@
       else freshScoreEl.className = 'text-2xl font-extrabold tabular-nums text-signal';
 
       // Shelf life
-      document.getElementById('res-shelf-life').innerText = data.shelf_life_days > 0 ? `약 ${data.shelf_life_days}일 남음` : '즉시 폐기 요망';
+      document.getElementById('res-shelf-life').innerText = data.shelf_life_days > 0 ? `About ${data.shelf_life_days} day${data.shelf_life_days === 1 ? '' : 's'} left` : 'Discard now';
 
       // Progress bar
       const bar = document.getElementById('res-progress-bar');
@@ -697,7 +697,7 @@
         const div = document.createElement('div');
         div.className = 'p-2.5 rounded-2xl bg-fog text-center min-w-0';
         div.innerHTML = `
-          <div class="text-sm">${escapeHtml(cand.emoji)}</div>
+          <div class="w-7 h-7 mx-auto mb-1 rounded-xl bg-white text-ember text-xs font-extrabold flex items-center justify-center" aria-hidden="true">${escapeHtml(String(cand.name_kr || '?').charAt(0).toUpperCase())}</div>
           <div class="font-bold text-xs text-graphite truncate">${escapeHtml(cand.name_kr)}</div>
           <div class="text-[11px] font-extrabold tabular-nums text-muted">${cand.probability}%</div>
         `;
@@ -735,13 +735,13 @@
         });
 
         if (res.ok) {
-          showToast(`'${currentPrediction.fruit_kr}'을(를) 내 식재료함에 보관 등록했습니다!`, 'success');
+          showToast(`${currentPrediction.fruit_kr} added to My Pantry.`, 'success');
           updateBadgeCount();
         } else {
-          showToast('저장 중 오류 발생', 'error');
+          showToast('Could not save item', 'error');
         }
       } catch (err) {
-        showToast('저장 중 오류 발생', 'error');
+        showToast('Could not save item', 'error');
       }
     }
 
@@ -791,9 +791,9 @@
 
       items.forEach(item => {
         let badgeClass = 'badge-fresh';
-        let badgeText = '신선';
-        if (item.freshness === 'normal') { badgeClass = 'badge-normal'; badgeText = '보통'; }
-        else if (item.freshness === 'rotten') { badgeClass = 'badge-rotten'; badgeText = '폐기권장'; }
+        let badgeText = 'Fresh';
+        if (item.freshness === 'normal') { badgeClass = 'badge-normal'; badgeText = 'Normal'; }
+        else if (item.freshness === 'rotten') { badgeClass = 'badge-rotten'; badgeText = 'Discard'; }
 
         const card = document.createElement('div');
         card.className = 'glass-card rounded-3xl overflow-hidden hover:border-[#d6d6d6] transition-colors flex flex-col justify-between';
@@ -804,7 +804,7 @@
               <span class="absolute top-3 left-3 text-[11px] font-bold px-2.5 py-1 rounded-3xl ${badgeClass}">
                 ${badgeText} (${escapeHtml(item.p_fresh)}%)
               </span>
-              <button onclick="deleteInventoryItem(${Number(item.id)})" class="absolute top-2 right-2 w-11 h-11 rounded-full bg-white hover:bg-fog text-graphite hover:text-signal flex items-center justify-center text-sm transition-colors" aria-label="삭제">
+              <button onclick="deleteInventoryItem(${Number(item.id)})" class="absolute top-2 right-2 w-11 h-11 rounded-full bg-white hover:bg-fog text-graphite hover:text-signal flex items-center justify-center text-sm transition-colors" aria-label="Delete">
                 <i class="fa-solid fa-trash"></i>
               </button>
             </div>
@@ -812,15 +812,15 @@
               <div class="flex items-center justify-between gap-2">
                 <h4 class="font-bold text-graphite text-lg truncate">${escapeHtml(item.name)}</h4>
                 <span class="text-xs font-bold text-graphite bg-fog px-2.5 py-1 rounded-3xl whitespace-nowrap tabular-nums">
-                  ${item.days_left > 0 ? `D-${item.days_left}` : (item.freshness === 'rotten' ? '소비기한 만료' : 'D-Day')}
+                  ${item.days_left > 0 ? `D-${item.days_left}` : (item.freshness === 'rotten' ? 'Expired' : 'D-Day')}
                 </span>
               </div>
-              <p class="text-xs text-muted leading-relaxed line-clamp-2">${escapeHtml(item.storage_tip || '서늘한 곳에 보관')}</p>
+              <p class="text-xs text-muted leading-relaxed line-clamp-2">${escapeHtml(item.storage_tip || 'Store in a cool place')}</p>
             </div>
           </div>
           <div class="px-4 py-3 border-t border-hairline flex items-center justify-between text-[11px] text-muted">
-            <span>등록: ${item.created_at ? item.created_at.substring(0, 10) : '오늘'}</span>
-            <span class="font-bold text-graphite">신뢰도 ${escapeHtml(item.confidence)}%</span>
+            <span>Added ${item.created_at ? item.created_at.substring(0, 10) : 'today'}</span>
+            <span class="font-bold text-graphite">${escapeHtml(item.confidence)}% confidence</span>
           </div>
         `;
         grid.appendChild(card);
@@ -828,15 +828,15 @@
     }
 
     async function deleteInventoryItem(id) {
-      if (!confirm('이 식재료를 식재료함에서 삭제하시겠습니까?')) return;
+      if (!confirm('Remove this item from your pantry?')) return;
       try {
         const res = await fetch(`/api/inventory/${id}`, { method: 'DELETE' });
         if (res.ok) {
-          showToast('식재료가 삭제되었습니다.', 'success');
+          showToast('Item removed.', 'success');
           loadInventory();
         }
       } catch (err) {
-        showToast('삭제 실패', 'error');
+        showToast('Delete failed', 'error');
       }
     }
 
@@ -869,11 +869,11 @@
             <td class="py-3 px-4">
               <img src="${escapeHtml(item.image_url)}" class="w-11 h-11 min-w-[2.75rem] max-w-none object-cover rounded-xl bg-fog">
             </td>
-            <td class="py-3 px-4 font-bold text-graphite whitespace-nowrap">${escapeHtml(item.fruit_name_kr)} <span class="text-muted font-medium">(${escapeHtml(item.fruit_type)})</span></td>
+            <td class="py-3 px-4 font-bold text-graphite whitespace-nowrap">${escapeHtml(item.fruit_name_kr || item.fruit_type)}</td>
             <td class="py-3 px-4"><span class="px-2.5 py-1 rounded-3xl text-xs font-bold whitespace-nowrap ${badgeClass}">${escapeHtml(item.freshness_kr)}</span></td>
             <td class="py-3 px-4 font-extrabold tabular-nums text-graphite">${item.p_fresh}%</td>
             <td class="py-3 px-4 tabular-nums text-muted">${item.confidence}%</td>
-            <td class="py-3 px-4 text-muted text-xs whitespace-nowrap">${escapeHtml(item.created_at || '방금')}</td>
+            <td class="py-3 px-4 text-muted text-xs whitespace-nowrap">${escapeHtml(item.created_at || 'just now')}</td>
           `;
           tbody.appendChild(tr);
         });
@@ -883,15 +883,15 @@
     }
 
     async function clearHistory() {
-      if (!confirm('검사 기록을 모두 삭제하시겠습니까?')) return;
+      if (!confirm('Delete all scan history?')) return;
       try {
         const res = await fetch('/api/history', { method: 'DELETE' });
         if (res.ok) {
-          showToast('모든 기록이 삭제되었습니다.', 'success');
+          showToast('All history deleted.', 'success');
           loadHistory();
         }
       } catch (err) {
-        showToast('삭제 실패', 'error');
+        showToast('Delete failed', 'error');
       }
     }
 

@@ -686,7 +686,8 @@ Be helpful, accurate, educational, and personalized to the user's health profile
             headers: { "User-Agent": "IngreScanAI/1.0" },
             signal: AbortSignal.timeout(10000),
           });
-          if (!response.ok) return null;
+          if (response.status === 404) return null;
+          if (!response.ok) throw new Error(`Open Food Facts responded ${response.status}`);
           const data = await response.json();
           if (data.status === 0 || !data.product) return null;
           const p = data.product;
@@ -713,7 +714,10 @@ Be helpful, accurate, educational, and personalized to the user's health profile
           };
         } catch (err) {
           console.error("[OpenFoodFacts] Barcode fetch error:", err);
-          return null;
+          throw new TRPCError({
+            code: "SERVICE_UNAVAILABLE",
+            message: "Open Food Facts is unreachable right now. Please try again in a moment.",
+          });
         }
       }),
 
@@ -731,12 +735,9 @@ Be helpful, accurate, educational, and personalized to the user's health profile
             },
             signal: AbortSignal.timeout(15000),
           });
-          if (!response.ok) return [];
+          if (!response.ok) throw new Error(`Open Food Facts responded ${response.status}`);
           const text = await response.text();
-          if (!text.trim().startsWith("{")) {
-            console.warn("[OpenFoodFacts] Received non-JSON response from search API");
-            return [];
-          }
+          if (!text.trim().startsWith("{")) throw new Error("Open Food Facts returned a non-JSON response");
           const data = JSON.parse(text);
           if (!data.products || !Array.isArray(data.products)) return [];
           return data.products.filter((p: any) => p && typeof p === "object").map((p: any) => ({
@@ -751,7 +752,10 @@ Be helpful, accurate, educational, and personalized to the user's health profile
           }));
         } catch (err) {
           console.error("[OpenFoodFacts] Search error:", err);
-          return [];
+          throw new TRPCError({
+            code: "SERVICE_UNAVAILABLE",
+            message: "Open Food Facts search is unavailable right now. Please try again in a moment.",
+          });
         }
       }),
   }),

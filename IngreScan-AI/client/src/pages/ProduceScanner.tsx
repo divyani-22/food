@@ -30,7 +30,6 @@ import {
 interface PredictionResult {
   fruit: string;
   fruit_kr: string;
-  emoji: string;
   confidence: number;
   p_fresh: number;
   freshness_status: "fresh" | "normal" | "rotten";
@@ -44,7 +43,6 @@ interface PredictionResult {
   top_candidates: Array<{
     code: string;
     name_kr: string;
-    emoji: string;
     probability: number;
   }>;
 }
@@ -187,7 +185,7 @@ export default function ProduceScanner() {
       const data: PredictionResult = await res.json();
       setResult(data);
       loadHistory();
-      toast.success(`Identified ${data.emoji} ${data.fruit_kr} as ${data.freshness_kr}!`);
+      toast.success(`Identified ${data.fruit_kr} as ${data.freshness_kr}.`);
     } catch (err: any) {
       toast.error(err.message || "Failed to analyze produce freshness");
     } finally {
@@ -210,7 +208,7 @@ export default function ProduceScanner() {
       const data: PredictionResult = await res.json();
       setResult(data);
       loadHistory();
-      toast.success(`Identified sample ${data.emoji} ${data.fruit_kr}!`);
+      toast.success(`Identified sample: ${data.fruit_kr}.`);
     } catch (err: any) {
       toast.error(err.message || "Sample analysis failed");
     } finally {
@@ -230,7 +228,7 @@ export default function ProduceScanner() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: `${result.emoji} ${result.fruit_kr}`,
+          name: result.fruit_kr,
           fruit: result.fruit,
           freshness_status: result.freshness_status,
           p_fresh: result.p_fresh,
@@ -287,11 +285,11 @@ export default function ProduceScanner() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "fresh":
-        return <StatusTag tone="positive">Fresh (신선)</StatusTag>;
+        return <StatusTag tone="positive">Fresh</StatusTag>;
       case "normal":
-        return <StatusTag tone="caution">Normal (보통)</StatusTag>;
+        return <StatusTag tone="caution">Normal</StatusTag>;
       case "rotten":
-        return <StatusTag tone="negative">Rotten (상함/폐기)</StatusTag>;
+        return <StatusTag tone="negative">Rotten</StatusTag>;
       default:
         return <StatusTag tone="neutral">{status}</StatusTag>;
     }
@@ -316,16 +314,16 @@ export default function ProduceScanner() {
           : "[&>[data-slot=progress-indicator]]:bg-graphite";
 
   const supportedProduce = [
-    "Apple (사과)",
-    "Banana (바나나)",
-    "Bell Pepper (피망)",
-    "Carrot (당근)",
-    "Cucumber (오이)",
-    "Mango (망고)",
-    "Orange (오렌지)",
-    "Potato (감자)",
-    "Strawberry (딸기)",
-    "Tomato (토마토)",
+    "Apple",
+    "Banana",
+    "Bell Pepper",
+    "Carrot",
+    "Cucumber",
+    "Mango",
+    "Orange",
+    "Potato",
+    "Strawberry",
+    "Tomato",
   ];
 
   return (
@@ -516,8 +514,7 @@ export default function ProduceScanner() {
                             </span>
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-baseline gap-x-2">
-                                <h2 className="fn-heading-sm capitalize text-graphite">{result.fruit}</h2>
-                                <span className="text-base font-bold text-muted-foreground">({result.fruit_kr})</span>
+                                <h2 className="fn-heading-sm text-graphite">{result.fruit_kr}</h2>
                               </div>
                               <p className="mt-1 text-xs text-muted-foreground">
                                 Identification Confidence: {result.confidence}%
@@ -775,8 +772,7 @@ export default function ProduceScanner() {
                       )}
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-graphite">
-                          {h.fruit_name_kr}{" "}
-                          <span className="text-xs font-medium capitalize text-muted-foreground">({h.fruit_type})</span>
+                          {h.fruit_name_kr}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           Confidence: {h.confidence}% | Freshness Prob: {h.p_fresh}%

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./db", () => ({
   getFoodScan: vi.fn(),
@@ -89,5 +89,24 @@ describe("input validation", () => {
     await caller.scanner.uploadImage({ fileName: "../../evil.png", fileData: Buffer.from("abc").toString("base64"), mimeType: "image/png" });
     expect((storagePut as any).mock.calls[0][0]).toMatch(/^scans\/5\/\d+-[0-9a-f]{16}-evil\.png$/);
     await expect(caller.scanner.uploadImage({ fileName: "a.exe", fileData: "AAAA", mimeType: "application/x-msdownload" })).rejects.toThrow();
+  });
+});
+
+describe("openFoodFacts error handling", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("returns null for an unknown barcode (404) without calling out for invalid input", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 404 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(caller.openFoodFacts.getByBarcode({ barcode: "12" })).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(caller.openFoodFacts.getByBarcode({ barcode: "4006381333931" })).resolves.toBeNull();
+  });
+
+  it("surfaces an outage as SERVICE_UNAVAILABLE instead of 'not found'", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNRESET")));
+    await expect(caller.openFoodFacts.getByBarcode({ barcode: "4006381333931" })).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("oops", { status: 503 })));
+    await expect(caller.openFoodFacts.search({ query: "biscuits" })).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
   });
 });

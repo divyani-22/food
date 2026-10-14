@@ -1,10 +1,10 @@
-# 🥗 FoodIQ – Smart Food AI & Freshness Safety Platform 🍎
+# FoodIQ – Smart Food AI & Freshness Safety Platform
 
 An all-in-one AI-powered food intelligence platform combining **Fresh Produce Inspection** and **Packaged Food Risk Analysis**.
 
 ---
 
-## 🌟 Overview
+## Overview
 
 **FoodIQ** provides a comprehensive 360° food safety suite:
 1. **Fresh Produce AI Inspector (FreshGuard)**: Uses Computer Vision (PyTorch EfficientNet-B0) to classify fruit/vegetable types (10 classes), inspect real-time freshness (fresh / normal / rotten), estimate remaining shelf life, and provide optimal storage guidelines.
@@ -13,28 +13,28 @@ An all-in-one AI-powered food intelligence platform combining **Fresh Produce In
 
 ---
 
-## ✨ Features
+## Features
 
-### 🍎 Fresh Produce Inspection
+### Fresh Produce Inspection
 - **Instant Spoilage & Freshness Detection**: Snap a photo or upload an image to determine if fresh produce is prime, nearing expiration, or spoiled.
 - **Shelf Life Estimation**: Calculates estimated days remaining based on classification status.
 - **Scientific Storage Tips**: Detailed temperature, ethylene gas, and packaging recommendations to maximize freshness.
 - **Culinary Guidance**: Tailored recipe and usage advice based on ripeness.
 - **Supported Produce**: Apples, Bananas, Bell Peppers, Carrots, Cucumbers, Mangoes, Oranges, Potatoes, Strawberries, and Tomatoes.
 
-### 🥗 Packaged Food & Ingredient Scanner
+### Packaged Food & Ingredient Scanner
 - **OCR Label Extraction**: Extracts full ingredient lists from food packaging photos.
 - **Health Risk Scoring**: Evaluates additives, sodium, hidden sugars, trans fats, and harmful preservatives.
 - **Allergen & Diet Matching**: Customized recommendations matching user health profiles and dietary restrictions.
 - **Safer Alternatives**: Scientific recommendations for healthier brand substitutions.
 
-### 🏠 Smart Fridge & Pantry Management
+### Smart Fridge & Pantry Management
 - Manage perishables with automated expiration warnings.
 - Keep a complete digital log of all scanned food items.
 
 ---
 
-## 🚀 Tech Stack
+## Tech Stack
 
 ### Frontend & Web App
 - **React 19** with **TypeScript**
@@ -54,7 +54,7 @@ An all-in-one AI-powered food intelligence platform combining **Fresh Produce In
 
 ---
 
-## ⚡ Quick Start
+## Quick Start
 
 ### 1. Requirements
 - Node.js (v18+)
@@ -87,5 +87,5 @@ Visit **[http://localhost:3000](http://localhost:3000)** to use the application.
 
 ---
 
-## 📄 License
+## License
 MIT License - Created by [divyani-22](https://github.com/divyani-22)

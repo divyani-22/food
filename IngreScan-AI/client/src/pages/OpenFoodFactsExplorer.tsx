@@ -48,20 +48,23 @@ export default function OpenFoodFactsExplorer() {
     data: product,
     isLoading: isProductLoading,
     isError: isProductError,
+    error: productError,
     refetch: refetchProduct,
   } = trpc.openFoodFacts.getByBarcode.useQuery(
     { barcode: activeBarcode },
-    { enabled: Boolean(activeBarcode) }
+    { enabled: Boolean(activeBarcode), retry: false }
   );
 
   // tRPC query for product search
   const {
     data: searchResults = [],
     isLoading: isSearchLoading,
+    isError: isSearchError,
+    error: searchError,
     refetch: refetchSearch,
   } = trpc.openFoodFacts.search.useQuery(
     { query: submittedQuery },
-    { enabled: Boolean(submittedQuery && activeTab === "search") }
+    { enabled: Boolean(submittedQuery && activeTab === "search"), retry: false }
   );
 
   // tRPC mutations
@@ -73,6 +76,10 @@ export default function OpenFoodFactsExplorer() {
     e.preventDefault();
     if (!barcodeInput.trim()) {
       toast.error("Please enter a barcode number");
+      return;
+    }
+    if (!/^\d{4,20}$/.test(barcodeInput.trim())) {
+      toast.error("Barcodes contain only digits (usually 8 or 13). Please check the number.");
       return;
     }
     setActiveBarcode(barcodeInput.trim());
@@ -285,6 +292,19 @@ export default function OpenFoodFactsExplorer() {
               <div className="flex flex-col items-center gap-3 rounded-3xl bg-white px-5 py-16 text-center text-muted-foreground">
                 <Loader2 className="h-7 w-7 animate-spin text-ember-orange" />
                 <p className="text-sm">Querying Open Food Facts database for barcode {activeBarcode}...</p>
+              </div>
+            ) : isProductError ? (
+              <div role="alert" className="flex flex-col items-center rounded-3xl bg-white px-5 py-14 text-center">
+                <span className="grid h-14 w-14 place-items-center rounded-3xl bg-fog">
+                  <AlertCircle className="h-7 w-7 text-signal-red-orange" />
+                </span>
+                <p className="mt-5 font-bold text-graphite">Couldn&rsquo;t reach Open Food Facts</p>
+                <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                  {productError?.message ?? "Please check your connection and try again."}
+                </p>
+                <Button variant="outline" className="mt-6" onClick={() => refetchProduct()}>
+                  Try again
+                </Button>
               </div>
             ) : product ? (
               <article className="overflow-hidden rounded-3xl bg-white">
@@ -546,6 +566,19 @@ export default function OpenFoodFactsExplorer() {
               <div className="flex flex-col items-center gap-3 rounded-3xl bg-white px-5 py-16 text-center text-muted-foreground">
                 <Loader2 className="h-7 w-7 animate-spin text-ember-orange" />
                 <p className="text-sm">Searching Open Food Facts...</p>
+              </div>
+            ) : isSearchError ? (
+              <div role="alert" className="flex flex-col items-center rounded-3xl bg-white px-5 py-14 text-center">
+                <span className="grid h-14 w-14 place-items-center rounded-3xl bg-fog">
+                  <AlertCircle className="h-7 w-7 text-signal-red-orange" />
+                </span>
+                <p className="mt-5 font-bold text-graphite">Search is unavailable</p>
+                <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                  {searchError?.message ?? "Please check your connection and try again."}
+                </p>
+                <Button variant="outline" className="mt-6" onClick={() => refetchSearch()}>
+                  Try again
+                </Button>
               </div>
             ) : searchResults.length > 0 ? (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3">

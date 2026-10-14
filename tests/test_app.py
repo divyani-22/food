@@ -250,3 +250,52 @@ def test_prune_uploads_removes_only_old_unreferenced(client, appmod):
         )
     assert appmod.prune_uploads(7) == 1
     assert not old_free.exists() and old_kept.exists() and fresh_new.exists()
+
+
+import re as _re
+
+_NON_ENGLISH = _re.compile("[\uac00-\ud7af\u3040-\u30ff\u4e00-\u9fff\U0001F000-\U0001FAFF\u2600-\u27bf\ufe0f]")
+
+
+def test_fruit_knowledge_base_is_english_and_emoji_free(appmod):
+    for code, info in appmod.FRUIT_INFO.items():
+        assert "emoji" not in info
+        for value in (info["kr"], info["storage"], info["cooking_fresh"], info["cooking_normal"], info["cooking_rotten"]):
+            assert not _NON_ENGLISH.search(value), (code, value)
+    for p in (0.9, 0.5, 0.1):
+        status = appmod.evaluate_freshness(p)
+        assert not _NON_ENGLISH.search(status["status_kr"] + status["message"])
+
+
+def test_api_responses_are_english_only(client):
+    for url in ("/api/fruits", "/api/samples"):
+        body = client.get(url).get_data(as_text=True)
+        assert not _NON_ENGLISH.search(body), url
+    r = client.post("/api/predict", json={"sample": "apple.jpg"})
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "emoji" not in data and all("emoji" not in c for c in data["top_candidates"])
+    assert not _NON_ENGLISH.search(r.get_data(as_text=True))
+
+
+def test_legacy_korean_rows_are_translated_on_read(client, appmod):
+    import sqlite3
+    with sqlite3.connect(appmod.DB_PATH) as conn:
+        conn.execute(
+            "INSERT INTO inventory (name, fruit_type, freshness, p_fresh, confidence, image_url, expiry_date, days_left, storage_tip)"
+            " VALUES (?, 'apple', 'fresh', 90, 90, '', '2099-01-01', 10, ?)",
+            ("\U0001F34E \uc0ac\uacfc", "\ub0c9\uc7a5 \ubcf4\uad00"),
+        )
+        conn.execute(
+            "INSERT INTO scan_history (fruit_type, fruit_name_kr, freshness, freshness_kr, p_fresh, confidence, image_url)"
+            " VALUES ('bell_pepper', ?, 'normal', ?, 50, 80, '')",
+            ("\ud30c\ud504\ub9ac\uce74/\ud53c\ub9dd", "\ubcf4\ud1b5 (Normal)"),
+        )
+    inv = client.get("/api/inventory").get_json()[0]
+    assert inv["name"] == "Apple"
+    assert not _NON_ENGLISH.search(inv["storage_tip"])
+    hist = client.get("/api/history").get_json()[0]
+    assert hist["fruit_name_kr"] == "Bell Pepper" and hist["freshness_kr"] == "Normal"
+    # POSTed legacy names are normalised too
+    client.post("/api/inventory", json={"name": "\U0001F34C \ubc14\ub098\ub098", "freshness_status": "fresh"})
+    assert client.get("/api/inventory").get_json()[0]["name"] == "Banana"
