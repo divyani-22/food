@@ -248,6 +248,12 @@ export default function ScanResult() {
                       <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-verdant-green" aria-hidden="true" />
                       <span className="min-w-0 break-words">{alt.productName}</span>
                     </h4>
+                    {alt.brand && (
+                      <p className="text-sm font-bold text-graphite">
+                        Brand: <span className="font-normal">{alt.brand}</span>
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">AI suggestion, verify availability</span>
+                      </p>
+                    )}
                     <p className="text-sm text-graphite">{alt.reason}</p>
                     {alt.scientificJustification && (
                       <div className="rounded-xl bg-white p-3 text-sm md:p-4">

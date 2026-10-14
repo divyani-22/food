@@ -61,3 +61,15 @@ The vitest test `server/schema.parity.test.ts` fails when the two schema files d
 ## End-to-end scripts
 
 `e2e/full-journey.mjs` and `e2e/produce-isolation.mjs` use `e2e/lib/db.mjs`, which talks to MySQL through the `mysql` CLI when `DATABASE_URL` is `mysql://...` and otherwise reads the SQLite file (`SQLITE_PATH`, default `IngreScan-AI/data/ingrescan.db`) through Python's `sqlite3`. Point the scripts at a non-default server with `BASE_URL`.
+
+## Before migrating an existing MySQL database
+
+Migrations 0003 and 0004 delete rows that would violate the new constraints: duplicate `user_profiles` (the newest row is kept), and orphan `scan_ingredients`, `alternatives` and `chat_messages`. Check first, and save those rows:
+
+```
+cd IngreScan-AI
+pnpm db:backup-check      # dry run: counts the rows that would be deleted
+pnpm db:migrate:safe      # saves them to backups/pre-migrate-<time>.json, then runs drizzle-kit migrate
+```
+
+This only saves the rows that would be deleted. Take a full `mysqldump` as well. The embedded SQLite database never deletes rows during migration.
