@@ -6,9 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, UserRound, HeartPulse, Pill, Activity } from "lucide-react";
+import { PageHeader } from "@/components/brand/PageHeader";
+import { StatusTag } from "@/components/brand/StatusTag";
 
 // Parse a numeric input to a positive integer, or undefined if empty/invalid
 // (the server rejects NaN and the DB columns are integers).
@@ -120,19 +122,19 @@ export default function Profile() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Health Profile</h1>
-          <p className="text-muted-foreground mt-2">Manage your personal and health information</p>
-        </div>
+      <div className="mx-auto max-w-4xl space-y-8 md:space-y-10">
+        <PageHeader
+          eyebrow="Profile"
+          title="Health Profile"
+          description="Manage your personal and health information"
+        />
 
         <Card>
           <CardHeader>
-            <CardTitle>Personal Details</CardTitle>
-            <CardDescription>Basic information for personalized analysis</CardDescription>
+            <SectionTitle icon={<UserRound className="h-5 w-5 text-ember-orange" />} title="Personal Details" description="Basic information for personalized analysis" />
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
+          <CardContent className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2 md:gap-5">
               <div className="space-y-2">
                 <Label htmlFor="age">Age</Label>
                 <Input id="age" type="number" placeholder="25" value={age} onChange={(e) => setAge(e.target.value)} />
@@ -140,7 +142,7 @@ export default function Profile() {
               <div className="space-y-2">
                 <Label htmlFor="gender">Gender</Label>
                 <Select value={gender} onValueChange={setGender}>
-                  <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
+                  <SelectTrigger id="gender" className="w-full"><SelectValue placeholder="Select gender" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="male">Male</SelectItem>
                     <SelectItem value="female">Female</SelectItem>
@@ -158,15 +160,18 @@ export default function Profile() {
               </div>
             </div>
             {bmi && (
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">Your BMI: <span className="text-lg font-bold text-foreground">{bmi}</span></p>
+              <div className="flex items-center gap-4 rounded-2xl bg-fog p-4">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white" aria-hidden="true">
+                  <Activity className="h-5 w-5 text-verdant-green" />
+                </span>
+                <p className="text-sm font-bold text-muted-foreground">Your BMI: <span className="fn-metric ml-1 text-2xl text-graphite">{bmi}</span></p>
               </div>
             )}
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid gap-4 md:grid-cols-2 md:gap-5">
               <div className="space-y-2">
                 <Label htmlFor="exercise">Exercise Frequency</Label>
                 <Select value={exerciseFrequency} onValueChange={setExerciseFrequency}>
-                  <SelectTrigger><SelectValue placeholder="Select frequency" /></SelectTrigger>
+                  <SelectTrigger id="exercise" className="w-full"><SelectValue placeholder="Select frequency" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="sedentary">Sedentary</SelectItem>
                     <SelectItem value="light">Light (1-2 days/week)</SelectItem>
@@ -179,7 +184,7 @@ export default function Profile() {
               <div className="space-y-2">
                 <Label htmlFor="diet">Diet Type</Label>
                 <Select value={dietType} onValueChange={setDietType}>
-                  <SelectTrigger><SelectValue placeholder="Select diet type" /></SelectTrigger>
+                  <SelectTrigger id="diet" className="w-full"><SelectValue placeholder="Select diet type" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="veg">Vegetarian</SelectItem>
                     <SelectItem value="non_veg">Non-Vegetarian</SelectItem>
@@ -190,25 +195,26 @@ export default function Profile() {
                 </Select>
               </div>
             </div>
-            <Button onClick={handleSaveProfile}>Save Profile</Button>
+            <div className="flex justify-end border-t border-border pt-6">
+              <Button onClick={handleSaveProfile} className="w-full sm:w-auto">Save Profile</Button>
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Medical Conditions</CardTitle>
-            <CardDescription>Track conditions that may affect food choices</CardDescription>
+            <SectionTitle icon={<HeartPulse className="h-5 w-5 text-signal-red-orange" />} title="Medical Conditions" description="Track conditions that may affect food choices" />
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex gap-2">
-              <Input placeholder="e.g., Diabetes, Hypertension" value={newCondition} onChange={(e) => setNewCondition(e.target.value)} />
-              <Button onClick={handleAddCondition}><Plus className="h-4 w-4" /></Button>
+              <Input placeholder="e.g., Diabetes, Hypertension" aria-label="Medical condition" value={newCondition} onChange={(e) => setNewCondition(e.target.value)} className="min-w-0 flex-1" />
+              <Button variant="dark" size="icon" onClick={handleAddCondition} aria-label="Add condition"><Plus className="h-4 w-4" /></Button>
             </div>
             <div className="space-y-2">
               {conditions?.map((condition) => (
-                <div key={condition.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <span>{condition.condition}</span>
-                  <Button variant="ghost" size="sm" onClick={() => handleDeleteCondition(condition.id)}><Trash2 className="h-4 w-4" /></Button>
+                <div key={condition.id} className="flex items-center justify-between gap-3 rounded-2xl bg-fog py-1.5 pl-4 pr-1.5">
+                  <span className="min-w-0 break-words font-bold text-graphite">{condition.condition}</span>
+                  <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:bg-white hover:text-signal-red-orange" onClick={() => handleDeleteCondition(condition.id)} aria-label={`Remove ${condition.condition}`}><Trash2 className="h-4 w-4" /></Button>
                 </div>
               ))}
               {(!conditions || conditions.length === 0) && <p className="text-sm text-muted-foreground">No medical conditions added</p>}
@@ -218,24 +224,23 @@ export default function Profile() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Medications</CardTitle>
-            <CardDescription>Current and past medications</CardDescription>
+            <SectionTitle icon={<Pill className="h-5 w-5 text-iris" />} title="Medications" description="Current and past medications" />
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-3 gap-2">
-              <Input placeholder="Medication name" value={newMedication.name} onChange={(e) => setNewMedication({ ...newMedication, name: e.target.value })} />
-              <Input placeholder="Dosage (optional)" value={newMedication.dosage} onChange={(e) => setNewMedication({ ...newMedication, dosage: e.target.value })} />
-              <Button onClick={handleAddMedication}><Plus className="h-4 w-4 mr-2" />Add</Button>
+            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+              <Input placeholder="Medication name" aria-label="Medication name" value={newMedication.name} onChange={(e) => setNewMedication({ ...newMedication, name: e.target.value })} />
+              <Input placeholder="Dosage (optional)" aria-label="Dosage" value={newMedication.dosage} onChange={(e) => setNewMedication({ ...newMedication, dosage: e.target.value })} />
+              <Button variant="dark" onClick={handleAddMedication}><Plus className="h-4 w-4" />Add</Button>
             </div>
             <div className="space-y-2">
               {medications?.map((med) => (
-                <div key={med.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <div>
-                    <p className="font-medium">{med.name}</p>
+                <div key={med.id} className="flex items-center justify-between gap-3 rounded-2xl bg-fog py-3 pl-4 pr-1.5">
+                  <div className="min-w-0 space-y-1">
+                    <p className="break-words font-bold text-graphite">{med.name}</p>
                     {med.dosage && <p className="text-sm text-muted-foreground">{med.dosage}</p>}
-                    <p className="text-xs text-muted-foreground">{med.isCurrent ? "Current" : "Past"}</p>
+                    <StatusTag tone={med.isCurrent ? "positive" : "neutral"} onWhite>{med.isCurrent ? "Current" : "Past"}</StatusTag>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => handleDeleteMedication(med.id)}><Trash2 className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:bg-white hover:text-signal-red-orange" onClick={() => handleDeleteMedication(med.id)} aria-label={`Remove ${med.name}`}><Trash2 className="h-4 w-4" /></Button>
                 </div>
               ))}
               {(!medications || medications.length === 0) && <p className="text-sm text-muted-foreground">No medications added</p>}
@@ -244,5 +249,19 @@ export default function Profile() {
         </Card>
       </div>
     </DashboardLayout>
+  );
+}
+
+function SectionTitle({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
+  return (
+    <div className="flex items-start gap-4">
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-fog" aria-hidden="true">
+        {icon}
+      </span>
+      <div className="min-w-0 space-y-1">
+        <CardTitle className="fn-heading-sm">{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </div>
+    </div>
   );
 }

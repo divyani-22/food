@@ -1,5 +1,6 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { AIChatBox } from "@/components/AIChatBox";
+import { PageHeader } from "@/components/brand/PageHeader";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
@@ -34,12 +35,18 @@ export default function Chat() {
 
   return (
     <DashboardLayout>
-      <div className="h-[calc(100vh-8rem)]">
+      <div className="flex h-[calc(100dvh-14rem)] min-h-[520px] flex-col gap-6 md:h-[calc(100dvh-5rem)] md:gap-8">
+        <PageHeader
+          eyebrow="Assist"
+          title="Chat"
+          description="Ask about food ingredients, health impacts, or safer alternatives."
+        />
         <AIChatBox
+          className="min-h-0 flex-1"
           messages={messages}
           onSendMessage={handleSendMessage}
           isLoading={sendMessageMutation.isPending}
-          height="100%"
+          height="auto"
           placeholder="Ask me about food ingredients, health impacts, or safer alternatives..."
         />
       </div>

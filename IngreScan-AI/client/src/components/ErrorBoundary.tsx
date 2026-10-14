@@ -31,9 +31,9 @@ class ErrorBoundary extends Component<Props, State> {
               className="text-destructive mb-6 flex-shrink-0"
             />
 
-            <h2 className="text-xl mb-4">An unexpected error occurred.</h2>
+            <h2 className="fn-heading-sm mb-4 text-graphite">An unexpected error occurred.</h2>
 
-            <div className="p-4 w-full rounded bg-muted overflow-auto mb-6">
+            <div className="p-5 w-full rounded-3xl bg-fog overflow-auto mb-6">
               <pre className="text-sm text-muted-foreground whitespace-break-spaces">
                 {this.state.error?.stack}
               </pre>
@@ -42,7 +42,7 @@ class ErrorBoundary extends Component<Props, State> {
             <button
               onClick={() => window.location.reload()}
               className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg",
+                "flex h-11 items-center gap-2 px-5 rounded-3xl font-bold",
                 "bg-primary text-primary-foreground",
                 "hover:opacity-90 cursor-pointer"
               )}

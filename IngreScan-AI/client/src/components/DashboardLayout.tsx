@@ -10,6 +10,8 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -19,9 +21,11 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
+import { getLoginUrl } from "@/const";
+import { BrandMark } from "@/components/brand/BrandMark";
+import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Scan, User, History, MessageSquare, Sparkles, Refrigerator, Barcode } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Scan, User, History, MessageSquare, Sparkles, Refrigerator, Barcode, Menu, Plus, ArrowRight } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -33,14 +37,25 @@ const PATH_ALIASES: Record<string, string[]> = {
 };
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-  { icon: Scan, label: "Packaged Scanner", path: "/scanner" },
-  { icon: Sparkles, label: "Fresh Produce AI", path: "/produce" },
-  { icon: Refrigerator, label: "Expiry Tracker", path: "/fridge" },
-  { icon: Barcode, label: "Open Food Facts", path: "/openfoodfacts" },
-  { icon: User, label: "Profile", path: "/profile" },
-  { icon: History, label: "History", path: "/history" },
-  { icon: MessageSquare, label: "Chat", path: "/chat" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard", group: "Overview" },
+  { icon: Scan, label: "Packaged Scanner", path: "/scanner", group: "Scan" },
+  { icon: Sparkles, label: "Fresh Produce AI", path: "/produce", group: "Scan" },
+  { icon: Barcode, label: "Open Food Facts", path: "/openfoodfacts", group: "Scan" },
+  { icon: Refrigerator, label: "Expiry Tracker", path: "/fridge", group: "Track" },
+  { icon: History, label: "History", path: "/history", group: "Track" },
+  { icon: MessageSquare, label: "Chat", path: "/chat", group: "Assist" },
+  { icon: User, label: "Profile", path: "/profile", group: "Assist" },
+];
+const menuGroups = ["Overview", "Scan", "Track", "Assist"] as const;
+
+const isPathActive = (location: string, path: string) =>
+  location === path || (PATH_ALIASES[path] ?? []).includes(location);
+
+/** Mobile tab bar (Foodnoms Tab Bar: active = Ember Orange + dot, floating orange action). */
+const tabItems = [
+  { icon: LayoutDashboard, label: "Home", path: "/dashboard" },
+  { icon: Sparkles, label: "Produce", path: "/produce" },
+  { icon: Refrigerator, label: "Fridge", path: "/fridge" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -79,33 +94,24 @@ export default function DashboardLayout({
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
-          <div className="flex flex-col items-center gap-6">
-            <div className="relative group">
-              <div className="relative">
-                <img
-                  src={APP_LOGO}
-                  alt={APP_TITLE}
-                  className="h-20 w-20 rounded-xl object-cover shadow"
-                />
-              </div>
-            </div>
-            <div className="text-center space-y-2">
-              <h1 className="text-2xl font-bold tracking-tight">{APP_TITLE}</h1>
-              <p className="text-sm text-muted-foreground">
-                Please sign in to continue
-              </p>
-            </div>
-          </div>
+      <div className="flex min-h-[100dvh] items-center justify-center bg-fog px-4">
+        <div className="w-full max-w-md rounded-3xl bg-white p-8 sm:p-10">
+          <BrandMark />
+          <h1 className="fn-heading mt-8 text-graphite">
+            <span className="text-verdant-green">Welcome back.</span> Sign in to keep scanning.
+          </h1>
+          <p className="mt-3 text-base text-muted-foreground">
+            Your scans, fridge inventory and health profile are waiting.
+          </p>
           <Button
             onClick={() => {
               window.location.href = getLoginUrl();
             }}
             size="lg"
-            className="w-full shadow-lg hover:shadow-xl transition-all"
+            className="mt-8 w-full"
           >
             Sign in
+            <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -142,7 +148,7 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => item.path === location);
+  const activeMenuItem = menuItems.find(item => isPathActive(location, item.path));
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -181,45 +187,40 @@ function DashboardLayoutContent({
     };
   }, [isResizing, setSidebarWidth]);
 
+  const { setOpenMobile } = useSidebar();
+  const goTo = (path: string) => {
+    setLocation(path);
+    setOpenMobile(false);
+  };
+
   return (
     <>
       <div className="relative" ref={sidebarRef}>
         <Sidebar
           collapsible="icon"
-          className="border-r-0"
+          className="border-r border-sidebar-border"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-16 justify-center">
-            <div className="flex items-center gap-3 pl-2 group-data-[collapsible=icon]:px-0 transition-all w-full">
+          <SidebarHeader className="h-[72px] justify-center px-3">
+            <div className="flex w-full items-center gap-2 transition-all group-data-[collapsible=icon]:justify-center">
               {isCollapsed ? (
-                <div className="relative h-8 w-8 shrink-0 group">
-                  <img
-                    src={APP_LOGO}
-                    className="h-8 w-8 rounded-md object-cover ring-1 ring-border"
-                    alt="Logo"
-                  />
-                  <button
-                    onClick={toggleSidebar}
-                    className="absolute inset-0 flex items-center justify-center bg-accent rounded-md ring-1 ring-border opacity-0 group-hover:opacity-100 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <PanelLeft className="h-4 w-4 text-foreground" />
-                  </button>
-                </div>
+                <button
+                  onClick={toggleSidebar}
+                  className="group relative grid h-9 w-9 place-items-center rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Expand sidebar"
+                >
+                  <BrandMark showWordmark={false} className="transition-opacity group-hover:opacity-0" />
+                  <PanelLeft className="absolute h-4 w-4 text-graphite opacity-0 transition-opacity group-hover:opacity-100" />
+                </button>
               ) : (
                 <>
-                  <div className="flex items-center gap-3 min-w-0">
-                    <img
-                      src={APP_LOGO}
-                      className="h-8 w-8 rounded-md object-cover ring-1 ring-border shrink-0"
-                      alt="Logo"
-                    />
-                    <span className="font-semibold tracking-tight truncate">
-                      {APP_TITLE}
-                    </span>
-                  </div>
+                  <button onClick={() => goTo("/")} className="min-w-0 rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <BrandMark />
+                  </button>
                   <button
                     onClick={toggleSidebar}
-                    className="ml-auto h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
+                    className="ml-auto grid h-9 w-9 shrink-0 place-items-center rounded-full transition-colors hover:bg-fog focus:outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:hidden"
+                    aria-label="Collapse sidebar"
                   >
                     <PanelLeft className="h-4 w-4 text-muted-foreground" />
                   </button>
@@ -228,43 +229,56 @@ function DashboardLayoutContent({
             </div>
           </SidebarHeader>
 
-          <SidebarContent className="gap-0">
-            <SidebarMenu className="px-2 py-1">
-              {menuItems.map(item => {
-                const isActive = location === item.path || (PATH_ALIASES[item.path] ?? []).includes(location);
-                return (
-                  <SidebarMenuItem key={item.path}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => setLocation(item.path)}
-                      tooltip={item.label}
-                      className={`h-10 transition-all font-normal`}
-                    >
-                      <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
-                      />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
+          <SidebarContent className="gap-1 px-1">
+            {menuGroups.map(group => (
+              <SidebarGroup key={group} className="py-1">
+                <SidebarGroupLabel className="px-3 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                  {group}
+                </SidebarGroupLabel>
+                <SidebarMenu className="gap-0.5">
+                  {menuItems
+                    .filter(item => item.group === group)
+                    .map(item => {
+                      const isActive = isPathActive(location, item.path);
+                      return (
+                        <SidebarMenuItem key={item.path}>
+                          <SidebarMenuButton
+                            isActive={isActive}
+                            onClick={() => goTo(item.path)}
+                            tooltip={item.label}
+                            className="h-11"
+                          >
+                            <item.icon
+                              className={cn(isActive ? "text-ember-orange" : "text-muted-foreground")}
+                              strokeWidth={isActive ? 2.5 : 2}
+                            />
+                            <span>{item.label}</span>
+                            {isActive && (
+                              <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-ember-orange group-data-[collapsible=icon]:hidden" aria-hidden="true" />
+                            )}
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    })}
+                </SidebarMenu>
+              </SidebarGroup>
+            ))}
           </SidebarContent>
 
           <SidebarFooter className="p-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <Avatar className="h-9 w-9 border shrink-0">
-                    <AvatarFallback className="text-xs font-medium">
-                      {user?.name?.charAt(0).toUpperCase()}
+                <button className="flex w-full items-center gap-3 rounded-3xl bg-fog px-2 py-2 text-left transition-colors hover:bg-[#ebebeb] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">
+                  <Avatar className="h-9 w-9 shrink-0">
+                    <AvatarFallback className="bg-graphite text-xs font-bold text-white">
+                      {user?.name?.charAt(0).toUpperCase() || "U"}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-                    <p className="text-sm font-medium truncate leading-none">
+                  <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+                    <p className="truncate text-sm font-bold leading-none text-graphite">
                       {user?.name || "-"}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate mt-1.5">
+                    <p className="mt-1.5 truncate text-xs text-muted-foreground">
                       {user?.email || "-"}
                     </p>
                   </div>
@@ -283,7 +297,7 @@ function DashboardLayoutContent({
           </SidebarFooter>
         </Sidebar>
         <div
-          className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""}`}
+          className={`absolute top-0 right-0 h-full w-1 cursor-col-resize transition-colors hover:bg-ember-orange/30 ${isCollapsed ? "hidden" : ""}`}
           onMouseDown={() => {
             if (isCollapsed) return;
             setIsResizing(true);
@@ -292,23 +306,65 @@ function DashboardLayoutContent({
         />
       </div>
 
-      <SidebarInset>
+      <SidebarInset className="min-h-[100dvh] bg-fog">
         {isMobile && (
-          <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col gap-1">
-                  <span className="tracking-tight text-foreground">
-                    {activeMenuItem?.label ?? APP_TITLE}
-                  </span>
-                </div>
-              </div>
-            </div>
+          <div className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-border bg-white/90 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+            <button onClick={() => goTo("/")} className="min-w-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <BrandMark size="sm" />
+            </button>
           </div>
         )}
-        <main className="flex-1 p-4">{children}</main>
+        <div className={cn("mx-auto w-full max-w-[1200px] flex-1 px-4 py-6 sm:px-6 md:px-10 md:py-10", isMobile && "pb-32")}>
+          {children}
+        </div>
+
+        {isMobile && (
+          <nav
+            aria-label="Primary"
+            className="fn-safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white"
+          >
+            <div className="relative mx-auto grid h-16 max-w-md grid-cols-5 items-center">
+              {tabItems.slice(0, 2).map(item => (
+                <TabButton key={item.path} item={item} active={isPathActive(location, item.path)} onClick={() => goTo(item.path)} />
+              ))}
+              <div className="flex justify-center">
+                <button
+                  onClick={() => goTo("/scanner")}
+                  aria-label="Scan packaged food"
+                  className="-mt-8 grid h-14 w-14 place-items-center rounded-full bg-ember-orange text-white ring-4 ring-white transition-transform active:scale-95 focus:outline-none focus-visible:ring-graphite"
+                >
+                  <Plus className="h-7 w-7" strokeWidth={2.75} />
+                </button>
+              </div>
+              <TabButton item={tabItems[2]} active={isPathActive(location, tabItems[2].path)} onClick={() => goTo(tabItems[2].path)} />
+              <TabButton item={{ icon: Menu, label: "More", path: "" }} active={false} onClick={() => setOpenMobile(true)} />
+            </div>
+          </nav>
+        )}
       </SidebarInset>
     </>
+  );
+}
+
+function TabButton({
+  item,
+  active,
+  onClick,
+}: {
+  item: { icon: typeof Menu; label: string; path: string };
+  active: boolean;
+  onClick: () => void;
+}) {
+  const Icon = item.icon;
+  return (
+    <button
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className="flex h-full flex-col items-center justify-center gap-1 focus:outline-none focus-visible:bg-fog"
+    >
+      <Icon className={cn("h-[22px] w-[22px]", active ? "text-ember-orange" : "text-muted-foreground")} strokeWidth={active ? 2.5 : 2} />
+      <span className={cn("text-[11px] font-bold leading-none", active ? "text-graphite" : "text-muted-foreground")}>{item.label}</span>
+      <span className={cn("h-1 w-1 rounded-full", active ? "bg-ember-orange" : "bg-transparent")} aria-hidden="true" />
+    </button>
   );
 }

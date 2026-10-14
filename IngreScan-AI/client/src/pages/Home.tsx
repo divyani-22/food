@@ -1,214 +1,383 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { BrandMark } from "@/components/brand/BrandMark";
+import {
+  FridgeScreen,
+  PhoneMockup,
+  ProduceScreen,
+  ProductScreen,
+  ScanResultScreen,
+} from "@/components/brand/PhoneMockup";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
-import { ScanLine, Shield, MessageSquare, User, TrendingUp, FileText, Refrigerator, Barcode } from "lucide-react";
+import { getLoginUrl } from "@/const";
+import {
+  ArrowRight,
+  Barcode,
+  Check,
+  FileText,
+  MessageSquare,
+  Refrigerator,
+  ScanLine,
+  Shield,
+  Sparkles,
+  TrendingUp,
+  User,
+} from "lucide-react";
+import type { ReactNode } from "react";
 import { Link } from "wouter";
 
-export default function Home() {
-  const { user, isAuthenticated } = useAuth();
+type Pillar = {
+  id: string;
+  eyebrow: string;
+  accent: string;
+  rest: string;
+  accentClass: string;
+  body: string;
+  points: string[];
+  href: string;
+  cta: string;
+  screen: ReactNode;
+};
 
-  const features = [
-    {
-      icon: ScanLine,
-      title: "Smart Scanner",
-      description: "Upload ingredient labels or enter text manually. Our OCR technology extracts ingredients instantly."
-    },
-    {
-      icon: Refrigerator,
-      title: "Food Expiry Tracker",
-      description: "Keep track of your fridge and pantry inventory. Dynamic shelf-life counters alert you before items expire."
-    },
-    {
-      icon: Barcode,
-      title: "Open Food Facts & Barcode",
-      description: "Look up millions of packaged foods via Open Food Facts. View Nutri-Scores, NOVA UPF grades, and allergens."
-    },
-    {
-      icon: Shield,
-      title: "Risk Analysis",
-      description: "Get personalized health risk scores based on your profile, medical conditions, and dietary preferences."
-    },
-    {
-      icon: MessageSquare,
-      title: "AI Chatbot",
-      description: "Ask questions about ingredients, health impacts, and get safer alternatives with scientific backing."
-    },
-    {
-      icon: User,
-      title: "Personal Profile",
-      description: "Track your health data, medical conditions, and medications for accurate risk assessment."
-    },
-    {
-      icon: TrendingUp,
-      title: "Visual Analytics",
-      description: "Interactive charts and graphs show ingredient breakdowns and risk levels at a glance."
-    },
-    {
-      icon: FileText,
-      title: "Scan History",
-      description: "Access all your previous scans and reports anytime. Track your food choices over time."
-    }
-  ];
+const pillars: Pillar[] = [
+  {
+    id: "scanner",
+    eyebrow: "Smart Scanner",
+    accent: "Read the label",
+    rest: "in seconds, not minutes",
+    accentClass: "text-ember-orange",
+    body: "Upload ingredient labels or enter text manually. Our OCR technology extracts ingredients instantly, then rates every one against your health profile.",
+    points: [
+      "Photo or typed ingredient lists",
+      "Personalised risk score from 0 to 100",
+      "Short and long-term effects, with sources",
+    ],
+    href: "/scanner",
+    cta: "Scan packaged food",
+    screen: <ScanResultScreen />,
+  },
+  {
+    id: "produce",
+    eyebrow: "Fresh Produce AI",
+    accent: "Spot spoilage",
+    rest: "before it reaches your plate",
+    accentClass: "text-verdant-green",
+    body: "Inspect fruit and vegetable freshness with the FreshGuard PyTorch model. Snap a photo and get a freshness score, shelf life and storage tips.",
+    points: [
+      "Fresh, normal or rotten in one photo",
+      "Estimated shelf life for 10 kinds of produce",
+      "Save results straight to your pantry",
+    ],
+    href: "/produce",
+    cta: "Inspect fresh produce",
+    screen: <ProduceScreen />,
+  },
+  {
+    id: "fridge",
+    eyebrow: "Food Expiry Tracker",
+    accent: "Waste less",
+    rest: "with a fridge that counts down for you",
+    accentClass: "text-verdant-green",
+    body: "Keep track of your fridge and pantry inventory. Dynamic shelf-life counters alert you before items expire.",
+    points: [
+      "Fridge, freezer and pantry in one list",
+      "Expiring-soon and expired at a glance",
+      "Quick expiry presets for common foods",
+    ],
+    href: "/fridge",
+    cta: "Open expiry tracker",
+    screen: <FridgeScreen />,
+  },
+  {
+    id: "openfoodfacts",
+    eyebrow: "Open Food Facts & Barcode",
+    accent: "Look up",
+    rest: "millions of packaged foods",
+    accentClass: "text-ember-orange",
+    body: "Search Open Food Facts by name or barcode. View Nutri-Scores, NOVA ultra-processing grades and allergens, then add products to your fridge.",
+    points: [
+      "Nutri-Score A–E and NOVA 1–4",
+      "Allergens and nutrients per 100 g",
+      "One tap to analyse ingredients",
+    ],
+    href: "/openfoodfacts",
+    cta: "Search products",
+    screen: <ProductScreen />,
+  },
+];
+
+const moreFeatures = [
+  {
+    icon: Shield,
+    title: "Risk Analysis",
+    description: "Get personalized health risk scores based on your profile, medical conditions, and dietary preferences.",
+  },
+  {
+    icon: MessageSquare,
+    title: "AI Chatbot",
+    description: "Ask questions about ingredients, health impacts, and get safer alternatives with scientific backing.",
+  },
+  {
+    icon: User,
+    title: "Personal Profile",
+    description: "Track your health data, medical conditions, and medications for accurate risk assessment.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Visual Analytics",
+    description: "Interactive charts and graphs show ingredient breakdowns and risk levels at a glance.",
+  },
+  {
+    icon: FileText,
+    title: "Scan History",
+    description: "Access all your previous scans and reports anytime. Track your food choices over time.",
+  },
+  {
+    icon: Refrigerator,
+    title: "Pantry sync",
+    description: "Produce you inspect and products you look up can be saved to your expiry tracker in one tap.",
+  },
+];
+
+const steps = [
+  { title: "Scan or Enter", body: "Take a photo of the ingredient label or type ingredients manually" },
+  { title: "AI Analysis", body: "Our AI analyzes each ingredient against health databases and your profile" },
+  { title: "Get Insights", body: "Receive detailed risk scores, health impacts, and safer alternatives" },
+];
+
+export default function Home() {
+  const { isAuthenticated } = useAuth();
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
       {/* Header */}
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {APP_LOGO && <img src={APP_LOGO} alt={APP_TITLE} className="h-8 w-8" />}
-            <h1 className="text-xl font-bold text-foreground">{APP_TITLE}</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link href="/produce">
-              <Button variant="outline" className="gap-2 border-emerald-500/50 text-emerald-600 hover:text-emerald-700">
-                🍎 Fresh Produce AI
+      <header className="sticky top-0 z-50 border-b border-border bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+        <div className="container flex h-16 items-center justify-between gap-4 md:h-[72px]">
+          <Link href="/" className="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <BrandMark />
+          </Link>
+          <nav className="hidden items-center gap-8 text-[15px] font-semibold text-graphite lg:flex" aria-label="Sections">
+            <a href="#features" className="hover:text-ember-orange">Features</a>
+            <a href="#how" className="hover:text-ember-orange">How it works</a>
+            <Link href="/about" className="hover:text-ember-orange">About</Link>
+          </nav>
+          <div className="flex items-center gap-2">
+            <Link href="/produce" className="hidden md:block">
+              <Button variant="ghost" className="gap-2">
+                <Sparkles className="h-4 w-4 text-verdant-green" />
+                Fresh Produce AI
               </Button>
             </Link>
             <Link href="/scanner">
-              <Button className="gap-2">
-                🥗 Packaged Scanner
+              <Button className="gap-2 max-sm:h-10 max-sm:px-4">
+                <ScanLine className="h-4 w-4" />
+                <span className="sm:hidden">Scan</span>
+                <span className="hidden sm:inline">Packaged Scanner</span>
               </Button>
             </Link>
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="py-20 bg-gradient-to-b from-primary/5 to-background">
-        <div className="container">
-          <div className="max-w-3xl mx-auto text-center space-y-6">
-            <div className="inline-block px-4 py-2 bg-primary/10 rounded-full mb-4">
-              <p className="text-sm font-semibold text-primary">Supporting Label Padhega India Movement 🇮🇳</p>
-            </div>
-            <h2 className="text-4xl md:text-5xl font-bold text-foreground">
-              Know What You Eat
-            </h2>
-            <p className="text-xl text-muted-foreground">
-              All-in-one food intelligence: Inspect fresh produce freshness with <strong>FreshGuard PyTorch AI</strong> and analyze packaged food ingredients with <strong>IngreScan-AI</strong>.
-            </p>
-            <div className="flex flex-wrap gap-4 justify-center pt-4">
-              <Link href="/produce">
-                <Button size="lg" className="text-base px-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md">
-                  🍎 Inspect Fresh Produce
-                </Button>
-              </Link>
-              <Link href="/scanner">
-                <Button size="lg" className="text-base px-6 shadow-md">
-                  <ScanLine className="mr-2 h-5 w-5" />
-                  Scan Packaged Food
-                </Button>
-              </Link>
-              <Link href="/dashboard">
-                <Button size="lg" variant="outline" className="text-base px-6">
-                  Open Dashboard
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features Grid */}
-      <section className="py-20">
-        <div className="container">
-          <div className="text-center mb-12">
-            <h3 className="text-3xl font-bold text-foreground mb-4">Comprehensive Food Analysis</h3>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Our platform combines cutting-edge technology with trusted health data to give you complete insights into your food.
-            </p>
-          </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((feature, index) => {
-              const Icon = feature.icon;
-              return (
-                <Card key={index} className="border-2 hover:border-primary/50 transition-colors">
-                  <CardHeader>
-                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                      <Icon className="h-6 w-6 text-primary" />
-                    </div>
-                    <CardTitle>{feature.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CardDescription className="text-base">{feature.description}</CardDescription>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section className="py-20 bg-muted/30">
-        <div className="container">
-          <div className="text-center mb-12">
-            <h3 className="text-3xl font-bold text-foreground mb-4">How It Works</h3>
-            <p className="text-lg text-muted-foreground">Simple, fast, and accurate</p>
-          </div>
-          <div className="max-w-4xl mx-auto grid md:grid-cols-3 gap-8">
-            <div className="text-center space-y-3">
-              <div className="h-16 w-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-2xl font-bold mx-auto">
-                1
+      <main className="flex-1">
+        {/* Hero */}
+        <section className="overflow-hidden pt-12 md:pt-20">
+          <div className="container">
+            <div className="mx-auto max-w-3xl text-center">
+              <span className="fn-tag" data-tone="brand">Supporting the Label Padhega India movement</span>
+              <h1 className="fn-display mt-6 text-graphite">
+                <span className="text-verdant-green">Know</span> what you eat
+              </h1>
+              <p className="fn-subheading mx-auto mt-5 max-w-2xl text-muted-foreground">
+                All-in-one food intelligence: inspect fresh produce with{" "}
+                <strong className="font-bold text-graphite">FreshGuard PyTorch AI</strong> and analyze packaged food
+                ingredients with <strong className="font-bold text-graphite">IngreScan-AI</strong>.
+              </p>
+              <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
+                <Link href="/scanner">
+                  <Button size="lg" className="w-full sm:w-auto">
+                    <ScanLine className="h-5 w-5" />
+                    Scan Packaged Food
+                  </Button>
+                </Link>
+                <Link href="/produce">
+                  <Button size="lg" variant="dark" className="w-full sm:w-auto">
+                    <Sparkles className="h-5 w-5" />
+                    Inspect Fresh Produce
+                  </Button>
+                </Link>
               </div>
-              <h4 className="text-xl font-semibold">Scan or Enter</h4>
-              <p className="text-muted-foreground">Take a photo of the ingredient label or type ingredients manually</p>
+              <Link
+                href="/dashboard"
+                className="mt-5 inline-flex items-center gap-1.5 text-[15px] font-bold text-graphite underline decoration-ember-orange decoration-2 underline-offset-4 hover:text-ember-orange"
+              >
+                Open Dashboard <ArrowRight className="h-4 w-4" />
+              </Link>
             </div>
-            <div className="text-center space-y-3">
-              <div className="h-16 w-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-2xl font-bold mx-auto">
-                2
-              </div>
-              <h4 className="text-xl font-semibold">AI Analysis</h4>
-              <p className="text-muted-foreground">Our AI analyzes each ingredient against health databases and your profile</p>
-            </div>
-            <div className="text-center space-y-3">
-              <div className="h-16 w-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-2xl font-bold mx-auto">
-                3
-              </div>
-              <h4 className="text-xl font-semibold">Get Insights</h4>
-              <p className="text-muted-foreground">Receive detailed risk scores, health impacts, and safer alternatives</p>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      {/* CTA Section */}
-      {!isAuthenticated && (
-        <section className="py-20 bg-primary text-primary-foreground">
-          <div className="container text-center space-y-6">
-            <h3 className="text-3xl font-bold">Start Making Healthier Choices Today</h3>
-            <p className="text-xl opacity-90 max-w-2xl mx-auto">
-              Join thousands of users who are taking control of their health through informed food decisions.
-            </p>
-            <Button size="lg" variant="secondary" className="text-lg px-8" asChild>
-              <a href={getLoginUrl()}>
-                Sign Up Now - It's Free
-              </a>
-            </Button>
+            {/* Phone fan */}
+            <div className="relative mx-auto mt-14 flex h-[330px] max-w-4xl items-start justify-center sm:h-[420px] md:mt-16 lg:h-[470px]">
+              <PhoneMockup className="absolute left-1/2 top-10 -translate-x-[118%] -rotate-[7deg] sm:-translate-x-[122%]">
+                <ProduceScreen />
+              </PhoneMockup>
+              <PhoneMockup className="absolute left-1/2 top-10 translate-x-[18%] rotate-[7deg] sm:translate-x-[22%]">
+                <FridgeScreen />
+              </PhoneMockup>
+              <PhoneMockup className="absolute left-1/2 top-0 z-10 -translate-x-1/2">
+                <ScanResultScreen />
+              </PhoneMockup>
+            </div>
           </div>
         </section>
-      )}
 
-      {/* Footer */}
-      <footer className="bg-green-900 text-white py-8 mt-16">
-        <div className="container">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-sm">
-              © 2025 Smart Food Risk Analyzer. Supporting Label Padhega India 🇮🇳
-            </p>
-            <div className="flex gap-6 text-sm">
-              <Link href="/about" className="hover:text-green-300 transition-colors">
-                About
-              </Link>
-              <Link href="/privacy" className="hover:text-green-300 transition-colors">
-                Privacy Policy
-              </Link>
-              <Link href="/terms" className="hover:text-green-300 transition-colors">
-                Terms of Service
-              </Link>
+        {/* Feature pillars */}
+        <section id="features" className="scroll-mt-20 border-t border-border">
+          <div className="container fn-section space-y-20 md:space-y-28">
+            <div className="mx-auto max-w-2xl text-center">
+              <p className="fn-eyebrow">Comprehensive Food Analysis</p>
+              <h2 className="fn-heading mt-3 text-graphite">
+                Four tools, <span className="text-ember-orange">one kitchen</span>
+              </h2>
+              <p className="mt-4 text-[17px] leading-relaxed text-muted-foreground">
+                Our platform combines cutting-edge technology with trusted health data to give you complete insights into your food.
+              </p>
+            </div>
+
+            {pillars.map((p, i) => (
+              <article
+                key={p.id}
+                className="grid items-center gap-10 md:grid-cols-2 md:gap-16"
+              >
+                <div className={i % 2 === 1 ? "md:order-2" : ""}>
+                  <p className="fn-eyebrow">{p.eyebrow}</p>
+                  <h3 className="fn-heading mt-3 text-graphite">
+                    <span className={p.accentClass}>{p.accent}</span> {p.rest}
+                  </h3>
+                  <p className="mt-4 text-[17px] leading-relaxed text-muted-foreground">{p.body}</p>
+                  <ul className="mt-6 space-y-3">
+                    {p.points.map(pt => (
+                      <li key={pt} className="flex items-start gap-3 text-[15px] font-semibold text-graphite">
+                        <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-fog">
+                          <Check className="h-3 w-3 text-verdant-green" strokeWidth={3.5} />
+                        </span>
+                        {pt}
+                      </li>
+                    ))}
+                  </ul>
+                  <Link href={p.href}>
+                    <Button variant="outline" className="mt-8">
+                      {p.cta}
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </div>
+                <div className={i % 2 === 1 ? "md:order-1" : ""}>
+                  <div className="fn-surface flex h-[360px] justify-center overflow-hidden px-6 pt-10 sm:h-[420px] md:pt-14 lg:h-[460px]">
+                    <PhoneMockup>
+                      {p.screen}
+                    </PhoneMockup>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        {/* Everything else — divided list, not a card grid */}
+        <section className="bg-fog">
+          <div className="container fn-section">
+            <div className="max-w-2xl">
+              <p className="fn-eyebrow">And everything around it</p>
+              <h2 className="fn-heading mt-3 text-graphite">Built around your health profile</h2>
+            </div>
+            <div className="mt-12 grid gap-x-12 sm:grid-cols-2 lg:grid-cols-3">
+              {moreFeatures.map(f => {
+                const Icon = f.icon;
+                return (
+                  <div key={f.title} className="flex gap-4 border-t border-[#e4e4e4] py-7">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white">
+                      <Icon className="h-5 w-5 text-ember-orange" />
+                    </span>
+                    <div>
+                      <h3 className="text-lg font-bold text-graphite">{f.title}</h3>
+                      <p className="mt-1.5 text-[15px] leading-relaxed text-muted-foreground">{f.description}</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
+        </section>
+
+        {/* How it works */}
+        <section id="how" className="scroll-mt-20">
+          <div className="container fn-section">
+            <div className="mx-auto max-w-2xl text-center">
+              <p className="fn-eyebrow">Simple, fast, and accurate</p>
+              <h2 className="fn-heading mt-3 text-graphite">How It Works</h2>
+            </div>
+            <ol className="mx-auto mt-12 grid max-w-5xl gap-10 md:grid-cols-3 md:gap-8">
+              {steps.map((s, i) => (
+                <li key={s.title} className="relative">
+                  <div className="flex items-center gap-4">
+                    <span className="fn-metric grid h-14 w-14 shrink-0 place-items-center rounded-full bg-ember-orange text-2xl text-white">
+                      {i + 1}
+                    </span>
+                    {i < steps.length - 1 && <span className="hidden h-px flex-1 bg-border md:block" aria-hidden="true" />}
+                  </div>
+                  <h3 className="mt-5 text-[22px] font-bold text-graphite">{s.title}</h3>
+                  <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">{s.body}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        {/* CTA card */}
+        <section className="pb-16 md:pb-24">
+          <div className="container">
+            <div className="fn-surface flex flex-col items-start gap-6 p-8 md:flex-row md:items-center md:justify-between md:p-12">
+              <div className="max-w-xl">
+                <h2 className="fn-heading text-graphite">
+                  <span className="text-verdant-green">Start making healthier choices</span> today
+                </h2>
+                <p className="mt-3 text-[17px] leading-relaxed text-muted-foreground">
+                  Join thousands of users who are taking control of their health through informed food decisions.
+                </p>
+              </div>
+              {isAuthenticated ? (
+                <Link href="/dashboard">
+                  <Button size="lg" className="shrink-0">
+                    Open Dashboard
+                    <ArrowRight className="h-5 w-5" />
+                  </Button>
+                </Link>
+              ) : (
+                <Button size="lg" className="shrink-0" asChild>
+                  <a href={getLoginUrl()}>
+                    Sign Up Now - It's Free
+                    <ArrowRight className="h-5 w-5" />
+                  </a>
+                </Button>
+              )}
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t border-border">
+        <div className="container flex flex-col gap-6 py-10 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-2">
+            <BrandMark size="sm" />
+            <p className="text-sm text-muted-foreground">
+              © 2025 Smart Food Risk Analyzer. Supporting Label Padhega India.
+            </p>
+          </div>
+          <nav className="flex flex-wrap gap-x-6 gap-y-2 text-[15px] font-semibold text-graphite" aria-label="Footer">
+            <Link href="/about" className="hover:text-ember-orange">About</Link>
+            <Link href="/privacy" className="hover:text-ember-orange">Privacy Policy</Link>
+            <Link href="/terms" className="hover:text-ember-orange">Terms of Service</Link>
+          </nav>
         </div>
       </footer>
     </div>
