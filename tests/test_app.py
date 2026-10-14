@@ -78,20 +78,14 @@ def _install_fake_torch():
                         "torchvision.models": models, "torchvision.transforms": tr})
 
 
-try:
-    import torch  # noqa: F401
-    import torchvision  # noqa: F401
-    import torch as _t
-    HAVE_TORCH = True
-except ImportError:
-    HAVE_TORCH = False
-    _install_fake_torch()
+# These are unit tests of the Flask layer, so they always run against the stub model
+# (fast and deterministic, with or without torch installed). The real checkpoint is
+# exercised separately in test_model_integration.py.
+_install_fake_torch()
 
 
 @pytest.fixture(scope="module")
 def appmod(tmp_path_factory):
-    if HAVE_TORCH:
-        pytest.skip("real torch present; tests target the stubbed model path")
     import app as m
     return m
 

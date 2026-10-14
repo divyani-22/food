@@ -4,35 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FreshGuard - AI Produce Freshness Checker</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Compiled Tailwind + vendored Font Awesome (rebuild: tools/freshguard-css, npm run build) -->
+  <link rel="stylesheet" href="/static/css/freshguard.css">
+  <link rel="stylesheet" href="/static/vendor/fontawesome/css/all.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['"Aquawax Pro"', '"Nunito Sans"', 'system-ui', 'sans-serif'],
-          },
-          colors: {
-            ember: { DEFAULT: '#ff5406', hover: '#e84a00' },
-            verdant: '#00b33f',
-            sunset: '#ff6d00',
-            signal: '#ff3400',
-            graphite: '#2f2f2f',
-            fog: '#f5f5f5',
-            muted: '#6b6b6b',
-            hairline: '#ebebeb',
-          },
-          borderRadius: {
-            '3xl': '26px',
-          }
-        }
-      }
-    }
-  </script>
   <style>
     :root {
       --fn-ember-orange: #ff5406;
@@ -192,23 +169,23 @@
               <div id="sample-buttons" class="grid grid-cols-5 gap-2">
                 <button onclick="runSample('apple.jpg')" class="min-w-0 p-1.5 rounded-2xl border border-hairline bg-white hover:border-ember text-center transition-colors group">
                   <img src="/static/samples/apple.jpg" class="w-full h-11 object-cover rounded-xl mb-1" alt="Apple">
-                  <span class="text-[11px] font-bold text-graphite block truncate">Apple</span>
+                  <span class="text-[10px] sm:text-[11px] font-bold text-graphite block leading-tight break-words">Apple</span>
                 </button>
                 <button onclick="runSample('banana.jpg')" class="min-w-0 p-1.5 rounded-2xl border border-hairline bg-white hover:border-ember text-center transition-colors group">
                   <img src="/static/samples/banana.jpg" class="w-full h-11 object-cover rounded-xl mb-1" alt="Banana">
-                  <span class="text-[11px] font-bold text-graphite block truncate">Banana</span>
+                  <span class="text-[10px] sm:text-[11px] font-bold text-graphite block leading-tight break-words">Banana</span>
                 </button>
                 <button onclick="runSample('orange.jpg')" class="min-w-0 p-1.5 rounded-2xl border border-hairline bg-white hover:border-ember text-center transition-colors group">
                   <img src="/static/samples/orange.jpg" class="w-full h-11 object-cover rounded-xl mb-1" alt="Orange">
-                  <span class="text-[11px] font-bold text-graphite block truncate">Orange</span>
+                  <span class="text-[10px] sm:text-[11px] font-bold text-graphite block leading-tight break-words">Orange</span>
                 </button>
                 <button onclick="runSample('strawberry.jpg')" class="min-w-0 p-1.5 rounded-2xl border border-hairline bg-white hover:border-ember text-center transition-colors group">
                   <img src="/static/samples/strawberry.jpg" class="w-full h-11 object-cover rounded-xl mb-1" alt="Strawberry">
-                  <span class="text-[11px] font-bold text-graphite block truncate">Strawberry</span>
+                  <span class="text-[10px] sm:text-[11px] font-bold text-graphite block leading-tight break-words">Strawberry</span>
                 </button>
                 <button onclick="runSample('tomato.jpg')" class="min-w-0 p-1.5 rounded-2xl border border-hairline bg-white hover:border-ember text-center transition-colors group">
                   <img src="/static/samples/tomato.jpg" class="w-full h-11 object-cover rounded-xl mb-1" alt="Tomato">
-                  <span class="text-[11px] font-bold text-graphite block truncate">Tomato</span>
+                  <span class="text-[10px] sm:text-[11px] font-bold text-graphite block leading-tight break-words">Tomato</span>
                 </button>
               </div>
             </div>

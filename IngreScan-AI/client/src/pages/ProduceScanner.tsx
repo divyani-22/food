@@ -21,6 +21,7 @@ import {
   Utensils,
   Refrigerator,
   Apple,
+  Leaf,
   Banana,
   Cherry,
   Salad,
@@ -510,7 +511,7 @@ export default function ProduceScanner() {
                         <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-5">
                           <div className="flex min-w-0 items-center gap-3">
                             <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-fog">
-                              <Apple className={`h-7 w-7 ${freshnessText(result.freshness_status)}`} />
+                              <Leaf className={`h-7 w-7 ${freshnessText(result.freshness_status)}`} />
                             </span>
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-baseline gap-x-2">
@@ -767,7 +768,7 @@ export default function ProduceScanner() {
                         />
                       ) : (
                         <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-fog">
-                          <Apple className="h-5 w-5 text-verdant-green" />
+                          <Leaf className="h-5 w-5 text-verdant-green" />
                         </span>
                       )}
                       <div className="min-w-0">
