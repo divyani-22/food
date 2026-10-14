@@ -52,7 +52,8 @@ save(ean, "ean13-valid.png")
 save(render("upca", "03600029145"), "upca-valid.png")  # -> 036000291452
 save(render("ean13", "301762042200"), "ean13-unknown.png")  # 3017620422003 (not in the stub)
 save(render("ean13", "890103089547"), "ean13-no-ingredients.png")  # 8901030895470
-save(render("ean13", "544900000099"), "ean13-outage.png")  # 5449000000996 (stub answers 503)
+save(render("ean13", "544900000099"), "ean13-outage.png")  # 5449000000996 (stub answers 503, later recovers)
+save(render("ean13", "501234567890"), "ean13-outage-hybrid.png")  # 5012345678900 (stub answers 503, never cached)
 
 # 2. wrong check digit (4006381333932 instead of ...931)
 save(render("ean13", "4006381333932", no_checksum=True), "ean13-bad-checksum.png")

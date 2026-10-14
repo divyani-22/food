@@ -114,7 +114,8 @@ export default function Scanner() {
   // Hybrid: barcode decoded from the label photo chosen in Image mode
   const [photoDetect, setPhotoDetect] = useState<"idle" | "detecting" | "done">("idle");
   const [photoScan, setPhotoScan] = useState<ScannedBarcode | null>(null);
-  const [photoInvalidCode, setPhotoInvalidCode] = useState<string | null>(null);
+  /** Barcode seen in the photo but its check digit failed. code is null when the digits could not be read at all. */
+  const [photoInvalid, setPhotoInvalid] = useState<{ code: string | null } | null>(null);
   const [forceOcr, setForceOcr] = useState(false);
   const detectAbortRef = useRef<AbortController | null>(null);
   const autoNameRef = useRef<string>("");
@@ -183,7 +184,7 @@ export default function Scanner() {
     setImagePreview(null);
     setPhotoDetect("idle");
     setPhotoScan(null);
-    setPhotoInvalidCode(null);
+    setPhotoInvalid(null);
     setForceOcr(false);
   };
 
@@ -214,7 +215,7 @@ export default function Scanner() {
       const ac = new AbortController();
       detectAbortRef.current = ac;
       setPhotoScan(null);
-      setPhotoInvalidCode(null);
+      setPhotoInvalid(null);
       setForceOcr(false);
       setPhotoDetect("detecting");
       decodeBarcodeFromFile(file, { signal: ac.signal })
@@ -224,7 +225,9 @@ export default function Scanner() {
             const c = result.best.check;
             setPhotoScan({ code: c.code, lookupCode: c.lookupCode, format: c.format, source: "photo", checksumValid: true });
           } else if (result.status === "invalid" && !result.best.check.ok) {
-            setPhotoInvalidCode(result.best.check.code);
+            setPhotoInvalid({ code: result.best.check.code });
+          } else if (result.status === "checksum_failed") {
+            setPhotoInvalid({ code: null });
           }
         })
         .catch(() => undefined) // detection is best-effort; OCR still works
@@ -475,9 +478,11 @@ export default function Scanner() {
                     <p>Checking the photo for a barcode...</p>
                   </Notice>
                 )}
-                {imageFile && photoInvalidCode && !photoScan && (
+                {imageFile && photoInvalid && !photoScan && (
                   <Notice icon={AlertCircle} tone="error" testId="hybrid-invalid">
-                    <p>A barcode was read as {photoInvalidCode}, but its check digit does not match, so it may be a misread. We will read the label text with OCR instead. To use the barcode, open the Barcode tab and check the number.</p>
+                    <p>
+                      {photoInvalid.code ? `A barcode was read as ${photoInvalid.code}` : "A barcode was detected"}, but its check digit does not match, so it may be a misread. We will read the label text with OCR instead. To use the barcode, open the Barcode tab and type or re-scan the number.
+                    </p>
                   </Notice>
                 )}
                 {imageFile && photoScan && photoQuery.isFetching && (

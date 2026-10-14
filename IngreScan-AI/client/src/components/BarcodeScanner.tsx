@@ -66,6 +66,7 @@ export function BarcodeScanner({ onDetected, disabled = false, initialValue = ""
   const abortRef = useRef<AbortController | null>(null);
   const lastEmitRef = useRef<{ key: string; at: number } | null>(null);
   const invalidSeenRef = useRef<Map<string, number>>(new Map());
+  const checksumFailuresRef = useRef(0);
   const onDetectedRef = useRef(onDetected);
   onDetectedRef.current = onDetected;
   const unmountedRef = useRef(false);
@@ -97,6 +98,7 @@ export function BarcodeScanner({ onDetected, disabled = false, initialValue = ""
       v.srcObject = null;
     }
     invalidSeenRef.current.clear();
+    checksumFailuresRef.current = 0;
     if (!unmountedRef.current) {
       setCameraState("idle");
       setLiveHint(null);
@@ -139,6 +141,7 @@ export function BarcodeScanner({ onDetected, disabled = false, initialValue = ""
       if (session !== sessionRef.current) return;
       const handle = await startLiveDecoding(video, (candidates) => {
         if (session !== sessionRef.current) return;
+        checksumFailuresRef.current = 0;
         const best = pickBestCandidate(candidates);
         if (!best) return;
         if (best.check.ok) {
@@ -153,6 +156,13 @@ export function BarcodeScanner({ onDetected, disabled = false, initialValue = ""
         if (seen >= 2) {
           setLiveHint(`Read ${best.check.code} but its check digit does not match. Hold steady, closer, and avoid glare.`);
         }
+      }, {
+        onChecksumFailure: () => {
+          if (session !== sessionRef.current) return;
+          if (++checksumFailuresRef.current >= 4) {
+            setLiveHint("A barcode is in view but cannot be read reliably (check digit mismatch). Hold steady, move closer and avoid glare, or type the number.");
+          }
+        },
       });
       if (session !== sessionRef.current) {
         handle.stop();
@@ -214,6 +224,10 @@ export function BarcodeScanner({ onDetected, disabled = false, initialValue = ""
           source: "photo",
           message: `We read ${c.code}, but its check digit does not match, so it may have been misread.`,
         });
+      } else if (result.status === "checksum_failed") {
+        setPhotoMessage(
+          "A barcode was detected in this photo, but its check digit does not match, so it was probably misread (or the number is printed wrongly). Retake the photo closer, in good light and without glare, or type the number below and look it up anyway.",
+        );
       } else if (result.status === "error") {
         setPhotoMessage(result.message);
       } else {

@@ -17,10 +17,10 @@ for (const q of [
   "delete from chat_messages where scan_id in (select id from food_scans where product_name like 'E2E %' or product_name='Secret Scan')",
   "delete from food_scans where product_name like 'E2E %' or product_name='Secret Scan'",
   "delete from users where openId='other-user'",
-  "delete from produce_inventory where user_id=1",
-  "delete from produce_scans where user_id=1",
-  "delete from medical_conditions where user_id=1",
-  "delete from medications where user_id=1",
+  "delete from produce_inventory where user_id=(select id from users where openId='local-dev-user')",
+  "delete from produce_scans where user_id=(select id from users where openId='local-dev-user')",
+  "delete from medical_conditions where user_id=(select id from users where openId='local-dev-user')",
+  "delete from medications where user_id=(select id from users where openId='local-dev-user')",
 ]) sql(q);
 
 async function step(name, fn) {
@@ -81,7 +81,7 @@ await step("Profile: invalid then valid save persists to DB", async () => {
   await page.fill("#weight", "62");
   await page.getByRole("button", { name: "Save Profile" }).click();
   await page.waitForTimeout(1200);
-  const row = sql("select age,height,weight,bmi from user_profiles where user_id=1");
+  const row = sql("select age,height,weight,bmi from user_profiles where user_id=(select id from users where openId='local-dev-user')");
   expect(row.startsWith("34\t168\t62"), "profile row: " + row);
 });
 await step("Profile: add + delete condition and medication", async () => {
@@ -92,8 +92,8 @@ await step("Profile: add + delete condition and medication", async () => {
   await page.getByLabel("Dosage").fill("5 mg");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await page.getByText("Amlodipine").first().waitFor();
-  expect(sql("select count(*) from medical_conditions where user_id=1") === "1", "condition in DB");
-  expect(sql("select count(*) from medications where user_id=1") === "1", "medication in DB");
+  expect(sql("select count(*) from medical_conditions where user_id=(select id from users where openId='local-dev-user')") === "1", "condition in DB");
+  expect(sql("select count(*) from medications where user_id=(select id from users where openId='local-dev-user')") === "1", "medication in DB");
   await page.reload({ waitUntil: "networkidle" });
   await page.getByText("Amlodipine").first().waitFor();
 });
@@ -208,14 +208,14 @@ await step("Produce: classify sample (real model), history is stored in the data
   await page.getByRole("button", { name: /^Apple$/ }).first().click();
   await page.getByText(/Identification Confidence/).waitFor({ timeout: 30000 });
   await page.waitForTimeout(1000);
-  expect(sql("select count(*) from produce_scans where user_id=1") === "1", "history row in the database for the user");
-  expect(sql("select fruit_name from produce_scans where user_id=1") === "Apple", "English name stored");
+  expect(sql("select count(*) from produce_scans where user_id=(select id from users where openId='local-dev-user')") === "1", "history row in the database for the user");
+  expect(sql("select fruit_name from produce_scans where user_id=(select id from users where openId='local-dev-user')") === "Apple", "English name stored");
 });
 await step("Produce: save to pantry stores a per-user row and shows in the Pantry tab", async () => {
   await page.getByRole("button", { name: /Save to Fridge/i }).click();
   await page.getByRole("tab", { name: /Fridge Pantry \(1\)/ }).waitFor({ timeout: 10000 });
-  expect(sql("select count(*) from produce_inventory where user_id=1") === "1", "pantry row in the database");
-  expect(/^\d{4}-\d{2}-\d{2}$/.test(sql("select expiry_date from produce_inventory where user_id=1")), "expiry date stored");
+  expect(sql("select count(*) from produce_inventory where user_id=(select id from users where openId='local-dev-user')") === "1", "pantry row in the database");
+  expect(/^\d{4}-\d{2}-\d{2}$/.test(sql("select expiry_date from produce_inventory where user_id=(select id from users where openId='local-dev-user')")), "expiry date stored");
   await page.getByText("Apple").first().waitFor();
 });
 await step("Produce: data survives a reload (read back from the database)", async () => {
@@ -228,11 +228,11 @@ await step("Produce: remove pantry item and clear history", async () => {
   await page.getByRole("tab", { name: /Fridge Pantry/ }).click();
   await page.getByRole("button", { name: /Remove \/ Consumed/ }).first().click();
   await page.getByRole("tab", { name: /Fridge Pantry \(0\)/ }).waitFor({ timeout: 10000 });
-  expect(sql("select count(*) from produce_inventory where user_id=1") === "0", "pantry row deleted");
+  expect(sql("select count(*) from produce_inventory where user_id=(select id from users where openId='local-dev-user')") === "0", "pantry row deleted");
   await page.getByRole("tab", { name: /History/ }).click();
   await page.getByRole("button", { name: /Clear History/ }).click();
   await page.waitForTimeout(1200);
-  expect(sql("select count(*) from produce_scans where user_id=1") === "0", "history cleared in the database");
+  expect(sql("select count(*) from produce_scans where user_id=(select id from users where openId='local-dev-user')") === "0", "history cleared in the database");
 });
 
 // ---------- Mobile shell ----------

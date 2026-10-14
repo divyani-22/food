@@ -53,7 +53,8 @@ const stubServer = http.createServer((req, res) => {
   if (m) {
     const code = m[1];
     stub.hits[code] = (stub.hits[code] || 0) + 1;
-    if (code === "5449000000996" && stub.outage) {
+    // 5449000000996 recovers when stub.outage is switched off; 5012345678900 is always down (so it can never be cached)
+    if (code === "5012345678900" || (code === "5449000000996" && stub.outage)) {
       res.writeHead(503, { "content-type": "text/plain" });
       return res.end("Service Unavailable");
     }
@@ -107,7 +108,9 @@ const launchArgs = (extra = []) => {
 };
 const results = [];
 const consoleErrors = [];
+let currentStep = "setup";
 async function step(name, fn) {
+  currentStep = name;
   const t = Date.now();
   try { await fn(); results.push(["PASS", name, Date.now() - t]); }
   catch (e) { results.push(["FAIL", name, Date.now() - t, String(e.message || e).split("\n")[0]]); }
@@ -127,7 +130,7 @@ const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } })
 const page = await ctx.newPage();
 const trpcCalls = [];
 page.on("request", (r) => { if (r.url().includes("/api/trpc/")) trpcCalls.push(decodeURIComponent(r.url())); });
-page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text().slice(0, 200)); });
+page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(`[${currentStep}] ` + m.text().slice(0, 200)); });
 page.on("pageerror", (e) => consoleErrors.push("PAGEERROR " + e.message));
 const calls = (needle) => trpcCalls.filter((u) => u.includes(needle)).length;
 const mark = () => trpcCalls.length;
@@ -226,18 +229,24 @@ await step("Barcode mode: OFF outage is distinct from not-found and is not cache
 });
 
 // ---------------------------------------------------------------- 4. checksum handling
-await step("Bad-checksum photo: warning shown, no lookup until the user confirms", async () => {
+await step("Bad-checksum photo: zxing reports a detected-but-unreadable barcode instead of ignoring it; no lookup happens", async () => {
   await openScanner(/Barcode/);
   await uploadBarcodePhoto("ean13-bad-checksum.png");
-  const w = page.locator('[data-testid="barcode-pending-invalid"]');
-  await w.waitFor({ timeout: 60000 });
-  const t = await w.innerText();
-  expect(/4006381333932/.test(t) && /check digit/i.test(t), "warning names the code: " + t);
-  expect(!stub.hits["4006381333932"], "no OFF request before confirmation");
-  await w.getByRole("button", { name: "Look up anyway" }).click();
+  const m = page.locator('[data-testid="barcode-photo-message"]');
+  await m.waitFor({ timeout: 90000 });
+  const t = await m.innerText();
+  expect(/barcode was detected/.test(t) && /check digit/.test(t), "warning wording: " + t);
+  expect(!stub.hits["4006381333932"], "no OFF request for an unverified code");
+  expect((await page.locator('[data-testid="barcode-result"]').count()) === 0, "no product result shown");
+});
+await step("Typed bad-checksum code: warning, then explicit 'Look up anyway' performs the lookup", async () => {
+  await openScanner(/Barcode/);
+  await page.locator('[data-testid="barcode-manual-input"]').fill("4006381333932");
+  expect(!stub.hits["4006381333932"], "no lookup while typing");
+  await page.locator('[data-testid="barcode-manual-submit"]').click();
   await page.locator('[data-testid="barcode-checksum-warning"]').waitFor({ timeout: 30000 });
   await page.locator('[data-testid="barcode-not-found"]').waitFor({ timeout: 30000 });
-  expect(stub.hits["4006381333932"] === 1, "one OFF request after confirmation");
+  expect(stub.hits["4006381333932"] === 1, "one OFF request after confirmation: " + stub.hits["4006381333932"]);
 });
 await step("Manual entry: live checksum feedback and explicit confirmation", async () => {
   await openScanner(/Barcode/);
@@ -308,7 +317,7 @@ await step("Hybrid: label photo WITHOUT a barcode proceeds with OCR exactly as b
 await step("Hybrid: barcode in photo but OFF outage -> falls back to OCR with a clear note", async () => {
   stub.outage = true;
   await openScanner(/Image/);
-  await page.setInputFiles("#imageUpload", fx("ean13-outage.png"));
+  await page.setInputFiles("#imageUpload", fx("ean13-outage-hybrid.png"));
   const f = page.locator('[data-testid="hybrid-fallback"]');
   await f.waitFor({ timeout: 90000 });
   expect(/unreachable/.test(await f.innerText()) && /OCR/.test(await f.innerText()), "fallback wording: " + (await f.innerText()));

@@ -143,6 +143,7 @@ function norm(s: unknown): string {
   return s
     .slice(0, MAX_NAME * 2)
     .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z]+/g, " ")
     .trim()

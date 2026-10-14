@@ -43,6 +43,7 @@ export function nativeDetectorAvailable(): boolean {
 type ZxingBits = {
   reader: { decodeFromCanvas(c: HTMLCanvasElement): { getText(): string; getBarcodeFormat(): number } };
   BarcodeFormat: Record<number, string>;
+  ChecksumException: new (...args: any[]) => Error;
 };
 let zxingPromise: Promise<ZxingBits> | null = null;
 
@@ -59,7 +60,7 @@ function loadZxing(): Promise<ZxingBits> {
       ]);
       hints.set(lib.DecodeHintType.TRY_HARDER, true);
       const reader = new BrowserMultiFormatReader(hints);
-      return { reader: reader as any, BarcodeFormat: lib.BarcodeFormat as any };
+      return { reader: reader as any, BarcodeFormat: lib.BarcodeFormat as any, ChecksumException: lib.ChecksumException as any };
     })().catch((err) => {
       zxingPromise = null; // allow a retry after a failed chunk load
       throw err;
@@ -68,13 +69,19 @@ function loadZxing(): Promise<ZxingBits> {
   return zxingPromise;
 }
 
-async function decodeCanvasZxing(canvas: HTMLCanvasElement): Promise<DecodedCandidate[]> {
+type ZxingOutcome = { candidates: DecodedCandidate[]; checksumFailed: boolean };
+
+/**
+ * zxing validates EAN/UPC check digits itself and throws ChecksumException when a barcode is found but its
+ * check digit is wrong. We cannot read the digits in that case, but we can tell the user a code was seen.
+ */
+async function decodeCanvasZxing(canvas: HTMLCanvasElement): Promise<ZxingOutcome> {
   const z = await loadZxing();
   try {
     const r = z.reader.decodeFromCanvas(canvas);
-    return [{ rawValue: r.getText(), format: z.BarcodeFormat[r.getBarcodeFormat()] ?? null }];
-  } catch {
-    return []; // NotFound / Checksum / Format exceptions all mean "nothing usable here"
+    return { candidates: [{ rawValue: r.getText(), format: z.BarcodeFormat[r.getBarcodeFormat()] ?? null }], checksumFailed: false };
+  } catch (err) {
+    return { candidates: [], checksumFailed: err instanceof z.ChecksumException || (err as any)?.name === "ChecksumException" };
   }
 }
 
@@ -90,12 +97,12 @@ async function decodeNative(source: unknown): Promise<DecodedCandidate[]> {
 }
 
 /** Decode one canvas with every available engine. */
-export async function decodeCanvas(canvas: HTMLCanvasElement): Promise<DecodedCandidate[]> {
+export async function decodeCanvas(canvas: HTMLCanvasElement): Promise<ZxingOutcome> {
   const out: DecodedCandidate[] = [];
   out.push(...(await decodeNative(canvas)));
-  if (pickBestCandidate(out)?.check.ok) return out;
-  out.push(...(await decodeCanvasZxing(canvas)));
-  return out;
+  if (pickBestCandidate(out)?.check.ok) return { candidates: out, checksumFailed: false };
+  const z = await decodeCanvasZxing(canvas);
+  return { candidates: [...out, ...z.candidates], checksumFailed: z.checksumFailed };
 }
 
 // ------------------------------------------------------------------ preprocessing
@@ -212,6 +219,8 @@ export type PhotoDecodeResult =
   | { status: "found"; best: BestCandidate; variant: string; attempts: number }
   /** A code was read but its check digit is wrong (likely misread); no variant produced a valid one. */
   | { status: "invalid"; best: BestCandidate; variant: string; attempts: number }
+  /** A barcode was detected in at least one variant but its check digit never verified, so the digits are unknown. */
+  | { status: "checksum_failed"; attempts: number }
   | { status: "none"; attempts: number }
   | { status: "error"; message: string };
 
@@ -256,6 +265,7 @@ export async function decodeBarcodeFromFile(
   }
   const variants = buildVariants(base);
   let firstInvalid: { best: BestCandidate; variant: string } | null = null;
+  let sawChecksumFailure = false;
   let attempts = 0;
   for (let i = 0; i < variants.length; i++) {
     if (opts.signal?.aborted) return { status: "none", attempts };
@@ -264,7 +274,9 @@ export async function decodeBarcodeFromFile(
     attempts++;
     let candidates: DecodedCandidate[] = [];
     try {
-      candidates = await decodeCanvas(variant.make());
+      const out = await decodeCanvas(variant.make());
+      candidates = out.candidates;
+      if (out.checksumFailed) sawChecksumFailure = true;
     } catch (err: any) {
       // The decoder library itself failed to load (e.g. offline chunk); the first variant would fail too.
       if (i === 0) return { status: "error", message: "The barcode reader could not be loaded. Check your connection or type the number instead." };
@@ -275,6 +287,7 @@ export async function decodeBarcodeFromFile(
     await tick();
   }
   if (firstInvalid) return { status: "invalid", ...firstInvalid, attempts };
+  if (sawChecksumFailure) return { status: "checksum_failed", attempts };
   return { status: "none", attempts };
 }
 
@@ -347,7 +360,7 @@ export type LiveScanHandle = { stop(): void; engine: "native" | "zxing" };
 export async function startLiveDecoding(
   video: HTMLVideoElement,
   onCandidates: (c: DecodedCandidate[]) => void,
-  opts: { intervalMs?: number } = {},
+  opts: { intervalMs?: number; onChecksumFailure?: () => void } = {},
 ): Promise<LiveScanHandle> {
   const native = await getNativeDetector();
   const interval = opts.intervalMs ?? (native ? 120 : 200);
@@ -364,6 +377,7 @@ export async function startLiveDecoding(
       busy = true;
       try {
         let found: DecodedCandidate[] = [];
+        let checksumFailed = false;
         if (native) {
           found = await decodeNative(video);
         } else if (zx) {
@@ -371,9 +385,12 @@ export async function startLiveDecoding(
           canvas.width = Math.round(video.videoWidth * f);
           canvas.height = Math.round(video.videoHeight * f);
           canvas.getContext("2d", { willReadFrequently: true })!.drawImage(video, 0, 0, canvas.width, canvas.height);
-          found = await decodeCanvasZxing(canvas);
+          const out = await decodeCanvasZxing(canvas);
+          found = out.candidates;
+          checksumFailed = out.checksumFailed;
         }
         if (!stopped && found.length) onCandidates(found);
+        else if (!stopped && checksumFailed) opts.onChecksumFailure?.();
       } finally {
         busy = false;
       }
