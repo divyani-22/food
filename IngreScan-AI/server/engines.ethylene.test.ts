@@ -76,7 +76,7 @@ describe("name matching", () => {
   });
 
   it("is safe with hostile input", () => {
-    for (const n of ["__proto__", "constructor", "toString", "hasOwnProperty", "prototype", "\u{1F34E}", "苹果", "a".repeat(100_000)]) {
+    for (const n of ["__proto__", "constructor", "toString", "hasOwnProperty", "prototype", "\u{1F34E}", "\u82F9\u679C", "a".repeat(100_000)]) {
       expect(() => ethyleneProfile(n)).not.toThrow();
     }
     expect(ethyleneProfile("__proto__")).toBeNull();
@@ -197,7 +197,7 @@ describe("analyzeEthyleneStorage", () => {
   });
 
   it("output never has emoji or non-ASCII even for unicode names", () => {
-    const alerts = analyzeEthyleneStorage([{ name: "Apple \u{1F34E}" }, { name: "Spinach 苹" }]);
+    const alerts = analyzeEthyleneStorage([{ name: "Apple \u{1F34E}" }, { name: "Spinach \u82F9" }]);
     expect(alerts.length).toBe(1);
     assertClean(alerts);
   });

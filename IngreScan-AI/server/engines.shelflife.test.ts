@@ -229,7 +229,7 @@ describe("estimateShelfLife: hostile input", () => {
     expect(key("\u{1F95B} Milk \u0000\u0007")).toBe("milk");
     expect(key("MILK​")).toBe("milk");
     expect(key("Café au lait")).toBeNull();
-    expect(estimateShelfLife("中文", { now: NOW })).toBeNull();
+    expect(estimateShelfLife("\u4E2D\u6587", { now: NOW })).toBeNull();
     expect(estimateShelfLife("\u0000\u0001", { now: NOW })).toBeNull();
   });
   it("does not choke on prototype-ish strings or regex metacharacters", () => {

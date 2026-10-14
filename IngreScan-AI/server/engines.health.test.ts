@@ -454,7 +454,7 @@ describe("structure, sorting and robustness", () => {
   });
 
   it("is safe against hostile strings and prototype keys", () => {
-    const evil = ["__proto__", "constructor", "prototype", "toString", "\u{1F600}", "糖", "x".repeat(200_000)];
+    const evil = ["__proto__", "constructor", "prototype", "toString", "\u{1F600}", "\u7CD6", "x".repeat(200_000)];
     expect(() => ev({ conditions: evil, ingredients: evil.map((name) => ({ name })), medications: evil.map((name) => ({ name })), allergensTags: evil })).not.toThrow();
     expect(ev({ conditions: evil, ingredients: evil.map((name) => ({ name })), medications: evil.map((name) => ({ name })), allergensTags: evil })).toEqual([]);
     const nut = JSON.parse('{"__proto__": {"sugars": 99}, "constructor": 5}');
@@ -463,7 +463,7 @@ describe("structure, sorting and robustness", () => {
   });
 
   it("strips non-ASCII from echoed triggers", () => {
-    const r = ev({ conditions: ["diabetes"], ingredients: [{ name: "Sugar \u{1F36C} 糖" }] });
+    const r = ev({ conditions: ["diabetes"], ingredients: [{ name: "Sugar \u{1F36C} \u7CD6" }] });
     expect(r[0].trigger).toBe("Sugar");
     assertClean(r);
   });

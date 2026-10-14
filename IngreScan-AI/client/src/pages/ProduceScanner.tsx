@@ -1,6 +1,7 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/brand/PageHeader";
 import { StatusTag } from "@/components/brand/StatusTag";
+import { EthyleneAlerts } from "@/components/features/EthyleneAlerts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -834,6 +835,8 @@ export default function ProduceScanner() {
                 <RotateCcw className="h-4 w-4" /> Refresh
               </Button>
             </div>
+
+            <EthyleneAlerts />
 
             {inventory.length === 0 ? (
               <div className="rounded-3xl bg-white p-8 text-center md:p-12">

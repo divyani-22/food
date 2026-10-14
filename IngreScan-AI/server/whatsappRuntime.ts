@@ -15,6 +15,7 @@ import {
   AttemptLimiter,
   checkLinkCode,
   createDefaultRateLimiter,
+  TokenBucketLimiter,
   createMetaSender,
   createTwilioSender,
   deliver,
@@ -404,12 +405,20 @@ function botConfig(env: WhatsappEnv): BotConfig {
   };
 }
 
+/** Per-phone limiter. Default: burst of 8, then one message every 6 s. WHATSAPP_RATE_BURST / WHATSAPP_RATE_PER_MINUTE override. */
+function createRateLimiter(e: NodeJS.ProcessEnv = process.env) {
+  const burst = Number(e.WHATSAPP_RATE_BURST);
+  if (!Number.isFinite(burst) || burst < 1) return createDefaultRateLimiter();
+  const perMinute = Number(e.WHATSAPP_RATE_PER_MINUTE);
+  return new TokenBucketLimiter({ capacity: Math.floor(burst), refillPerSec: (perMinute > 0 ? perMinute : 10) / 60 });
+}
+
 export function createHandlerDeps(env: WhatsappEnv = getWhatsappEnv()): HandlerDeps {
   return {
     store: createWhatsappStore(),
     services: createWhatsappServices({ env }),
     config: botConfig(env),
-    rateLimiter: createDefaultRateLimiter(),
+    rateLimiter: createRateLimiter(),
     linkLimiter: new AttemptLimiter(),
     log,
   };
@@ -467,7 +476,7 @@ export function registerWhatsappRoutes(app: Express, depsOverride?: HandlerDeps)
   });
 }
 
-/** Daily expiry reminders. Checks every 10 minutes; each user is notified at most once per local day. */
+/** Daily expiry reminders. Checks every 10 minutes (configurable); each user is notified at most once per local day. */
 export function startReminderScheduler(depsOverride?: HandlerDeps): (() => void) | null {
   const env = getWhatsappEnv();
   const provider = reminderProvider(env);
@@ -488,7 +497,10 @@ export function startReminderScheduler(depsOverride?: HandlerDeps): (() => void)
       running = false;
     }
   };
-  const timer = setInterval(tick, 10 * 60 * 1000);
+  // Default every 10 minutes; WHATSAPP_REMINDER_INTERVAL_MS (>= 1000) shortens it for tests.
+  const configured = Number(process.env.WHATSAPP_REMINDER_INTERVAL_MS);
+  const intervalMs = Number.isFinite(configured) && configured >= 1000 ? configured : 10 * 60 * 1000;
+  const timer = setInterval(tick, intervalMs);
   timer.unref?.();
   log("info", "reminder_scheduler_started", { provider });
   return () => clearInterval(timer);

@@ -314,9 +314,9 @@ def test_import_script_emits_english_sql_for_one_user(client, appmod, tmp_path):
             " p_fresh REAL, confidence REAL, image_url TEXT, created_at TEXT);"
         )
         conn.execute("INSERT INTO inventory VALUES (1, ?, 'apple', 'fresh', 90, 95, '/static/uploads/a.jpg', '2030-01-02', 5, ?, '2026-01-01 10:00:00')",
-                     ("\U0001F34E 사과", "O'Brien 냉장"))
+                     ("\U0001F34E \uC0AC\uACFC", "O'Brien \uB0C9\uC7A5"))
         conn.execute("INSERT INTO scan_history VALUES (1, 'bell_pepper', ?, 'weird', ?, 50, 80, '', '2026-01-01 10:00:00')",
-                     ("파프리카/피망", "보통 (Normal)"))
+                     ("\uD30C\uD504\uB9AC\uCE74/\uD53C\uB9DD", "\uBCF4\uD1B5 (Normal)"))
     root = Path(appmod.__file__).parent
     proc = subprocess.run([sys.executable, str(root / "tools" / "import_freshguard_data.py"), "--user-id", "7", "--db", str(db)],
                           capture_output=True, text=True)

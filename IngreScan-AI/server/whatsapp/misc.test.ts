@@ -118,3 +118,17 @@ describe("time helpers", () => {
     expect(isIsoDate("2026-02-28")).toBe(true);
   });
 });
+
+describe("canonicalTimeZone keeps the spelling users type", () => {
+  it("does not rewrite modern names to legacy ICU aliases", () => {
+    expect(canonicalTimeZone("Asia/Kolkata")).toBe("Asia/Kolkata");
+    expect(canonicalTimeZone("America/Argentina/Buenos_Aires")).toBe("America/Argentina/Buenos_Aires");
+    expect(canonicalTimeZone("UTC")).toBe("UTC");
+    expect(canonicalTimeZone("Etc/GMT+3")).toBe("Etc/GMT+3");
+  });
+  it("fixes casing for sloppy input and rejects unknown zones", () => {
+    expect(canonicalTimeZone("europe/london")).toBe("Europe/London");
+    expect(canonicalTimeZone("Mars/Base")).toBeNull();
+    expect(canonicalTimeZone("")).toBeNull();
+  });
+});

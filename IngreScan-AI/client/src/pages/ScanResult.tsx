@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { AIChatBox } from "@/components/AIChatBox";
+import { HealthAlerts } from "@/components/features/HealthAlerts";
 
 function parseSources(raw?: string | null): string {
   if (!raw) return "";
@@ -136,6 +137,8 @@ export default function ScanResult() {
             </div>
           </section>
         </div>
+
+        <HealthAlerts scanId={scanId} />
 
         {scan.imageUrl && (
           <Card>

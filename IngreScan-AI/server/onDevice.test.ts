@@ -53,7 +53,7 @@ describe("freshness rules (shared with fruit_info.py through fruitInfo.json)", (
   });
   it("knowledge covers every class and has no emoji or Hangul", () => {
     for (const f of FRUITS) expect(KNOWLEDGE.fruits[f]).toBeTruthy();
-    expect(JSON.stringify(KNOWLEDGE)).not.toMatch(/[ᄀ-ᇿ가-힯\u{1F000}-\u{1FAFF}☀-➿]/u);
+    expect(JSON.stringify(KNOWLEDGE)).not.toMatch(/[\u1100-\u11FF\uAC00-\uD7AF\u{1F000}-\u{1FAFF}\u2600-\u27BF]/u);
   });
 });
 

@@ -25,7 +25,7 @@ import { getLoginUrl } from "@/const";
 import { BrandMark } from "@/components/brand/BrandMark";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Scan, User, History, MessageSquare, Sparkles, Refrigerator, Barcode, Menu, Plus, ArrowRight } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Scan, User, History, MessageSquare, Sparkles, Refrigerator, Barcode, Menu, Plus, ArrowRight, ClipboardCheck, ReceiptText } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -42,11 +42,13 @@ const menuItems = [
   { icon: Sparkles, label: "Fresh Produce AI", path: "/produce", group: "Scan" },
   { icon: Barcode, label: "Open Food Facts", path: "/openfoodfacts", group: "Scan" },
   { icon: Refrigerator, label: "Expiry Tracker", path: "/fridge", group: "Track" },
+  { icon: ReceiptText, label: "Receipt import", path: "/receipt", group: "Track" },
   { icon: History, label: "History", path: "/history", group: "Track" },
+  { icon: ClipboardCheck, label: "Batch QC", path: "/qc", group: "Business" },
   { icon: MessageSquare, label: "Chat", path: "/chat", group: "Assist" },
   { icon: User, label: "Profile", path: "/profile", group: "Assist" },
 ];
-const menuGroups = ["Overview", "Scan", "Track", "Assist"] as const;
+const menuGroups = ["Overview", "Scan", "Track", "Business", "Assist"] as const;
 
 const isPathActive = (location: string, path: string) =>
   location === path || (PATH_ALIASES[path] ?? []).includes(location);

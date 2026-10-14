@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { insightsRouter, rescueRouter, whatsappRouter } from "./featureRouters";
+import { qcRouter, receiptRouter } from "./opsRouters";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
@@ -117,6 +118,8 @@ const userProfileSchema = z.object({
   bmi: z.number().min(0).max(200).optional(),
   exerciseFrequency: z.enum(["sedentary", "light", "moderate", "active", "very_active"]).optional(),
   dietType: z.enum(["veg", "non_veg", "vegan", "keto", "other"]).optional(),
+  // Country or city; lets the AI suggest brands that are actually sold near the user. Empty string clears it.
+  region: z.string().trim().max(64).optional(),
 });
 
 const medicalConditionSchema = z.object({
@@ -199,6 +202,7 @@ export const appRouter = router({
         return db.upsertUserProfile({
           userId: ctx.user.id,
           ...input,
+          region: input.region === undefined ? undefined : input.region || null,
           bmi,
         });
       }),
@@ -495,15 +499,19 @@ User Profile: ${JSON.stringify(userProfile)}
 Current Product Risk Score: ${scan.riskScore}
 Problematic Ingredients: ${ingredients.filter(i => i.riskLevel && ['moderate', 'high', 'severe'].includes(i.riskLevel)).map(i => i.name).join(', ')}
 
+User region: ${userProfile?.region || "not provided"}
+
 For each alternative, provide:
 1. Product name
-2. Reason why it's better
-3. Scientific justification
-4. Sources
+2. Brand: a specific commercial brand${userProfile?.region ? ` that is sold in ${userProfile.region}` : ""}, only if you are confident it exists and fits; otherwise an empty string. Never invent a brand, a price or store availability.
+3. Reason why it's better
+4. Scientific justification
+5. Sources
 
 Return as JSON array:
 [{
   "productName": "alternative product",
+  "brand": "brand name or empty string",
   "reason": "why it's better",
   "scientificJustification": "detailed explanation",
   "sources": ["source1", "source2"]
@@ -528,11 +536,12 @@ Return as JSON array:
                       type: "object",
                       properties: {
                         productName: { type: "string" },
+                        brand: { type: "string" },
                         reason: { type: "string" },
                         scientificJustification: { type: "string" },
                         sources: { type: "array", items: { type: "string" } }
                       },
-                      required: ["productName", "reason", "scientificJustification", "sources"],
+                      required: ["productName", "brand", "reason", "scientificJustification", "sources"],
                       additionalProperties: false
                     }
                   }
@@ -806,6 +815,8 @@ Be helpful, accurate, educational, and personalized to the user's health profile
   insights: insightsRouter,
   rescue: rescueRouter,
   whatsapp: whatsappRouter,
+  qc: qcRouter,
+  receipt: receiptRouter,
 
   openFoodFacts: router({
     getByBarcode: publicProcedure

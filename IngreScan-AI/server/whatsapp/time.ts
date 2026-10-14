@@ -13,6 +13,9 @@ export function isValidTimeZone(zone: string | undefined | null): boolean {
 /** Canonical spelling Intl reports (e.g. "asia/kolkata" -> "Asia/Calcutta" or "Asia/Kolkata" by ICU). */
 export function canonicalTimeZone(zone: string): string | null {
   if (!isValidTimeZone(zone)) return null;
+  // Keep the spelling the user typed when it is a valid, properly capitalised IANA name. The ICU database
+  // resolves modern names to legacy aliases (Asia/Kolkata -> Asia/Calcutta), which would be confusing to show back.
+  if (/^[A-Z][A-Za-z0-9_+\-]*(\/[A-Za-z0-9_+\-]+)*$/.test(zone)) return zone;
   return new Intl.DateTimeFormat("en-US", { timeZone: zone }).resolvedOptions().timeZone;
 }
 

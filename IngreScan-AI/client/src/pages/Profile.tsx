@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Trash2, Plus, UserRound, HeartPulse, Pill, Activity } from "lucide-react";
 import { PageHeader } from "@/components/brand/PageHeader";
 import { StatusTag } from "@/components/brand/StatusTag";
+import { WhatsAppCard } from "@/components/features/WhatsAppCard";
 
 // Parse a numeric input to a positive integer, or undefined if empty/invalid
 // (the server rejects NaN and the DB columns are integers).
@@ -247,6 +248,8 @@ export default function Profile() {
             </div>
           </CardContent>
         </Card>
+
+        <WhatsAppCard />
       </div>
     </DashboardLayout>
   );

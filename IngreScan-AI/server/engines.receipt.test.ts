@@ -444,7 +444,7 @@ describe("LLM path", () => {
         "string",
         42,
         { name: { toString: 1 } },
-        { name: "café 中文 Tomato" },
+        { name: "café \u4E2D\u6587 Tomato" },
       ],
     };
     const r = sanitizeReceiptItems(raw);

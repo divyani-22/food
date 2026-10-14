@@ -17,6 +17,8 @@ import Chat from "./pages/Chat";
 import ProduceScanner from "./pages/ProduceScanner";
 import FridgeTracker from "./pages/FridgeTracker";
 import OpenFoodFactsExplorer from "./pages/OpenFoodFactsExplorer";
+import BatchQC from "./pages/BatchQC";
+import ReceiptImport from "./pages/ReceiptImport";
 
 function Router() {
   return (
@@ -27,6 +29,8 @@ function Router() {
       <Route path={"/produce"} component={ProduceScanner} />
       <Route path={"/fridge"} component={FridgeTracker} />
       <Route path={"/expiry"} component={FridgeTracker} />
+      <Route path={"/qc"} component={BatchQC} />
+      <Route path={"/receipt"} component={ReceiptImport} />
       <Route path={"/openfoodfacts"} component={OpenFoodFactsExplorer} />
       <Route path={"/barcode"} component={OpenFoodFactsExplorer} />
       <Route path={"/profile"} component={Profile} />

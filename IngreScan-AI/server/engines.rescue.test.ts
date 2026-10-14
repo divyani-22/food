@@ -135,7 +135,7 @@ describe("selectRescueItems", () => {
     expect(selectRescueItems([item("A", "2026-03-11")], new Date("x")).urgent).toEqual([]);
     const s = sel([
       null as never, 5 as never, {} as never, item("", "2026-03-11"), item("__proto__", "2026-03-11"),
-      item("Milk \u{1F95B} 牢奶", "2026-03-11"), item("x".repeat(100_000), "2026-03-11"),
+      item("Milk \u{1F95B} \u7262\u5976", "2026-03-11"), item("x".repeat(100_000), "2026-03-11"),
     ]);
     expect(s.urgent.map((i) => i.title)).toContain("__proto__");
     expect(s.urgent.find((i) => i.title.startsWith("Milk"))!.title).toBe("Milk");
@@ -298,11 +298,11 @@ describe("sanitizeRecipe", () => {
   });
 
   it("strips emoji and non-English text, and drops non-English titles", () => {
-    const r = sanitizeRecipe(recipe({ title: "Banana \u{1F34C} pancakes 香蕉", steps: ["Mash \u{1F34C} the bananas.", "Fry until golden \u{2728}."], tip: "Yum \u{1F60B}" }), s)!;
+    const r = sanitizeRecipe(recipe({ title: "Banana \u{1F34C} pancakes \u9999\u8549", steps: ["Mash \u{1F34C} the bananas.", "Fry until golden \u{2728}."], tip: "Yum \u{1F60B}" }), s)!;
     expect(r.title).toBe("Banana pancakes");
     expect(r.steps[0]).toBe("Mash the bananas.");
     assertClean(r);
-    expect(sanitizeRecipe(recipe({ title: "香蕉煎饼" }), s)).toBeNull();
+    expect(sanitizeRecipe(recipe({ title: "\u9999\u8549\u714E\u997C" }), s)).toBeNull();
     expect(sanitizeRecipe(recipe({ title: "\u{1F34C}\u{1F34C}\u{1F34C}" }), s)).toBeNull();
   });
 

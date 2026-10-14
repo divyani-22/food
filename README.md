@@ -130,3 +130,12 @@ Visit **[http://localhost:3000](http://localhost:3000)** to use the application.
 
 ## License
 MIT License - Created by [divyani-22](https://github.com/divyani-22)
+
+## Zero-config setup and new features
+
+- **No database needed to start**: without `DATABASE_URL` the web app uses an embedded SQLite file (`IngreScan-AI/data/ingrescan.db`). Set `DATABASE_URL` to use MySQL. See `docs/database.md`.
+- **On-device produce inspection** (ONNX in the browser, server fallback): `docs/on-device-inference.md`.
+- **Barcode and Open Food Facts lookup** alongside OCR: `docs/barcode-scanning.md`.
+- **Ethylene alerts, health alerts, Rescue My Fridge, receipt import, batch QC**: `docs/engines-health.md`, `docs/engines-ops.md`.
+- **WhatsApp bot** (Twilio or Meta): `docs/whatsapp-bot.md`. Copy `IngreScan-AI/.env.example` to `.env`.
+- Tests: `cd IngreScan-AI && npx vitest run`; `python3 -m pytest tests -q`.

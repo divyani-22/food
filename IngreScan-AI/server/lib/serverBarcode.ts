@@ -3,16 +3,15 @@
  * Pure JS: jpeg-js / pngjs decode the pixels, @zxing/library finds the barcode.
  * Supports JPEG and PNG (WhatsApp sends JPEG). WebP is not decoded here and returns null.
  */
-import {
-  BarcodeFormat,
-  BinaryBitmap,
-  DecodeHintType,
-  HybridBinarizer,
-  MultiFormatReader,
-  RGBLuminanceSource,
-} from "@zxing/library";
+// These are CommonJS packages: Node's native ESM loader (and the production bundle, which keeps packages
+// external) cannot resolve their named exports, so import the default and destructure. Test runners that
+// transform imports would hide this, so keep it this way.
+import zxing from "@zxing/library";
 import jpeg from "jpeg-js";
-import { PNG } from "pngjs";
+import pngjs from "pngjs";
+
+const { BarcodeFormat, BinaryBitmap, DecodeHintType, HybridBinarizer, MultiFormatReader, RGBLuminanceSource } = zxing;
+const { PNG } = pngjs;
 
 const MAX_PIXELS = 24_000_000; // refuse decompression bombs (about 6000 x 4000)
 
@@ -82,7 +81,7 @@ function downscale(src: Gray, factor: number): Gray {
   return { width: w, height: h, data: out };
 }
 
-const hints = new Map<DecodeHintType, unknown>([
+const hints = new Map<number, unknown>([
   // 1D retail formats only. Rotations are handled in decodeBarcodeFromImage.
   [DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E]],
 ]);

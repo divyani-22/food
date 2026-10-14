@@ -45,3 +45,8 @@ static/uploads/*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Uploaded scan images (runtime data and e2e artefacts)
+IngreScan-AI/uploads/*
+!IngreScan-AI/uploads/.gitkeep
+IngreScan-AI/data/
