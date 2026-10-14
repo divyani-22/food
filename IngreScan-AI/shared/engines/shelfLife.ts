@@ -522,7 +522,7 @@ export const SHELF_LIFE_TABLE: readonly ShelfLifeEntry[] = [
     opened: { fridge: 3, pantry: 1 },
     note: "Opened fizzy drinks go flat within days.",
   }),
-  E("water_bottled", "Beverages", "pantry", "medium", { pantry: 365 }, ["bottled water", "mineral water", "drinking water", "packaged water", "packaged drinking water", "bisleri", "aquafina", "kinley", "bisleri water", "aquafina water", "kinley water", "spring water", "alkaline water", "himalayan water", "evian"], {
+  E("water_bottled", "Beverages", "pantry", "medium", { pantry: 365 }, ["bottled water", "mineral water", "drinking water", "packaged drinking water", "bisleri", "aquafina", "kinley", "bisleri water", "aquafina water", "kinley water", "spring water", "alkaline water", "himalayan water", "evian"], {
     opened: { fridge: 3, pantry: 1 },
     note: "The date on the bottle takes precedence; once opened, drink within a few days.",
   }),
@@ -620,6 +620,13 @@ const ABBREVIATIONS: Readonly<Record<string, string>> = {
   paner: "paneer",
   panir: "paneer",
   dhai: "dahi",
+  lrg: "large",
+  lg: "large",
+  sm: "small",
+  med: "medium",
+  dz: "dozen",
+  ww: "whole wheat",
+  wholemeal: "whole wheat",
 };
 
 const FROZEN_TOKENS = new Set(["frozen", "freezer", "deepfrozen"]);
@@ -636,7 +643,7 @@ const NOISE = new Set([
   "tin", "jar", "box", "tub", "tray", "carton", "tetra", "tetrapak", "combo", "offer", "new", "value", "each", "ea", "pc",
   "pcs", "unit", "nos", "no", "mrp", "rs", "inr", "approx", "net", "wt", "flavour", "flavor", "flavoured", "flavored",
   "style", "size", "qty", "quantity", "x", "ltr", "kg", "gm", "gms", "g", "ml", "l", "oz", "lb", "lbs", "gram", "grams",
-  "litre", "liter", "litres", "liters", "dozen", "doz", "ct", "count", "pieces", "piece", "ready", "special", "best",
+  "litre", "liter", "litres", "liters", "gallon", "gal", "quart", "qt", "pint", "pt", "fl", "dozen", "doz", "ct", "count", "pieces", "piece", "ready", "special", "best",
   "taaza", "tazza", "shakti", "gold", "brand", "super", "ultra", "mega", "max", "plus", "fresho", "premium", "select",
   "selects", "choice", "classic", "signature", "everyday", "essential", "essentials", "daily", "farm", "homestyle",
   "amul", "nestle", "britannia", "parle", "haldiram", "haldirams", "aashirvaad", "tata", "sampann", "patanjali", "mdh",
@@ -665,7 +672,7 @@ const SOFT_TRAILING = new Set<string>([
   "langra", "dasheri", "shimla", "fuji", "gala", "royal", "granny", "smith", "baby", "bunch", "halves", "half", "loaf",
   "slice", "fillet", "stick", "block", "wedge", "cube", "cooked", "frozen", "opened", "leaf", "green", "greens", "wheat", "multigrain",
   "seeded", "grain", "pro", "nature", "mixed", "dry", "dried", "instant", "ground", "powdered", "roasted", "salted",
-  "unsalted", "sprouted", "split", "polished", "unpolished", "refined", "unrefined", "ordinary",
+  "unsalted", "sprouted", "split", "polished", "unpolished", "refined", "unrefined", "ordinary", "mature", "mild", "strong", "vintage", "fillet", "steak_cut",
 ]);
 
 const IRREGULAR_SINGULAR: Readonly<Record<string, string>> = {
@@ -720,8 +727,7 @@ const IRREGULAR_SINGULAR: Readonly<Record<string, string>> = {
 
 export function singularizeToken(t: string): string {
   if (t.length <= 3) return t;
-  const irr = IRREGULAR_SINGULAR[t];
-  if (irr !== undefined) return irr;
+  if (Object.prototype.hasOwnProperty.call(IRREGULAR_SINGULAR, t)) return IRREGULAR_SINGULAR[t];
   if (t.endsWith("ies") && t.length > 4) return t.slice(0, -3) + "y";
   if (/(ches|shes|xes|sses|zes)$/.test(t)) return t.slice(0, -2);
   if (t.endsWith("oes")) return t.slice(0, -2);
@@ -766,8 +772,11 @@ const SIZE_REGEXES: readonly RegExp[] = [
   /\b\d+\s*x\b/g,
 ];
 
+/** Combining diacritical marks U+0300..U+036F, built from code points to keep the source pure ASCII. */
+const COMBINING_MARKS = new RegExp("[" + String.fromCharCode(0x300) + "-" + String.fromCharCode(0x36f) + "]", "g");
+
 function foldAscii(s: string): string {
-  return s.normalize("NFKD").replace(/[̀-ͯ]/g, "");
+  return s.normalize("NFKD").replace(COMBINING_MARKS, "");
 }
 
 export interface NormalizedName {
@@ -790,7 +799,7 @@ export function normalizeFoodName(raw: unknown): NormalizedName {
   let openedHint = false;
   const out: string[] = [];
   for (const t0 of rawTokens) {
-    let parts = [ABBREVIATIONS[t0] ?? t0];
+    let parts = [Object.prototype.hasOwnProperty.call(ABBREVIATIONS, t0) ? ABBREVIATIONS[t0] : t0];
     if (parts[0].includes(" ")) parts = parts[0].split(" ");
     for (const t of parts) {
       if (FROZEN_TOKENS.has(t)) {
@@ -937,6 +946,10 @@ const FOOD_PHRASE_EXCEPTIONS: readonly string[] = [
   "wheel of cheese", "surf clam",
 ];
 
+const normPhrase = (p: string): string => p.split(" ").map(singularizeToken).join(" ");
+const NON_FOOD_PHRASES_N: string[] = NON_FOOD_PHRASES.map(normPhrase);
+const FOOD_PHRASE_EXCEPTIONS_N: string[] = FOOD_PHRASE_EXCEPTIONS.map(normPhrase);
+
 function containsPhrase(joined: string, phrase: string): boolean {
   return (" " + joined + " ").includes(" " + phrase + " ");
 }
@@ -953,15 +966,15 @@ export function classifyFoodItem(name: unknown): "food" | "non_food" | "unknown"
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
   if (!text) return "unknown";
-  let probe = " " + text + " ";
-  for (const ex of FOOD_PHRASE_EXCEPTIONS) {
+  let probe = " " + text.split(" ").map(singularizeToken).join(" ") + " ";
+  for (const ex of FOOD_PHRASE_EXCEPTIONS_N) {
     probe = probe.split(" " + ex + " ").join(" ");
   }
   probe = probe.trim();
-  for (const ph of NON_FOOD_PHRASES) {
+  for (const ph of NON_FOOD_PHRASES_N) {
     if (containsPhrase(probe, ph)) return "non_food";
   }
-  const toks = probe.split(" ").filter(Boolean).map(singularizeToken);
+  const toks = probe.split(" ").filter(Boolean);
   for (const t of toks) {
     if (NON_FOOD_STRONG.has(t)) return "non_food";
   }

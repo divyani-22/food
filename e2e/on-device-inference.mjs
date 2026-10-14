@@ -7,7 +7,7 @@
 // Run from the repo root:  node e2e/on-device-inference.mjs
 //
 // Env: BASE_URL (default http://localhost:3102), FLASK_URL (default http://127.0.0.1:5102), JWT_SECRET, VITE_APP_ID,
-//      E2E_DB (MariaDB database holding the web app users, default ingrescan_b), MAX_P_FRESH_DIFF (default 1.5)
+//      E2E_WEBGPU=1 (expose a software WebGPU adapter), E2E_DB (MariaDB database holding the web app users, default ingrescan_b), MAX_P_FRESH_DIFF (default 1.5)
 import { chromium } from "playwright";
 import { createRequire } from "module";
 import { execSync } from "child_process";
@@ -91,6 +91,9 @@ async function serverResult(file) {
 
 const launchArgs = ["--ignore-certificate-errors"];
 if (process.env.HTTPS_PROXY) launchArgs.push(`--proxy-server=${process.env.HTTPS_PROXY}`, "--proxy-bypass-list=localhost;127.0.0.1");
+// E2E_WEBGPU=1 exposes Chromium's software (SwiftShader) WebGPU adapter. That exercises the WebGPU code path, but it is
+// NOT a real GPU: it proves the wiring and parity, not GPU performance.
+if (process.env.E2E_WEBGPU === "1") launchArgs.push("--enable-unsafe-webgpu");
 const browser = await chromium.launch({ args: launchArgs });
 
 async function newSession() {
@@ -210,7 +213,13 @@ check("Offline: still no predict requests", A.log.predict.length === 0);
   check("Inspection works after a cache-only reload", r.fruit === "tomato", `${r.fruit} ${r.freshness}`);
   await A.page.unroute(/\/(models\/freshguard\.onnx|ort\/[^/]+\.wasm)/);
 }
-check("No console/page errors in the on-device session", A.log.console.length === 0 && A.log.pageErrors.length === 0, [...A.log.console, ...A.log.pageErrors].join(" | ").slice(0, 300));
+{
+  // While the network is cut, the app's own tRPC queries (auth, history) legitimately fail to fetch; those are not
+  // part of the inspection, so they are excluded. Anything else counts.
+  const offlineNoise = /API Query Error\] TRPCClientError: Failed to fetch|ERR_INTERNET_DISCONNECTED/;
+  const errs = [...A.log.console.filter((m) => !offlineNoise.test(m)), ...A.log.pageErrors];
+  check("No unexpected console/page errors in the on-device session", errs.length === 0, errs.join(" | ").slice(0, 300));
+}
 
 // =====================================================================================
 // 3. Manual switch to the server and persistence of the preference

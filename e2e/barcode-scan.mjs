@@ -106,6 +106,8 @@ const launchArgs = (extra = []) => {
   if (process.env.HTTPS_PROXY) a.push(`--proxy-server=${process.env.HTTPS_PROXY}`, "--proxy-bypass-list=localhost;127.0.0.1;192.0.2.2");
   return a;
 };
+const UPLOADS = path.join(APP_DIR, "uploads");
+const uploadsBefore = new Set(fs.existsSync(UPLOADS) ? fs.readdirSync(UPLOADS) : []);
 const results = [];
 const consoleErrors = [];
 let currentStep = "setup";
@@ -137,6 +139,8 @@ const mark = () => trpcCalls.length;
 const callsSince = (i, needle) => trpcCalls.slice(i).filter((u) => u.includes(needle)).length;
 
 const openScanner = async (tab) => {
+  // let the previous page finish its queries so navigating away does not abort them (that logs "Failed to fetch")
+  await page.waitForLoadState("networkidle").catch(() => undefined);
   await page.goto(`${BASE}/scanner`, { waitUntil: "domcontentloaded" });
   await page.getByRole("tab", { name: tab }).click();
 };
@@ -229,24 +233,28 @@ await step("Barcode mode: OFF outage is distinct from not-found and is not cache
 });
 
 // ---------------------------------------------------------------- 4. checksum handling
-await step("Bad-checksum photo: zxing reports a detected-but-unreadable barcode instead of ignoring it; no lookup happens", async () => {
+await step("Bad-checksum photo: digits are read, warning shown, no lookup until the user confirms", async () => {
   await openScanner(/Barcode/);
   await uploadBarcodePhoto("ean13-bad-checksum.png");
-  const m = page.locator('[data-testid="barcode-photo-message"]');
-  await m.waitFor({ timeout: 90000 });
-  const t = await m.innerText();
-  expect(/barcode was detected/.test(t) && /check digit/.test(t), "warning wording: " + t);
-  expect(!stub.hits["4006381333932"], "no OFF request for an unverified code");
-  expect((await page.locator('[data-testid="barcode-result"]').count()) === 0, "no product result shown");
+  const w = page.locator('[data-testid="barcode-pending-invalid"]');
+  await w.waitFor({ timeout: 60000 });
+  const t = await w.innerText();
+  expect(/4006381333932/.test(t) && /check digit/i.test(t), "warning names the code: " + t);
+  expect(!stub.hits["4006381333932"], "no OFF request before confirmation");
+  expect((await page.locator('[data-testid="barcode-manual-input"]').inputValue()) === "4006381333932", "number copied to the editable field");
+  await w.getByRole("button", { name: "Look up anyway" }).click();
+  await page.locator('[data-testid="barcode-checksum-warning"]').waitFor({ timeout: 30000 });
+  await page.locator('[data-testid="barcode-not-found"]').waitFor({ timeout: 30000 });
+  expect(stub.hits["4006381333932"] === 1, "one OFF request after confirmation");
 });
 await step("Typed bad-checksum code: warning, then explicit 'Look up anyway' performs the lookup", async () => {
   await openScanner(/Barcode/);
-  await page.locator('[data-testid="barcode-manual-input"]').fill("4006381333932");
-  expect(!stub.hits["4006381333932"], "no lookup while typing");
+  await page.locator('[data-testid="barcode-manual-input"]').fill("3017620422004");
+  expect(!stub.hits["3017620422004"], "no lookup while typing");
   await page.locator('[data-testid="barcode-manual-submit"]').click();
   await page.locator('[data-testid="barcode-checksum-warning"]').waitFor({ timeout: 30000 });
   await page.locator('[data-testid="barcode-not-found"]').waitFor({ timeout: 30000 });
-  expect(stub.hits["4006381333932"] === 1, "one OFF request after confirmation: " + stub.hits["4006381333932"]);
+  expect(stub.hits["3017620422004"] === 1, "one OFF request after confirmation: " + stub.hits["3017620422004"]);
 });
 await step("Manual entry: live checksum feedback and explicit confirmation", async () => {
   await openScanner(/Barcode/);
@@ -427,10 +435,17 @@ await step("Insecure context (non-localhost http): explains that the camera need
 });
 
 // ---------------------------------------------------------------- report
-const unexpected = consoleErrors.filter((e) => !/503|404|Failed to load resource|Open Food Facts/.test(e));
+const unexpected = consoleErrors.filter((e) => !/503|404|Failed to load resource|Open Food Facts|TRPCClientError: Failed to fetch/.test(e));
+// ("Failed to fetch" above = an in-flight query aborted by our own page.goto, not an app error)
 await step("No unexpected console errors", async () => { expect(unexpected.length === 0, unexpected.slice(0, 3).join(" | ")); });
 
 await browser.close();
+// The OCR-path steps upload label photos through the real app; remove exactly the files this run created.
+if (fs.existsSync(UPLOADS)) {
+  for (const f of fs.readdirSync(UPLOADS)) {
+    if (!uploadsBefore.has(f) && /\.(png|jpe?g)$/i.test(f)) fs.rmSync(path.join(UPLOADS, f), { force: true });
+  }
+}
 stubServer.close();
 stopApp();
 console.log("\n=== barcode-scan e2e ===");

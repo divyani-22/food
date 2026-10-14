@@ -275,9 +275,11 @@ export function buildRescuePrompt(
 
 function balancedSlices(text: string, max = 6): string[] {
   const out: string[] = [];
-  for (let i = 0; i < text.length && out.length < max; i++) {
+  let attempts = 0;
+  for (let i = 0; i < text.length && out.length < max && attempts < 40; i++) {
     const open = text[i];
     if (open !== "{" && open !== "[") continue;
+    attempts++;
     const close = open === "{" ? "}" : "]";
     let depth = 0;
     let inStr = false;
@@ -389,7 +391,7 @@ function toParsed(raw: unknown): ParsedRecipe | null {
 /** Tolerant parser: fenced JSON, prose around JSON, a bare array, a single recipe, missing fields. */
 export function parseRescueRecipes(llmText: string): ParsedRecipe[] {
   if (typeof llmText !== "string" || !llmText.trim()) return [];
-  const text = llmText.slice(0, 200_000);
+  const text = llmText.slice(0, 100_000);
   const candidates: string[] = [];
   const fence = /```(?:json|JSON)?\s*([\s\S]*?)```/g;
   let m: RegExpExecArray | null;
@@ -603,19 +605,19 @@ const TEMPLATES: Template[] = [
       "Make small wells in the sauce, crack in the eggs, cover and cook 4 to 5 minutes until the whites are fully set.",
       "Season and serve straight from the pan.",
     ],
-    tip: "Serve with bread or cooked rice if you have some.",
+    tip: "Serve with cooked rice or a side of your choice.",
     safety: "Cook eggs until the whites are fully set and the yolks are not runny.",
   },
   {
     id: "tomato_sauce", title: "Quick tomato sauce", time: 15, servings: 2,
     need: [{ any: ["tomato"] }],
     opt: { onion: { extra: null } },
-    extras: ["oil", "garlic", "salt", "pepper", "bread, toast or cooked rice to serve"],
+    extras: ["oil", "garlic", "salt", "pepper"],
     steps: [
       "Chop the tomatoes and the onion if using.",
       "Heat oil in a pan, soften the onion for 3 minutes, then add the garlic for 30 seconds.",
       "Add the tomatoes and a pinch of salt and simmer partly covered for 8 to 10 minutes, mashing as they soften.",
-      "Season to taste and spoon over toast, rice or pasta cooked separately.",
+      "Season to taste and serve over cooked rice, vegetables or a side of your choice.",
     ],
     tip: "Cool leftover sauce quickly and keep it in the fridge for no more than 2 days.",
   },
@@ -636,10 +638,10 @@ const TEMPLATES: Template[] = [
   {
     id: "french_toast", title: "Savoury or sweet French toast", time: 12, servings: 2,
     need: [{ any: ["bread"] }],
-    opt: { egg: { extra: "2 eggs", essential: true }, milk: { extra: "plant milk or water (1/4 cup)" } },
+    opt: { egg: { extra: "2 eggs", essential: true }, milk: { extra: "water or a plant-based drink (1/4 cup)" } },
     extras: ["oil", "cinnamon or black pepper"],
     steps: [
-      "Beat the eggs with the milk and a pinch of cinnamon or pepper in a shallow dish.",
+      "Beat the eggs with the liquid and a pinch of cinnamon or pepper in a shallow dish.",
       "Dip each bread slice for about 10 seconds per side.",
       "Cook in a lightly oiled pan over medium heat for 2 to 3 minutes per side until golden and no wet egg shows.",
       "Serve warm.",
@@ -689,9 +691,22 @@ const TEMPLATES: Template[] = [
     highCarb: true,
   },
   {
+    id: "avocado_mash", title: "Smashed avocado", time: 5, servings: 1,
+    need: [{ any: ["avocado"] }],
+    opt: { bread: { extra: null }, tomato: { extra: null } },
+    extras: ["lemon juice", "salt", "pepper"],
+    steps: [
+      "Halve the avocado, remove the stone and scoop the flesh into a bowl.",
+      "Mash with lemon juice, salt and pepper.",
+      "Serve with chopped tomato or vegetable sticks.",
+      "[bread] Or spread it on toasted bread.",
+    ],
+    tip: "Lemon juice slows browning if you need to keep it for a short while.",
+  },
+  {
     id: "fruit_smoothie", title: "Rescue fruit smoothie", time: 5, servings: 1,
     need: [{ any: FRUIT_SET }],
-    opt: { milk: { extra: "plant milk or water (1 cup)" }, yogurt: { extra: null } },
+    opt: { milk: { extra: "water or a plant-based drink (1 cup)" }, yogurt: { extra: null } },
     extras: [],
     steps: [
       "Peel and chop the fruit, removing any stones and seeds.",
@@ -715,18 +730,6 @@ const TEMPLATES: Template[] = [
     ],
     tip: "No added sugar is needed when the fruit is ripe.",
     highCarb: true,
-  },
-  {
-    id: "avocado_mash", title: "Smashed avocado", time: 5, servings: 1,
-    need: [{ any: ["avocado"] }],
-    opt: { bread: { extra: null }, tomato: { extra: null } },
-    extras: ["lemon juice", "salt", "pepper"],
-    steps: [
-      "Halve the avocado, remove the stone and scoop the flesh into a bowl.",
-      "Mash with lemon juice, salt and pepper.",
-      "Spread on toasted bread, or serve with chopped tomato.",
-    ],
-    tip: "Lemon juice slows browning if you need to keep it for a short while.",
   },
   {
     id: "greens_saute", title: "Garlic sauteed greens", time: 8, servings: 2,
@@ -789,7 +792,7 @@ const TEMPLATES: Template[] = [
       "Whisk the yogurt until smooth and fold in the vegetables.",
       "Season with salt and cumin and serve chilled.",
     ],
-    tip: "It goes well with rice, flatbreads or spicy dishes.",
+    tip: "It goes well with rice or spicy dishes.",
     safety: "Keep it cold and eat it the same day.",
   },
   {
@@ -922,19 +925,9 @@ export function fallbackRescueRecipes(
         extras.push(o.extra);
       }
     }
-    // Drop optional used items that conflict; skip the template if a required piece conflicts.
-    const requiredTitles = tpl.need.flatMap((n) => n.any.flatMap((c) => (byCanon.get(c) ?? []).map((i) => i.title)));
-    const kept: RescueItem[] = [];
-    let blocked = false;
-    for (const it of used) {
-      const conflict = findHardConflicts([it.title], ctx).length > 0;
-      if (conflict) {
-        if (requiredTitles.includes(it.title) && tpl.need.length === 1 && tpl.need[0].any.length === 1) blocked = true;
-        else if (requiredTitles.includes(it.title)) continue;
-        else continue;
-      } else kept.push(it);
-    }
-    if (blocked || kept.length === 0) continue;
+    // Drop conflicting items; the requirement check below rejects the template if a required one was lost.
+    const kept = used.filter((it) => findHardConflicts([it.title], ctx).length === 0);
+    if (kept.length === 0) continue;
     // Required groups must still be satisfied after dropping conflicting items.
     const keptKinds = new Set(kept.map((i) => canonicalRescueItem(i)));
     if (!tpl.need.every((n) => n.any.filter((c) => keptKinds.has(c)).length >= (n.min ?? 1))) continue;
@@ -956,7 +949,9 @@ export function fallbackRescueRecipes(
         servings: tpl.servings,
         usesItems: kept.map((i) => i.title),
         extraPantryItems: finalExtras.slice(0, 8),
-        steps: tpl.steps,
+        steps: tpl.steps
+          .filter((st) => !st.startsWith("[bread] ") || kept.some((i) => canonicalRescueItem(i) === "bread"))
+          .map((st) => st.replace(/^\[bread\] /, "")),
         tip: tpl.tip,
         safetyNote: tpl.safety ? `${tpl.safety} ${RESCUE_SAFETY_NOTE}` : RESCUE_SAFETY_NOTE,
         source: "offline",

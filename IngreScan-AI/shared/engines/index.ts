@@ -59,3 +59,72 @@ export type {
   RescueResult,
   RescueDietType,
 } from "./rescue";
+
+export {
+  SHELF_LIFE_TABLE,
+  estimateShelfLife,
+  classifyFoodItem,
+  isFoodItem,
+  addDaysIso,
+  getShelfLifeEntry,
+  listShelfLifeKeys,
+  normalizeFoodName,
+} from "./shelfLife";
+export type {
+  ShelfLifeLocation,
+  ShelfLifeConfidence,
+  ShelfLifeCategory,
+  ShelfLifeDays,
+  ShelfLifeEntry,
+  ShelfLifeOptions,
+  ShelfLifeEstimate,
+} from "./shelfLife";
+
+export {
+  MAX_RECEIPT_ITEMS,
+  RECEIPT_EXTRACTION_PROMPT,
+  parseReceiptText,
+  buildReceiptExtractionMessages,
+  sanitizeReceiptItems,
+  enrichReceiptItems,
+  normalizeReceiptUnit,
+  toSafeAscii,
+} from "./receiptParser";
+export type {
+  ReceiptSkipReason,
+  ReceiptUnit,
+  ParsedReceiptItem,
+  SkippedReceiptLine,
+  ParsedReceipt,
+  ParseReceiptOptions,
+  ReceiptExtractionMessage,
+  SanitizedReceiptItem,
+  SanitizeReceiptResult,
+} from "./receiptParser";
+
+export {
+  DEFAULT_QC_THRESHOLDS,
+  DEFAULT_QC_ACCEPTANCE,
+  gradePhoto,
+  summarizeBatch,
+  vendorScorecard,
+  toCsv,
+  csvCell,
+  batchReportCsv,
+  batchPhotosCsv,
+  vendorScorecardCsv,
+} from "./qcGrading";
+export type {
+  QcGrade,
+  QcVerdict,
+  QcPhotoInput,
+  QcThresholds,
+  QcAcceptance,
+  QcPhotoGrade,
+  QcCounts,
+  QcBatchSummary,
+  SummarizeBatchOptions,
+  QcTrend,
+  VendorScore,
+  VendorScorecard,
+} from "./qcGrading";

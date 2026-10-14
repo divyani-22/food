@@ -54,6 +54,8 @@ export interface ProduceClassification {
   confidence: number;
   freshnessStatus: FreshnessStatus;
   shelfLifeDays: number;
+  /** Probability (0-100) that the item is fresh, as returned by the Flask service. */
+  pFresh?: number;
   storageTip?: string;
   cookingTip?: string;
 }
@@ -66,6 +68,11 @@ export type ImageInterpretation =
 export interface PackagedReport {
   productName: string;
   brand?: string;
+  /**
+   * True when the product is known but has no ingredient list, so no risk score can be computed.
+   * riskScore is then ignored and the user is asked for a label photo instead.
+   */
+  noIngredientData?: boolean;
   /** 0-100. Higher means riskier. */
   riskScore: number;
   highRiskAdditives: string[];
@@ -92,6 +99,7 @@ export interface NewPantryItem {
   source: string;
   freshnessStatus?: FreshnessStatus;
   confidence?: number;
+  pFresh?: number;
   storageTip?: string;
 }
 

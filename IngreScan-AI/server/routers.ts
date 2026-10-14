@@ -2,6 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
+import { insightsRouter, rescueRouter, whatsappRouter } from "./featureRouters";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
@@ -801,6 +802,11 @@ Be helpful, accurate, educational, and personalized to the user's health profile
   }),
 
   // ============= Open Food Facts Router =============
+  // Pantry intelligence (ethylene alerts, personal health alerts), rescue recipes and the WhatsApp link.
+  insights: insightsRouter,
+  rescue: rescueRouter,
+  whatsapp: whatsappRouter,
+
   openFoodFacts: router({
     getByBarcode: publicProcedure
       .input(z.object({ barcode: z.string().max(64) }))

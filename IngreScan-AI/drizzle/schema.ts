@@ -31,6 +31,7 @@ export const userProfiles = mysqlTable("user_profiles", {
   bmi: float("bmi"),
   exerciseFrequency: mysqlEnum("exercise_frequency", ["sedentary", "light", "moderate", "active", "very_active"]),
   dietType: mysqlEnum("diet_type", ["veg", "non_veg", "vegan", "keto", "other"]),
+  region: varchar("region", { length: 64 }), // country/city used to suggest locally available brands
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, t => ({
@@ -132,6 +133,7 @@ export const alternatives = mysqlTable("alternatives", {
   id: int("id").autoincrement().primaryKey(),
   scanId: int("scan_id").notNull().references(() => foodScans.id, { onDelete: "cascade" }),
   productName: varchar("product_name", { length: 255 }).notNull(),
+  brand: varchar("brand", { length: 255 }), // specific commercial brand when the model can name one
   reason: text("reason").notNull(),
   scientificJustification: text("scientific_justification"),
   sources: text("sources"), // JSON array
@@ -247,3 +249,99 @@ export const produceInventory = mysqlTable("produce_inventory", {
 
 export type ProduceInventoryItem = typeof produceInventory.$inferSelect;
 export type InsertProduceInventoryItem = typeof produceInventory.$inferInsert;
+
+/**
+ * WhatsApp bot: account link (phone <-> user), one-time link codes, conversation state, webhook de-duplication.
+ */
+export const whatsappLinks = mysqlTable("whatsapp_links", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull(),
+  phone: varchar("phone", { length: 20 }).notNull(), // E.164, e.g. +919876543210
+  timezone: varchar("timezone", { length: 64 }).default("UTC").notNull(),
+  reminderHour: int("reminder_hour").default(9).notNull(),
+  remindersEnabled: boolean("reminders_enabled").default(true).notNull(),
+  lastInboundAt: timestamp("last_inbound_at"),
+  lastReminderLocalDate: varchar("last_reminder_local_date", { length: 10 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, t => ({
+  userUnique: uniqueIndex("whatsapp_links_user_id_unique").on(t.userId),
+  phoneUnique: uniqueIndex("whatsapp_links_phone_unique").on(t.phone),
+}));
+
+export type WhatsappLink = typeof whatsappLinks.$inferSelect;
+export type InsertWhatsappLink = typeof whatsappLinks.$inferInsert;
+
+export const whatsappLinkCodes = mysqlTable("whatsapp_link_codes", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull(),
+  codeHash: varchar("code_hash", { length: 64 }).notNull(),
+  salt: varchar("salt", { length: 32 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  attempts: int("attempts").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, t => ({
+  userIdx: index("whatsapp_link_codes_user_id_idx").on(t.userId),
+}));
+
+export type WhatsappLinkCode = typeof whatsappLinkCodes.$inferSelect;
+
+export const whatsappState = mysqlTable("whatsapp_state", {
+  id: int("id").autoincrement().primaryKey(),
+  phone: varchar("phone", { length: 20 }).notNull(),
+  state: text("state").notNull(), // JSON conversation state (pending ADD, CLEAR choice, ...)
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, t => ({
+  phoneUnique: uniqueIndex("whatsapp_state_phone_unique").on(t.phone),
+}));
+
+export const whatsappSeen = mysqlTable("whatsapp_seen", {
+  id: int("id").autoincrement().primaryKey(),
+  provider: varchar("provider", { length: 16 }).notNull(),
+  messageId: varchar("message_id", { length: 128 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, t => ({
+  messageUnique: uniqueIndex("whatsapp_seen_provider_message_unique").on(t.provider, t.messageId),
+}));
+
+/**
+ * B2B incoming-produce quality control: a batch of crate photos graded A / B / REVIEW / REJECT.
+ */
+export const qcBatches = mysqlTable("qc_batches", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull(),
+  vendor: varchar("vendor", { length: 120 }).notNull(),
+  lotId: varchar("lot_id", { length: 80 }),
+  notes: text("notes"),
+  verdict: varchar("verdict", { length: 32 }).notNull(),
+  total: int("total").notNull(),
+  gradeA: int("grade_a").default(0).notNull(),
+  gradeB: int("grade_b").default(0).notNull(),
+  gradeReview: int("grade_review").default(0).notNull(),
+  gradeReject: int("grade_reject").default(0).notNull(),
+  meanPFresh: float("mean_p_fresh").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, t => ({
+  userIdx: index("qc_batches_user_id_idx").on(t.userId, t.createdAt),
+}));
+
+export type QcBatch = typeof qcBatches.$inferSelect;
+export type InsertQcBatch = typeof qcBatches.$inferInsert;
+
+export const qcItems = mysqlTable("qc_items", {
+  id: int("id").autoincrement().primaryKey(),
+  batchId: int("batch_id").notNull().references(() => qcBatches.id, { onDelete: "cascade" }),
+  label: varchar("label", { length: 160 }), // original file name or crate id
+  fruitType: varchar("fruit_type", { length: 64 }).notNull(),
+  freshness: mysqlEnum("freshness", ["fresh", "normal", "rotten"]).notNull(),
+  pFresh: float("p_fresh").notNull(),
+  confidence: float("confidence").notNull(),
+  grade: varchar("grade", { length: 8 }).notNull(),
+  reasons: text("reasons"), // JSON array of short strings
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, t => ({
+  batchIdx: index("qc_items_batch_id_idx").on(t.batchId),
+}));
+
+export type QcItem = typeof qcItems.$inferSelect;
+export type InsertQcItem = typeof qcItems.$inferInsert;

@@ -260,6 +260,7 @@ async function handlePhoto(ctx: Ctx, link: LinkRecord): Promise<void> {
           source: "whatsapp_photo",
           freshnessStatus: result.freshnessStatus,
           confidence: result.confidence,
+          pFresh: result.pFresh,
           storageTip: result.storageTip,
           shelfLifeDays: result.shelfLifeDays,
         },

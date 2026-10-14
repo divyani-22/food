@@ -43,6 +43,13 @@
       "when": 1791955144871,
       "tag": "0005_shiny_squirrel_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1791956991337,
+      "tag": "0006_last_liz_osborn",
+      "breakpoints": true
     }
   ]
 }

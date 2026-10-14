@@ -29,7 +29,13 @@ function ortWasmAssets(): Plugin {
         fs.createReadStream(file).pipe(res);
       });
     },
-    generateBundle() {
+    generateBundle(_options, bundle) {
+      // The ORT bundles reference these files through `new URL(..., import.meta.url)`, which makes Vite emit
+      // hashed copies under assets/. The app always passes the binary itself (wasmBinary), so the copies are
+      // dead weight (about 42 MB); keep only the stable /ort/ ones.
+      for (const key of Object.keys(bundle)) {
+        if (/^assets\/ort-wasm-simd-threaded.*\.wasm$/.test(key)) delete bundle[key];
+      }
       for (const name of files) {
         const file = path.join(distDir, name);
         if (!fs.existsSync(file)) {

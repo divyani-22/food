@@ -200,3 +200,21 @@ describe("no emoji by default", () => {
     expect(produceReport({ fruit: "A", confidence: 80, freshnessStatus: "fresh", shelfLifeDays: 2 }, { useEmoji: true })).toMatch(EMOJI);
   });
 });
+
+describe("packagedReport without ingredient data", () => {
+  it("asks for a label photo instead of showing a score", () => {
+    const text = packagedReport({
+      productName: "Mystery Biscuit",
+      brand: "Acme",
+      riskScore: 0,
+      highRiskAdditives: [],
+      allergens: ["gluten"],
+      personalAlerts: [],
+      noIngredientData: true,
+    });
+    expect(text).toContain("PRODUCT FOUND");
+    expect(text).toContain("cannot calculate a risk score");
+    expect(text).toContain("Allergens listed: gluten");
+    expect(text).not.toMatch(/Risk score|\d+\/100/);
+  });
+});

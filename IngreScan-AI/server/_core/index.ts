@@ -9,6 +9,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { registerWhatsappRoutes, startReminderScheduler } from "../whatsappRuntime";
 import { createRateLimiter } from "./rateLimit";
 import { assertRuntimeConfig } from "./env";
 import { initDatabase } from "./database";
@@ -38,6 +39,9 @@ async function startServer() {
   await initDatabase();
   const app = express();
   const server = createServer(app);
+  // WhatsApp webhooks need the exact raw request bytes for signature checks, so they are mounted
+  // BEFORE the JSON/urlencoded body parsers below.
+  registerWhatsappRoutes(app);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -135,6 +139,7 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    startReminderScheduler();
   });
 }
 

@@ -39,6 +39,7 @@ export const userProfiles = sqliteTable("user_profiles", {
   bmi: real("bmi"),
   exerciseFrequency: text("exercise_frequency", { enum: ["sedentary", "light", "moderate", "active", "very_active"] }),
   dietType: text("diet_type", { enum: ["veg", "non_veg", "vegan", "keto", "other"] }),
+  region: text("region", { length: 64 }), // country/city used to suggest locally available brands
   createdAt: integer("created_at", { mode: "timestamp" }).default(nowSeconds).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).default(nowSeconds).$onUpdate(() => new Date()).notNull(),
 }, t => ({
@@ -110,6 +111,7 @@ export const alternatives = sqliteTable("alternatives", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   scanId: integer("scan_id").notNull().references(() => foodScans.id, { onDelete: "cascade" }),
   productName: text("product_name", { length: 255 }).notNull(),
+  brand: text("brand", { length: 255 }), // specific commercial brand when the model can name one
   reason: text("reason").notNull(),
   scientificJustification: text("scientific_justification"),
   sources: text("sources"), // JSON array
@@ -194,3 +196,95 @@ export const produceInventory = sqliteTable("produce_inventory", {
 }, t => ({
   userIdx: index("produce_inventory_user_id_idx").on(t.userId),
 }));
+
+// ---- WhatsApp bot: account link, one-time link codes, conversation state, webhook de-duplication ----
+export const whatsappLinks = sqliteTable("whatsapp_links", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull(),
+  phone: text("phone", { length: 20 }).notNull(), // E.164, e.g. +919876543210
+  timezone: text("timezone", { length: 64 }).default("UTC").notNull(),
+  reminderHour: integer("reminder_hour").default(9).notNull(),
+  remindersEnabled: integer("reminders_enabled", { mode: "boolean" }).default(true).notNull(),
+  lastInboundAt: integer("last_inbound_at", { mode: "timestamp" }),
+  lastReminderLocalDate: text("last_reminder_local_date", { length: 10 }),
+  createdAt: integer("created_at", { mode: "timestamp" }).default(nowSeconds).notNull(),
+}, t => ({
+  userUnique: uniqueIndex("whatsapp_links_user_id_unique").on(t.userId),
+  phoneUnique: uniqueIndex("whatsapp_links_phone_unique").on(t.phone),
+}));
+
+export type WhatsappLink = typeof whatsappLinks.$inferSelect;
+export type InsertWhatsappLink = typeof whatsappLinks.$inferInsert;
+
+export const whatsappLinkCodes = sqliteTable("whatsapp_link_codes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull(),
+  codeHash: text("code_hash", { length: 64 }).notNull(),
+  salt: text("salt", { length: 32 }).notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  usedAt: integer("used_at", { mode: "timestamp" }),
+  attempts: integer("attempts").default(0).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).default(nowSeconds).notNull(),
+}, t => ({
+  userIdx: index("whatsapp_link_codes_user_id_idx").on(t.userId),
+}));
+
+export type WhatsappLinkCode = typeof whatsappLinkCodes.$inferSelect;
+
+export const whatsappState = sqliteTable("whatsapp_state", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  phone: text("phone", { length: 20 }).notNull(),
+  state: text("state").notNull(), // JSON conversation state (pending ADD, CLEAR choice, ...)
+  updatedAt: integer("updated_at", { mode: "timestamp" }).default(nowSeconds).$onUpdate(() => new Date()).notNull(),
+}, t => ({
+  phoneUnique: uniqueIndex("whatsapp_state_phone_unique").on(t.phone),
+}));
+
+export const whatsappSeen = sqliteTable("whatsapp_seen", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  provider: text("provider", { length: 16 }).notNull(),
+  messageId: text("message_id", { length: 128 }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).default(nowSeconds).notNull(),
+}, t => ({
+  messageUnique: uniqueIndex("whatsapp_seen_provider_message_unique").on(t.provider, t.messageId),
+}));
+
+// ---- B2B incoming-produce quality control ----
+export const qcBatches = sqliteTable("qc_batches", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull(),
+  vendor: text("vendor", { length: 120 }).notNull(),
+  lotId: text("lot_id", { length: 80 }),
+  notes: text("notes"),
+  verdict: text("verdict", { length: 32 }).notNull(),
+  total: integer("total").notNull(),
+  gradeA: integer("grade_a").default(0).notNull(),
+  gradeB: integer("grade_b").default(0).notNull(),
+  gradeReview: integer("grade_review").default(0).notNull(),
+  gradeReject: integer("grade_reject").default(0).notNull(),
+  meanPFresh: real("mean_p_fresh").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).default(nowSeconds).notNull(),
+}, t => ({
+  userIdx: index("qc_batches_user_id_idx").on(t.userId, t.createdAt),
+}));
+
+export type QcBatch = typeof qcBatches.$inferSelect;
+export type InsertQcBatch = typeof qcBatches.$inferInsert;
+
+export const qcItems = sqliteTable("qc_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  batchId: integer("batch_id").notNull().references(() => qcBatches.id, { onDelete: "cascade" }),
+  label: text("label", { length: 160 }), // original file name or crate id
+  fruitType: text("fruit_type", { length: 64 }).notNull(),
+  freshness: text("freshness", { enum: ["fresh", "normal", "rotten"] }).notNull(),
+  pFresh: real("p_fresh").notNull(),
+  confidence: real("confidence").notNull(),
+  grade: text("grade", { length: 8 }).notNull(),
+  reasons: text("reasons"), // JSON array of short strings
+  createdAt: integer("created_at", { mode: "timestamp" }).default(nowSeconds).notNull(),
+}, t => ({
+  batchIdx: index("qc_items_batch_id_idx").on(t.batchId),
+}));
+
+export type QcItem = typeof qcItems.$inferSelect;
+export type InsertQcItem = typeof qcItems.$inferInsert;

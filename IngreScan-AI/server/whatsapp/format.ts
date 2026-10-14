@@ -226,6 +226,17 @@ export function riskLabel(score: number): string {
 }
 
 export function packagedReport(r: PackagedReport, opts?: FormatOptions): string {
+  if (r.noIngredientData) {
+    const lines = [
+      "*PRODUCT FOUND*",
+      `Product: ${escapeWa(r.productName)}${r.brand ? ` (${escapeWa(r.brand, 40)})` : ""}`,
+      "",
+      "This product has no ingredient list in the database, so I cannot calculate a risk score.",
+      "Send a clear photo of the ingredient label, or type the ingredients, and I will analyze them.",
+    ];
+    if (r.allergens.length) lines.push("", `Allergens listed: ${r.allergens.map((a) => escapeWa(a, 30)).join(", ")}`);
+    return lines.join("\n");
+  }
   const score = Math.max(0, Math.min(100, Math.round(r.riskScore)));
   const label = riskLabel(score);
   const kind: MarkerKind = label === "HIGH" ? "bad" : label === "MODERATE" ? "warn" : "ok";

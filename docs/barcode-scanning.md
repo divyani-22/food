@@ -47,11 +47,14 @@ barcode path is stored with `inputType: "text"` (the DB enum has no barcode valu
 * The **server** only rejects malformed input (not 4 to 20 digits returns `null` without calling OFF). It does not
   verify check digits because real OFF data contains some codes with invalid check digits. The **client** shows a
   warning for a bad check digit and only looks the code up after the user presses "Look up anyway".
-* Decoders validate check digits themselves: zxing throws `ChecksumException` when a barcode is found but its check digit
-  fails, and the native detector normally drops such reads. We cannot recover the digits in that case, so the UI
-  reports "a barcode was detected but its check digit does not match" (photo) or a hold-steady hint (live camera,
-  after 4 consecutive failures) instead of silently ignoring it, and offers typed entry. Codes whose digits are known
-  but invalid (typed, or returned by a decoder that does not validate) get the explicit "Look up anyway" button.
+* zxing drops reads whose check digit fails (it swallows the exception per row), so a damaged or wrongly printed code would
+  look like "no barcode". After a failed strict pass, `barcodeDecode.ts` runs a second zxing pass with check-digit
+  verification switched off (a scoped override of the static `checkChecksum` that every EAN/UPC reader calls;
+  `UPCEANReader` is not exported, so it is reached as the parent class of `EAN13Reader`). The digits are then validated
+  by our own `checkBarcode`, shown to the user as "check digit does not match", copied into the editable field, and only
+  looked up after "Look up anyway". In photos a valid read from any preprocessing variant always wins over such a read.
+  On the live camera the lenient pass runs on every 4th frame and a hint appears after the same invalid code is read twice.
+  The native `BarcodeDetector` normally drops such reads, so with it the user just sees no result.
 
 ## Browser support
 

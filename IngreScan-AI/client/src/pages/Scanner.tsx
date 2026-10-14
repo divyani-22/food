@@ -226,8 +226,6 @@ export default function Scanner() {
             setPhotoScan({ code: c.code, lookupCode: c.lookupCode, format: c.format, source: "photo", checksumValid: true });
           } else if (result.status === "invalid" && !result.best.check.ok) {
             setPhotoInvalid({ code: result.best.check.code });
-          } else if (result.status === "checksum_failed") {
-            setPhotoInvalid({ code: null });
           }
         })
         .catch(() => undefined) // detection is best-effort; OCR still works

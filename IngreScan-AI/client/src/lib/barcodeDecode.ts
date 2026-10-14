@@ -43,7 +43,8 @@ export function nativeDetectorAvailable(): boolean {
 type ZxingBits = {
   reader: { decodeFromCanvas(c: HTMLCanvasElement): { getText(): string; getBarcodeFormat(): number } };
   BarcodeFormat: Record<number, string>;
-  ChecksumException: new (...args: any[]) => Error;
+  /** Run `fn` with check-digit verification switched off (synchronous scope). */
+  lenient<T>(fn: () => T): T;
 };
 let zxingPromise: Promise<ZxingBits> | null = null;
 
@@ -60,7 +61,33 @@ function loadZxing(): Promise<ZxingBits> {
       ]);
       hints.set(lib.DecodeHintType.TRY_HARDER, true);
       const reader = new BrowserMultiFormatReader(hints);
-      return { reader: reader as any, BarcodeFormat: lib.BarcodeFormat as any, ChecksumException: lib.ChecksumException as any };
+      // zxing drops reads whose check digit fails (the exception is swallowed per row), so a mistyped or damaged
+      // code looks like "no barcode". To tell the user what was seen, a second pass can run with verification off;
+      // our own checkBarcode() then flags the digits as invalid. UPCEANReader is not exported, but it is the
+      // parent class of EAN13Reader, and its static checkChecksum is what every EAN/UPC reader calls.
+      const UPCEAN: any = Object.getPrototypeOf(lib.EAN13Reader);
+      let lenientDepth = 0;
+      if (UPCEAN && typeof UPCEAN.checkChecksum === "function" && !UPCEAN.__ingrescanPatched) {
+        const original = UPCEAN.checkChecksum;
+        UPCEAN.checkChecksum = function (str: string) {
+          return lenientDepth > 0 ? true : original.call(this, str);
+        };
+        UPCEAN.__ingrescanPatched = true;
+      }
+      const canLenient = !!UPCEAN?.__ingrescanPatched;
+      return {
+        reader: reader as any,
+        BarcodeFormat: lib.BarcodeFormat as any,
+        lenient<T>(fn: () => T): T {
+          if (!canLenient) throw new Error("lenient decoding unavailable");
+          lenientDepth++;
+          try {
+            return fn();
+          } finally {
+            lenientDepth--;
+          }
+        },
+      };
     })().catch((err) => {
       zxingPromise = null; // allow a retry after a failed chunk load
       throw err;
@@ -69,19 +96,26 @@ function loadZxing(): Promise<ZxingBits> {
   return zxingPromise;
 }
 
-type ZxingOutcome = { candidates: DecodedCandidate[]; checksumFailed: boolean };
-
 /**
- * zxing validates EAN/UPC check digits itself and throws ChecksumException when a barcode is found but its
- * check digit is wrong. We cannot read the digits in that case, but we can tell the user a code was seen.
+ * Decode with zxing. Strict pass first (check digits verified). When `allowLenient` and the strict pass finds
+ * nothing, a second pass with verification off may return digits that fail the check, so the caller can warn.
  */
-async function decodeCanvasZxing(canvas: HTMLCanvasElement): Promise<ZxingOutcome> {
+async function decodeCanvasZxing(canvas: HTMLCanvasElement, allowLenient = true): Promise<DecodedCandidate[]> {
   const z = await loadZxing();
+  const toCandidate = (r: { getText(): string; getBarcodeFormat(): number }): DecodedCandidate => ({
+    rawValue: r.getText(),
+    format: z.BarcodeFormat[r.getBarcodeFormat()] ?? null,
+  });
   try {
-    const r = z.reader.decodeFromCanvas(canvas);
-    return { candidates: [{ rawValue: r.getText(), format: z.BarcodeFormat[r.getBarcodeFormat()] ?? null }], checksumFailed: false };
-  } catch (err) {
-    return { candidates: [], checksumFailed: err instanceof z.ChecksumException || (err as any)?.name === "ChecksumException" };
+    return [toCandidate(z.reader.decodeFromCanvas(canvas))];
+  } catch {
+    /* not found: try the lenient pass below */
+  }
+  if (!allowLenient) return [];
+  try {
+    return [toCandidate(z.lenient(() => z.reader.decodeFromCanvas(canvas)))];
+  } catch {
+    return [];
   }
 }
 
@@ -97,12 +131,12 @@ async function decodeNative(source: unknown): Promise<DecodedCandidate[]> {
 }
 
 /** Decode one canvas with every available engine. */
-export async function decodeCanvas(canvas: HTMLCanvasElement): Promise<ZxingOutcome> {
+export async function decodeCanvas(canvas: HTMLCanvasElement): Promise<DecodedCandidate[]> {
   const out: DecodedCandidate[] = [];
   out.push(...(await decodeNative(canvas)));
-  if (pickBestCandidate(out)?.check.ok) return { candidates: out, checksumFailed: false };
-  const z = await decodeCanvasZxing(canvas);
-  return { candidates: [...out, ...z.candidates], checksumFailed: z.checksumFailed };
+  if (pickBestCandidate(out)?.check.ok) return out;
+  out.push(...(await decodeCanvasZxing(canvas)));
+  return out;
 }
 
 // ------------------------------------------------------------------ preprocessing
@@ -219,8 +253,6 @@ export type PhotoDecodeResult =
   | { status: "found"; best: BestCandidate; variant: string; attempts: number }
   /** A code was read but its check digit is wrong (likely misread); no variant produced a valid one. */
   | { status: "invalid"; best: BestCandidate; variant: string; attempts: number }
-  /** A barcode was detected in at least one variant but its check digit never verified, so the digits are unknown. */
-  | { status: "checksum_failed"; attempts: number }
   | { status: "none"; attempts: number }
   | { status: "error"; message: string };
 
@@ -265,7 +297,6 @@ export async function decodeBarcodeFromFile(
   }
   const variants = buildVariants(base);
   let firstInvalid: { best: BestCandidate; variant: string } | null = null;
-  let sawChecksumFailure = false;
   let attempts = 0;
   for (let i = 0; i < variants.length; i++) {
     if (opts.signal?.aborted) return { status: "none", attempts };
@@ -274,9 +305,7 @@ export async function decodeBarcodeFromFile(
     attempts++;
     let candidates: DecodedCandidate[] = [];
     try {
-      const out = await decodeCanvas(variant.make());
-      candidates = out.candidates;
-      if (out.checksumFailed) sawChecksumFailure = true;
+      candidates = await decodeCanvas(variant.make());
     } catch (err: any) {
       // The decoder library itself failed to load (e.g. offline chunk); the first variant would fail too.
       if (i === 0) return { status: "error", message: "The barcode reader could not be loaded. Check your connection or type the number instead." };
@@ -287,7 +316,6 @@ export async function decodeBarcodeFromFile(
     await tick();
   }
   if (firstInvalid) return { status: "invalid", ...firstInvalid, attempts };
-  if (sawChecksumFailure) return { status: "checksum_failed", attempts };
   return { status: "none", attempts };
 }
 
@@ -360,7 +388,7 @@ export type LiveScanHandle = { stop(): void; engine: "native" | "zxing" };
 export async function startLiveDecoding(
   video: HTMLVideoElement,
   onCandidates: (c: DecodedCandidate[]) => void,
-  opts: { intervalMs?: number; onChecksumFailure?: () => void } = {},
+  opts: { intervalMs?: number } = {},
 ): Promise<LiveScanHandle> {
   const native = await getNativeDetector();
   const interval = opts.intervalMs ?? (native ? 120 : 200);
@@ -369,6 +397,7 @@ export async function startLiveDecoding(
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let busy = false;
+  let frame = 0;
   const canvas = document.createElement("canvas");
 
   const loop = async () => {
@@ -377,7 +406,6 @@ export async function startLiveDecoding(
       busy = true;
       try {
         let found: DecodedCandidate[] = [];
-        let checksumFailed = false;
         if (native) {
           found = await decodeNative(video);
         } else if (zx) {
@@ -385,12 +413,10 @@ export async function startLiveDecoding(
           canvas.width = Math.round(video.videoWidth * f);
           canvas.height = Math.round(video.videoHeight * f);
           canvas.getContext("2d", { willReadFrequently: true })!.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const out = await decodeCanvasZxing(canvas);
-          found = out.candidates;
-          checksumFailed = out.checksumFailed;
+          // The lenient pass doubles the cost of a miss, so run it on every 4th frame only.
+          found = await decodeCanvasZxing(canvas, ++frame % 4 === 0);
         }
         if (!stopped && found.length) onCandidates(found);
-        else if (!stopped && checksumFailed) opts.onChecksumFailure?.();
       } finally {
         busy = false;
       }

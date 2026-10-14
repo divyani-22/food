@@ -179,7 +179,7 @@ function negated(ing: Ing, term: Term): boolean {
   if (!term.plain) return false;
   const n = ` ${ing.norm} `;
   const p = term.plain;
-  if (n.includes(` ${p} free `) || n.includes(` ${p}free `) || n.includes(` free ${p} `) || n.includes(` free from ${p} `)) return true;
+  if (n.includes(` ${p} free `) || n.includes(` ${p}free `) || n.includes(` free from ${p} `)) return true;
   if (n.includes(` no ${p} `) || n.includes(` no added ${p} `) || n.includes(` without ${p} `) || n.includes(` non ${p} `)) return true;
   if (p === "sugar" && (n.includes(" unsweetened ") || n.includes(" sugarfree "))) return true;
   return false;
@@ -242,6 +242,7 @@ function groupHit(ing: Ing, g: CompiledGroup): boolean {
     if (negated(ing, term)) continue;
     for (const pos of positions(ing.toks, term.phrase)) {
       if (g.qualSet.size > 0 && pos > 0 && g.qualSet.has(ing.toks[pos - 1])) continue;
+      if (g.qualSet.size > 0 && pos > 1 && ing.toks[pos - 1] === "free" && (ing.toks[pos - 2] === "dairy" || ing.toks[pos - 2] === "milk")) continue;
       if (term.phrase.length === 1 && term.phrase[0] === "cream" && ing.toks[pos + 1] === "of" && ing.toks[pos + 2] === "tartar") continue;
       return true;
     }
@@ -294,7 +295,7 @@ const LABEL: Record<Key, string> = {
 
 const COND_PATTERNS: Array<[CondKey, RegExp]> = [
   ["prediabetes", /\b(pre ?diabet|borderline diabet|impaired (fasting )?glucose)/],
-  ["diabetes", /\b(t1d|t2d|t1dm|t2dm|dm|dm1|dm2|niddm|iddm|gdm|type (1|2|i|ii|one|two)|sugar patient|sugar problem|high sugar)\b/],
+  ["diabetes", /(\bdiabet|\b(t1d|t2d|t1dm|t2dm|dm|dm1|dm2|niddm|iddm|gdm|type (1|2|i|ii|one|two)|sugar patient|sugar problem|high sugar)\b)/],
   ["hypertension", /\b(hypertens\w*|htn|high (blood pressure|bp)|bp)\b/],
   ["celiac", /\b(celiac|coeliac|sprue)\b/],
   ["gluten_sens", /(gluten (intoleran|sensitiv|allerg)|non ?celiac|\bncgs\b|wheat (intoleran|sensitiv)|gluten free diet)/],
@@ -378,7 +379,7 @@ function detectDiet(d: unknown): DietKey | null {
 // Term tables
 // ---------------------------------------------------------------------------
 
-const PLANT_QUAL = ["coconut", "almond", "soy", "soya", "oat", "rice", "cashew", "hemp", "peanut", "cocoa", "cacao", "shea", "nut", "hazelnut", "walnut", "plant", "vegan", "bean", "squash", "vegetable", "free", "nondairy", "sunflower", "pea"];
+const PLANT_QUAL = ["coconut", "almond", "soy", "soya", "oat", "rice", "cashew", "hemp", "peanut", "cocoa", "cacao", "shea", "nut", "hazelnut", "walnut", "plant", "vegan", "bean", "squash", "vegetable", "nondairy", "sunflower", "pea"];
 
 const GLUTEN_FLOUR_QUAL = ["rice", "corn", "maize", "gram", "chickpea", "besan", "almond", "coconut", "potato", "tapioca", "buckwheat", "sorghum", "jowar", "bajra", "ragi", "millet", "quinoa", "amaranth", "cassava", "soy", "oat", "lentil", "arrowroot", "singhara", "kuttu", "gluten", "wheat", "barley", "rye", "spelt"];
 
@@ -386,6 +387,7 @@ const GLUTEN_GROUPS: Group[] = [
   { terms: ["wheat", "barley", "rye", "malt", "malted", "semolina", "suji", "sooji", "durum", "spelt", "triticale", "farro", "kamut", "einkorn", "bulgur", "couscous", "seitan", "gluten", "atta", "maida", "graham", "wheat starch"], sev: "warning" },
   { terms: ["oat", "oats", "oatmeal", "rolled oats"], sev: "caution", note: "Oats are often cross-contaminated with gluten during growing or processing; only oats labelled gluten-free are generally recommended for celiac disease." },
   { terms: ["flour"], sev: "caution", note: "Unspecified flour is often wheat.", unless: GLUTEN_FLOUR_QUAL },
+  { terms: ["bread", "breadcrumb", "bun", "pav", "roti", "chapati", "naan", "paratha", "pita", "pasta", "noodle", "spaghetti", "macaroni", "biscuit", "cracker"], sev: "caution", note: "Bread, pasta and baked goods are usually made with wheat unless labelled gluten-free.", unless: ["rice", "gluten", "corn", "gram", "lentil", "chickpea", "glass", "buckwheat", "millet", "ragi", "jowar", "bajra"] },
 ];
 
 const DAIRY_CORE = ["milk", "milk powder", "skimmed milk", "condensed milk", "evaporated milk", "milk solids", "cream", "butter", "buttermilk", "cheese", "cheddar", "mozzarella", "parmesan", "ricotta", "mascarpone", "brie", "camembert", "feta", "yogurt", "yoghurt", "curd", "dahi", "lassi", "kefir", "ghee", "paneer", "khoa", "khoya", "mawa", "whey", "casein", "caseinate", "lactose", "lactalbumin", "lactoglobulin", "ice cream", "custard"];
@@ -645,7 +647,7 @@ const RULES: Rule[] = [
     id: "pregnancy.alcohol", keys: ["pregnancy"], kind: "condition",
     title: "Alcohol",
     message: "This product lists alcohol. Pregnancy guidance advises not drinking alcohol; consider asking your midwife or doctor about products with alcohol as an ingredient.",
-    reason: "No safe level of alcohol in pregnancy has been established.",
+    reason: "Health authorities have not identified any amount of alcohol in pregnancy that is known to carry no risk.",
     source: "NHS (alcohol in pregnancy); UK Chief Medical Officers' guideline",
     groups: [
       { terms: ["beer", "wine", "whisky", "whiskey", "rum", "vodka", "brandy", "gin", "liqueur", "cider", "sake"], sev: "warning", unless: ["root", "ginger", "nonalcoholic", "alcohol", "vinegar"] },
