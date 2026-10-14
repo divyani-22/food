@@ -35,6 +35,52 @@ async function requireOwnedScan(scanId: number, userId: number) {
   return scan;
 }
 
+/** Produce images are served from this app's own /static (uploads or bundled samples); no external URLs. */
+const produceImageUrl = z
+  .string()
+  .max(512)
+  .regex(/^\/static\/(uploads|samples)\/[A-Za-z0-9._-]+$/, "Invalid image path")
+  .or(z.literal(""))
+  .optional();
+
+/** Whole calendar days from today (UTC date) to a YYYY-MM-DD expiry; negative once expired. */
+function produceDaysLeft(expiryDate: string, now: Date = new Date()): number {
+  const target = Date.parse(`${expiryDate}T00:00:00Z`);
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Number.isNaN(target) ? 0 : Math.round((target - today) / 86_400_000);
+}
+
+// Row shapes keep the snake_case field names the Produce page already renders.
+function toProduceInventoryRow(r: db.ProduceInventoryRow) {
+  return {
+    id: r.id,
+    name: r.name,
+    fruit_type: r.fruitType,
+    freshness: r.freshness,
+    p_fresh: r.pFresh,
+    confidence: r.confidence,
+    image_url: r.imageUrl ?? "",
+    expiry_date: r.expiryDate,
+    days_left: Math.max(produceDaysLeft(r.expiryDate), 0),
+    storage_tip: r.storageTip ?? "",
+    created_at: r.createdAt.toISOString(),
+  };
+}
+
+function toProduceScanRow(r: db.ProduceScanRow) {
+  return {
+    id: r.id,
+    fruit_type: r.fruitType,
+    fruit_name_kr: r.fruitName,
+    freshness: r.freshness,
+    freshness_kr: r.freshnessLabel,
+    p_fresh: r.pFresh,
+    confidence: r.confidence,
+    image_url: r.imageUrl ?? "",
+    created_at: r.createdAt.toISOString(),
+  };
+}
+
 /** Parse a date input for a TIMESTAMP column or throw BAD_REQUEST. */
 function requireDate(value: string | Date): Date {
   const d = parseTimestampInput(value);
@@ -608,6 +654,86 @@ Be helpful, accurate, educational, and personalized to the user's health profile
       .query(async ({ ctx, input }) => {
         return db.getChatHistory(ctx.user.id, input.scanId, input.limit);
       }),
+  }),
+
+  // ============= FreshGuard produce: per-user pantry + scan history =============
+  // The Flask service only classifies images; persistence happens here, scoped to the signed-in user.
+  produce: router({
+    listInventory: protectedProcedure.query(async ({ ctx }) => {
+      const rows = await db.listProduceInventory(ctx.user.id);
+      return rows.map(toProduceInventoryRow);
+    }),
+
+    addInventory: protectedProcedure
+      .input(z.object({
+        name: z.string().trim().min(1).max(100),
+        fruit: z.string().trim().min(1).max(64),
+        freshness: z.enum(["fresh", "normal", "rotten"]),
+        pFresh: z.number().min(0).max(100),
+        confidence: z.number().min(0).max(100),
+        imageUrl: produceImageUrl,
+        expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expiry must be YYYY-MM-DD"),
+        storageTip: z.string().max(2000).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (Number.isNaN(new Date(`${input.expiryDate}T00:00:00Z`).getTime())) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid expiry date" });
+        }
+        const id = await db.addProduceInventoryItem({
+          userId: ctx.user.id,
+          name: input.name,
+          fruitType: input.fruit,
+          freshness: input.freshness,
+          pFresh: input.pFresh,
+          confidence: input.confidence,
+          imageUrl: input.imageUrl || null,
+          expiryDate: input.expiryDate,
+          storageTip: input.storageTip ?? null,
+        });
+        return { id };
+      }),
+
+    deleteInventory: protectedProcedure
+      .input(z.object({ id: z.number().int() }))
+      .mutation(async ({ ctx, input }) => {
+        const deleted = await db.deleteProduceInventoryItem(input.id, ctx.user.id);
+        if (!deleted) throw new TRPCError({ code: "NOT_FOUND", message: "Item not found" });
+        return { success: true };
+      }),
+
+    listHistory: protectedProcedure.query(async ({ ctx }) => {
+      const rows = await db.listProduceScans(ctx.user.id, 50);
+      return rows.map(toProduceScanRow);
+    }),
+
+    recordScan: protectedProcedure
+      .input(z.object({
+        fruit: z.string().trim().min(1).max(64),
+        fruitName: z.string().trim().min(1).max(100),
+        freshness: z.enum(["fresh", "normal", "rotten"]),
+        freshnessLabel: z.string().trim().min(1).max(64),
+        pFresh: z.number().min(0).max(100),
+        confidence: z.number().min(0).max(100),
+        imageUrl: produceImageUrl,
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const id = await db.addProduceScan({
+          userId: ctx.user.id,
+          fruitType: input.fruit,
+          fruitName: input.fruitName,
+          freshness: input.freshness,
+          freshnessLabel: input.freshnessLabel,
+          pFresh: input.pFresh,
+          confidence: input.confidence,
+          imageUrl: input.imageUrl || null,
+        });
+        return { id };
+      }),
+
+    clearHistory: protectedProcedure.mutation(async ({ ctx }) => {
+      await db.clearProduceScans(ctx.user.id);
+      return { success: true };
+    }),
   }),
 
   // ============= Food Expiry Tracker Router (EcoFridge Integration) =============

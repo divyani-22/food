@@ -1,0 +1,84 @@
+"""Produce knowledge base: names, shelf life, storage and cooking tips (English)."""
+
+FRUIT_INFO = {
+    "apple": {
+        "kr": "Apple",
+        "shelf_life_days": {"fresh": 14, "normal": 4, "rotten": 0},
+        "storage": "Refrigerate at 0–4°C. Apples release ethylene gas, so seal them in a bag away from other fruit.",
+        "cooking_fresh": "Eat fresh, in salads or as fresh juice",
+        "cooking_normal": "Apple jam, stewed apples, apple pie, smoothies",
+        "cooking_rotten": "Not safe to eat (discard as food waste)"
+    },
+    "banana": {
+        "kr": "Banana",
+        "shelf_life_days": {"fresh": 5, "normal": 2, "rotten": 0},
+        "storage": "Keep at room temperature (13–16°C). Wrapping the stem in cling film slows ethylene release and extends shelf life.",
+        "cooking_fresh": "Eat fresh or as a yogurt topping",
+        "cooking_normal": "Banana pancakes, banana bread, freeze for smoothies",
+        "cooking_rotten": "Not safe to eat (discard if the flesh is discoloured or rotting)"
+    },
+    "bell_pepper": {
+        "kr": "Bell Pepper",
+        "shelf_life_days": {"fresh": 10, "normal": 3, "rotten": 0},
+        "storage": "Pat dry, wrap in a paper towel, seal in a zip bag and keep in the fridge crisper (4–7°C).",
+        "cooking_fresh": "Fresh salads, crudités, lettuce wraps",
+        "cooking_normal": "Stir-fries, pasta topping, fried rice",
+        "cooking_rotten": "Not safe to eat (discard if soft rot appears)"
+    },
+    "carrot": {
+        "kr": "Carrot",
+        "shelf_life_days": {"fresh": 21, "normal": 5, "rotten": 0},
+        "storage": "Brush off soil, wrap in a paper towel, place in a bag and store upright in the fridge.",
+        "cooking_fresh": "Carrot salad, raw carrot sticks, juice",
+        "cooking_normal": "Curry, soup garnish, braised carrots, carrot fritters",
+        "cooking_rotten": "Not safe to eat (discard if black spots or a bad smell appear)"
+    },
+    "cucumber": {
+        "kr": "Cucumber",
+        "shelf_life_days": {"fresh": 7, "normal": 2, "rotten": 0},
+        "storage": "Dry well, wrap each one in a paper towel, bag and refrigerate at 7–10°C.",
+        "cooking_fresh": "Cucumber salad, chilled soup, quick pickled salad",
+        "cooking_normal": "Stir-fried cucumber, pickles, cold noodle topping",
+        "cooking_rotten": "Not safe to eat (discard if the skin turns slimy)"
+    },
+    "mango": {
+        "kr": "Mango",
+        "shelf_life_days": {"fresh": 6, "normal": 2, "rotten": 0},
+        "storage": "Ripen at room temperature, then wrap in paper and refrigerate once fully ripe.",
+        "cooking_fresh": "Fresh mango desserts, mango shaved ice",
+        "cooking_normal": "Mango lassi, mango purée, smoothies",
+        "cooking_rotten": "Not safe to eat (discard if it smells alcoholic or shows mould)"
+    },
+    "orange": {
+        "kr": "Orange",
+        "shelf_life_days": {"fresh": 14, "normal": 4, "rotten": 0},
+        "storage": "Store in a cool, well-ventilated place, or wrap individually and refrigerate.",
+        "cooking_fresh": "Eat fresh or as fresh-squeezed juice",
+        "cooking_normal": "Orange marmalade, fruit syrup, sangria",
+        "cooking_rotten": "Not safe to eat (discard immediately if mould appears)"
+    },
+    "potato": {
+        "kr": "Potato",
+        "shelf_life_days": {"fresh": 28, "normal": 7, "rotten": 0},
+        "storage": "Store in a dark, cool, well-ventilated place at room temperature. Keeping an apple with them helps stop sprouting.",
+        "cooking_fresh": "Potato salad, baked potatoes, potato wedges",
+        "cooking_normal": "Braised potatoes, potato pancakes, stews",
+        "cooking_rotten": "Not safe to eat (green patches contain toxic solanine)"
+    },
+    "strawberry": {
+        "kr": "Strawberry",
+        "shelf_life_days": {"fresh": 4, "normal": 1, "rotten": 0},
+        "storage": "Do not wash. Place stem-side down on a paper towel in a sealed container and refrigerate.",
+        "cooking_fresh": "Eat fresh or as a cake topping",
+        "cooking_normal": "Strawberry syrup, homemade jam, smoothies",
+        "cooking_rotten": "Not safe to eat (discard immediately if white mould appears)"
+    },
+    "tomato": {
+        "kr": "Tomato",
+        "shelf_life_days": {"fresh": 8, "normal": 3, "rotten": 0},
+        "storage": "Store stem-side down in a shaded spot at room temperature. Refrigerate once fully ripe.",
+        "cooking_fresh": "Caprese salad, fresh salads",
+        "cooking_normal": "Tomato pasta sauce, tomato soup, shakshuka",
+        "cooking_rotten": "Not safe to eat (discard if sour-smelling or mushy)"
+    }
+}

@@ -101,89 +101,8 @@ def prune_uploads(max_age_days: int = UPLOAD_MAX_AGE_DAYS):
 
 prune_uploads()
 
-# --- Fruit Knowledge Base ---
-FRUIT_INFO = {
-    "apple": {
-        "kr": "Apple",
-        "shelf_life_days": {"fresh": 14, "normal": 4, "rotten": 0},
-        "storage": "Refrigerate at 0–4°C. Apples release ethylene gas, so seal them in a bag away from other fruit.",
-        "cooking_fresh": "Eat fresh, in salads or as fresh juice",
-        "cooking_normal": "Apple jam, stewed apples, apple pie, smoothies",
-        "cooking_rotten": "Not safe to eat (discard as food waste)"
-    },
-    "banana": {
-        "kr": "Banana",
-        "shelf_life_days": {"fresh": 5, "normal": 2, "rotten": 0},
-        "storage": "Keep at room temperature (13–16°C). Wrapping the stem in cling film slows ethylene release and extends shelf life.",
-        "cooking_fresh": "Eat fresh or as a yogurt topping",
-        "cooking_normal": "Banana pancakes, banana bread, freeze for smoothies",
-        "cooking_rotten": "Not safe to eat (discard if the flesh is discoloured or rotting)"
-    },
-    "bell_pepper": {
-        "kr": "Bell Pepper",
-        "shelf_life_days": {"fresh": 10, "normal": 3, "rotten": 0},
-        "storage": "Pat dry, wrap in a paper towel, seal in a zip bag and keep in the fridge crisper (4–7°C).",
-        "cooking_fresh": "Fresh salads, crudités, lettuce wraps",
-        "cooking_normal": "Stir-fries, pasta topping, fried rice",
-        "cooking_rotten": "Not safe to eat (discard if soft rot appears)"
-    },
-    "carrot": {
-        "kr": "Carrot",
-        "shelf_life_days": {"fresh": 21, "normal": 5, "rotten": 0},
-        "storage": "Brush off soil, wrap in a paper towel, place in a bag and store upright in the fridge.",
-        "cooking_fresh": "Carrot salad, raw carrot sticks, juice",
-        "cooking_normal": "Curry, soup garnish, braised carrots, carrot fritters",
-        "cooking_rotten": "Not safe to eat (discard if black spots or a bad smell appear)"
-    },
-    "cucumber": {
-        "kr": "Cucumber",
-        "shelf_life_days": {"fresh": 7, "normal": 2, "rotten": 0},
-        "storage": "Dry well, wrap each one in a paper towel, bag and refrigerate at 7–10°C.",
-        "cooking_fresh": "Cucumber salad, chilled soup, quick pickled salad",
-        "cooking_normal": "Stir-fried cucumber, pickles, cold noodle topping",
-        "cooking_rotten": "Not safe to eat (discard if the skin turns slimy)"
-    },
-    "mango": {
-        "kr": "Mango",
-        "shelf_life_days": {"fresh": 6, "normal": 2, "rotten": 0},
-        "storage": "Ripen at room temperature, then wrap in paper and refrigerate once fully ripe.",
-        "cooking_fresh": "Fresh mango desserts, mango shaved ice",
-        "cooking_normal": "Mango lassi, mango purée, smoothies",
-        "cooking_rotten": "Not safe to eat (discard if it smells alcoholic or shows mould)"
-    },
-    "orange": {
-        "kr": "Orange",
-        "shelf_life_days": {"fresh": 14, "normal": 4, "rotten": 0},
-        "storage": "Store in a cool, well-ventilated place, or wrap individually and refrigerate.",
-        "cooking_fresh": "Eat fresh or as fresh-squeezed juice",
-        "cooking_normal": "Orange marmalade, fruit syrup, sangria",
-        "cooking_rotten": "Not safe to eat (discard immediately if mould appears)"
-    },
-    "potato": {
-        "kr": "Potato",
-        "shelf_life_days": {"fresh": 28, "normal": 7, "rotten": 0},
-        "storage": "Store in a dark, cool, well-ventilated place at room temperature. Keeping an apple with them helps stop sprouting.",
-        "cooking_fresh": "Potato salad, baked potatoes, potato wedges",
-        "cooking_normal": "Braised potatoes, potato pancakes, stews",
-        "cooking_rotten": "Not safe to eat (green patches contain toxic solanine)"
-    },
-    "strawberry": {
-        "kr": "Strawberry",
-        "shelf_life_days": {"fresh": 4, "normal": 1, "rotten": 0},
-        "storage": "Do not wash. Place stem-side down on a paper towel in a sealed container and refrigerate.",
-        "cooking_fresh": "Eat fresh or as a cake topping",
-        "cooking_normal": "Strawberry syrup, homemade jam, smoothies",
-        "cooking_rotten": "Not safe to eat (discard immediately if white mould appears)"
-    },
-    "tomato": {
-        "kr": "Tomato",
-        "shelf_life_days": {"fresh": 8, "normal": 3, "rotten": 0},
-        "storage": "Store stem-side down in a shaded spot at room temperature. Refrigerate once fully ripe.",
-        "cooking_fresh": "Caprese salad, fresh salads",
-        "cooking_normal": "Tomato pasta sauce, tomato soup, shakshuka",
-        "cooking_rotten": "Not safe to eat (discard if sour-smelling or mushy)"
-    }
-}
+# --- Fruit Knowledge Base (see fruit_info.py) ---
+from fruit_info import FRUIT_INFO  # noqa: E402
 
 # --- PyTorch MultiTask Architecture ---
 class MultiTaskEffB0(nn.Module):
@@ -302,28 +221,8 @@ def run_inference(image: Image.Image):
     }
 
 
-# --- English-only display helpers ---
-# Older databases may hold Korean names/labels and emoji saved by earlier versions.
-# Translate them on read so every page shows English, without rewriting user data.
-LEGACY_KO_TO_EN = {
-    "\ud30c\ud504\ub9ac\uce74/\ud53c\ub9dd": "Bell Pepper", "\uc0ac\uacfc": "Apple", "\ubc14\ub098\ub098": "Banana", "\ub2f9\uadfc": "Carrot",
-    "\uc624\uc774": "Cucumber", "\ub9dd\uace0": "Mango", "\uc624\ub80c\uc9c0": "Orange", "\uac10\uc790": "Potato", "\ub538\uae30": "Strawberry",
-    "\ud1a0\ub9c8\ud1a0": "Tomato", "\uc2dd\uc7ac\ub8cc": "Produce",
-    "\uc2e0\uc120\ud568 (Fresh)": "Fresh", "\uc0c1\ud568/\ubd80\ud328 (Rotten)": "Rotten", "\ubcf4\ud1b5 (Normal)": "Normal",
-    "\uc2e0\uc120": "Fresh", "\ubcf4\ud1b5": "Normal", "\uc0c1\ud568": "Rotten",
-}
-_EMOJI_RE = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F\u200D]")
-_HANGUL_RE = re.compile("[\uac00-\ud7af]")
-
-
-def englishify(text):
-    """Strip emoji and translate known legacy Korean labels to English."""
-    if not isinstance(text, str):
-        return text
-    out = _EMOJI_RE.sub("", text)
-    for ko in sorted(LEGACY_KO_TO_EN, key=len, reverse=True):
-        out = out.replace(ko, LEGACY_KO_TO_EN[ko])
-    return out.strip()
+# --- English-only display helpers (see legacy_text.py) ---
+from legacy_text import LEGACY_KO_TO_EN, englishify, _HANGUL_RE  # noqa: F401
 
 
 def _englishify_row(row):
@@ -412,21 +311,23 @@ def predict():
         result = run_inference(image)
         result["image_url"] = image_url
 
-        # Save to scan history
-        with closing(sqlite3.connect(DB_PATH)) as conn:
-            conn.execute("""
-                INSERT INTO scan_history (fruit_type, fruit_name_kr, freshness, freshness_kr, p_fresh, confidence, image_url)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                result["fruit"],
-                result["fruit_kr"],
-                result["freshness_status"],
-                result["freshness_kr"],
-                result["p_fresh"],
-                result["confidence"],
-                result["image_url"]
-            ))
-            conn.commit()
+        # Save to this service's own scan history, used only by the standalone page.
+        # The IngreScan web app sends persist=0 and stores history per user in MySQL instead.
+        if request.args.get("persist", "1") != "0":
+            with closing(sqlite3.connect(DB_PATH)) as conn:
+                conn.execute("""
+                    INSERT INTO scan_history (fruit_type, fruit_name_kr, freshness, freshness_kr, p_fresh, confidence, image_url)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    result["fruit"],
+                    result["fruit_kr"],
+                    result["freshness_status"],
+                    result["freshness_kr"],
+                    result["p_fresh"],
+                    result["confidence"],
+                    result["image_url"]
+                ))
+                conn.commit()
 
         return jsonify(result)
 

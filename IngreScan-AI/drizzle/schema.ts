@@ -206,3 +206,44 @@ export const foodInventory = mysqlTable("food_inventory", {
 
 export type FoodInventoryItem = typeof foodInventory.$inferSelect;
 export type InsertFoodInventoryItem = typeof foodInventory.$inferInsert;
+
+/**
+ * FreshGuard (fresh produce AI) — per-user pantry and scan history.
+ * The Flask service only classifies images; everything saved lives here, scoped by user.
+ */
+export const produceScans = mysqlTable("produce_scans", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull(),
+  fruitType: varchar("fruit_type", { length: 64 }).notNull(),
+  fruitName: varchar("fruit_name", { length: 100 }).notNull(),
+  freshness: mysqlEnum("freshness", ["fresh", "normal", "rotten"]).notNull(),
+  freshnessLabel: varchar("freshness_label", { length: 64 }).notNull(),
+  pFresh: float("p_fresh").notNull(),
+  confidence: float("confidence").notNull(),
+  imageUrl: varchar("image_url", { length: 512 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, t => ({
+  userIdx: index("produce_scans_user_id_idx").on(t.userId, t.createdAt),
+}));
+
+export type ProduceScan = typeof produceScans.$inferSelect;
+export type InsertProduceScan = typeof produceScans.$inferInsert;
+
+export const produceInventory = mysqlTable("produce_inventory", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  fruitType: varchar("fruit_type", { length: 64 }).notNull(),
+  freshness: mysqlEnum("freshness", ["fresh", "normal", "rotten"]).notNull(),
+  pFresh: float("p_fresh").notNull(),
+  confidence: float("confidence").notNull(),
+  imageUrl: varchar("image_url", { length: 512 }),
+  expiryDate: varchar("expiry_date", { length: 10 }).notNull(), // YYYY-MM-DD
+  storageTip: text("storage_tip"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, t => ({
+  userIdx: index("produce_inventory_user_id_idx").on(t.userId),
+}));
+
+export type ProduceInventoryItem = typeof produceInventory.$inferSelect;
+export type InsertProduceInventoryItem = typeof produceInventory.$inferInsert;

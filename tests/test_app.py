@@ -293,3 +293,37 @@ def test_legacy_korean_rows_are_translated_on_read(client, appmod):
     # POSTed legacy names are normalised too
     client.post("/api/inventory", json={"name": "\U0001F34C \ubc14\ub098\ub098", "freshness_status": "fresh"})
     assert client.get("/api/inventory").get_json()[0]["name"] == "Banana"
+
+
+def test_persist_zero_skips_flask_history(client):
+    assert client.post("/api/predict?sample=apple.jpg&persist=0").status_code == 200
+    assert client.get("/api/history").get_json() == []
+    assert client.post("/api/predict?sample=apple.jpg").status_code == 200
+    assert len(client.get("/api/history").get_json()) == 1
+
+
+def test_import_script_emits_english_sql_for_one_user(client, appmod, tmp_path):
+    import sqlite3, subprocess, sys
+    from pathlib import Path
+    db = tmp_path / "legacy.db"
+    with sqlite3.connect(db) as conn:
+        conn.executescript(
+            "CREATE TABLE inventory (id INTEGER PRIMARY KEY, name TEXT, fruit_type TEXT, freshness TEXT, p_fresh REAL, confidence REAL,"
+            " image_url TEXT, expiry_date TEXT, days_left INTEGER, storage_tip TEXT, created_at TEXT);"
+            "CREATE TABLE scan_history (id INTEGER PRIMARY KEY, fruit_type TEXT, fruit_name_kr TEXT, freshness TEXT, freshness_kr TEXT,"
+            " p_fresh REAL, confidence REAL, image_url TEXT, created_at TEXT);"
+        )
+        conn.execute("INSERT INTO inventory VALUES (1, ?, 'apple', 'fresh', 90, 95, '/static/uploads/a.jpg', '2030-01-02', 5, ?, '2026-01-01 10:00:00')",
+                     ("\U0001F34E 사과", "O'Brien 냉장"))
+        conn.execute("INSERT INTO scan_history VALUES (1, 'bell_pepper', ?, 'weird', ?, 50, 80, '', '2026-01-01 10:00:00')",
+                     ("파프리카/피망", "보통 (Normal)"))
+    root = Path(appmod.__file__).parent
+    proc = subprocess.run([sys.executable, str(root / "tools" / "import_freshguard_data.py"), "--user-id", "7", "--db", str(db)],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    sql = proc.stdout
+    assert not _NON_ENGLISH.search(sql)
+    assert "INSERT INTO produce_inventory" in sql and "VALUES (7, 'Apple', 'apple', 'fresh'" in sql
+    assert "Refrigerate at 0" in sql      # Korean tip replaced by that fruit's English tip
+    assert "'Bell Pepper', 'normal', 'Normal'" in sql   # label translated, bad status normalised
+    assert "1 pantry items, 1 history rows for user 7" in proc.stderr

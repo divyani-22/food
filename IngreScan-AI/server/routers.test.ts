@@ -16,6 +16,12 @@ vi.mock("./db", () => ({
   addInventoryItem: vi.fn(async () => 7),
   getUserInventory: vi.fn(async () => []),
   updateInventoryItem: vi.fn(),
+  listProduceInventory: vi.fn(async () => []),
+  addProduceInventoryItem: vi.fn(async () => 11),
+  deleteProduceInventoryItem: vi.fn(async () => false),
+  listProduceScans: vi.fn(async () => []),
+  addProduceScan: vi.fn(async () => 21),
+  clearProduceScans: vi.fn(),
 }));
 vi.mock("./_core/llm", () => ({ invokeLLM: vi.fn() }));
 vi.mock("./storage", () => ({ storagePut: vi.fn(async (k: string) => ({ key: k, url: "/uploads/x" })) }));
@@ -108,5 +114,55 @@ describe("openFoodFacts error handling", () => {
     await expect(caller.openFoodFacts.getByBarcode({ barcode: "4006381333931" })).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("oops", { status: 503 })));
     await expect(caller.openFoodFacts.search({ query: "biscuits" })).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+  });
+});
+
+describe("produce (FreshGuard) per-user storage", () => {
+  const item = {
+    name: "Apple", fruit: "apple", freshness: "fresh" as const, pFresh: 91.2, confidence: 99.1,
+    imageUrl: "/static/samples/apple.jpg", expiryDate: "2099-01-10", storageTip: "Refrigerate.",
+  };
+
+  it("scopes every read and write to the signed-in user", async () => {
+    await caller.produce.addInventory(item);
+    expect(db.addProduceInventoryItem).toHaveBeenCalledWith(expect.objectContaining({ userId: 5, fruitType: "apple", expiryDate: "2099-01-10" }));
+    await caller.produce.listInventory();
+    expect(db.listProduceInventory).toHaveBeenCalledWith(5);
+    await caller.produce.listHistory();
+    expect(db.listProduceScans).toHaveBeenCalledWith(5, 50);
+    await caller.produce.clearHistory();
+    expect(db.clearProduceScans).toHaveBeenCalledWith(5);
+    await caller.produce.recordScan({ fruit: "apple", fruitName: "Apple", freshness: "fresh", freshnessLabel: "Fresh", pFresh: 90, confidence: 99, imageUrl: "/static/uploads/abc.jpg" });
+    expect(db.addProduceScan).toHaveBeenCalledWith(expect.objectContaining({ userId: 5 }));
+  });
+
+  it("returns NOT_FOUND when deleting an item the user does not own", async () => {
+    (db.deleteProduceInventoryItem as any).mockResolvedValueOnce(false);
+    await expect(caller.produce.deleteInventory({ id: 99 })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(db.deleteProduceInventoryItem).toHaveBeenCalledWith(99, 5);
+    (db.deleteProduceInventoryItem as any).mockResolvedValueOnce(true);
+    await expect(caller.produce.deleteInventory({ id: 1 })).resolves.toEqual({ success: true });
+  });
+
+  it("rejects external image URLs, bad dates and out-of-range scores", async () => {
+    await expect(caller.produce.addInventory({ ...item, imageUrl: "https://evil.example/x.png" })).rejects.toThrow();
+    await expect(caller.produce.addInventory({ ...item, imageUrl: "/static/uploads/../../etc/passwd" })).rejects.toThrow();
+    await expect(caller.produce.addInventory({ ...item, expiryDate: "10/01/2099" })).rejects.toThrow();
+    await expect(caller.produce.addInventory({ ...item, expiryDate: "2099-13-45" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(caller.produce.addInventory({ ...item, pFresh: 120 })).rejects.toThrow();
+    expect(db.addProduceInventoryItem).not.toHaveBeenCalled();
+  });
+
+  it("maps rows to the shape the Produce page renders and computes days left", async () => {
+    const day = 86_400_000;
+    const ymd = (offset: number) => new Date(Date.now() + offset * day).toISOString().slice(0, 10);
+    (db.listProduceInventory as any).mockResolvedValueOnce([
+      { id: 1, userId: 5, name: "Apple", fruitType: "apple", freshness: "fresh", pFresh: 90, confidence: 99, imageUrl: null, expiryDate: ymd(3), storageTip: null, createdAt: new Date("2026-01-01T10:00:00Z") },
+      { id: 2, userId: 5, name: "Banana", fruitType: "banana", freshness: "rotten", pFresh: 5, confidence: 80, imageUrl: "/static/samples/banana.jpg", expiryDate: ymd(-4), storageTip: "x", createdAt: new Date("2026-01-01T10:00:00Z") },
+    ]);
+    const rows = await caller.produce.listInventory();
+    expect(rows[0]).toMatchObject({ fruit_type: "apple", days_left: 3, image_url: "", storage_tip: "" });
+    expect(rows[1]).toMatchObject({ days_left: 0, image_url: "/static/samples/banana.jpg" });
+    expect(rows[0].created_at).toBe("2026-01-01T10:00:00.000Z");
   });
 });

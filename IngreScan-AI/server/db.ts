@@ -10,9 +10,14 @@ import {
   alternatives, InsertAlternative,
   chatMessages, InsertChatMessage,
   ingredientDatabase, InsertIngredientData,
-  foodInventory, InsertFoodInventoryItem
+  foodInventory, InsertFoodInventoryItem,
+  produceScans, InsertProduceScan,
+  produceInventory, InsertProduceInventoryItem
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
+
+export type ProduceInventoryRow = typeof produceInventory.$inferSelect;
+export type ProduceScanRow = typeof produceScans.$inferSelect;
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -367,4 +372,52 @@ export async function deleteInventoryItem(id: number, userId: number) {
   
   await db.delete(foodInventory)
     .where(and(eq(foodInventory.id, id), eq(foodInventory.userId, userId)));
+}
+
+// ============= FreshGuard produce (per-user pantry + history) =============
+
+export async function listProduceScans(userId: number, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(produceScans)
+    .where(eq(produceScans.userId, userId))
+    .orderBy(desc(produceScans.createdAt), desc(produceScans.id))
+    .limit(limit);
+}
+
+export async function addProduceScan(scan: InsertProduceScan) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(produceScans).values(scan);
+  return result[0].insertId;
+}
+
+export async function clearProduceScans(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(produceScans).where(eq(produceScans.userId, userId));
+}
+
+export async function listProduceInventory(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(produceInventory)
+    .where(eq(produceInventory.userId, userId))
+    .orderBy(desc(produceInventory.id));
+}
+
+export async function addProduceInventoryItem(item: InsertProduceInventoryItem) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(produceInventory).values(item);
+  return result[0].insertId;
+}
+
+/** Returns true when a row owned by this user was deleted. */
+export async function deleteProduceInventoryItem(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.delete(produceInventory)
+    .where(and(eq(produceInventory.id, id), eq(produceInventory.userId, userId)));
+  return (result[0].affectedRows ?? 0) > 0;
 }

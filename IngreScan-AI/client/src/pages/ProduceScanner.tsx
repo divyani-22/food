@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { useState, useEffect, useRef } from "react";
+import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { toLocalDateInput } from "@/lib/utils";
 import {
@@ -126,13 +127,17 @@ export default function ProduceScanner() {
     }
   };
 
+  // Pantry and history are stored per user in MySQL (tRPC); the Flask service only classifies images.
+  const utils = trpc.useUtils();
+  const recordScan = trpc.produce.recordScan.useMutation();
+  const addInventoryMutation = trpc.produce.addInventory.useMutation();
+  const deleteInventoryMutation = trpc.produce.deleteInventory.useMutation();
+  const clearHistoryMutation = trpc.produce.clearHistory.useMutation();
+
   const loadInventory = async () => {
     try {
-      const res = await fetch("/api/freshguard/inventory");
-      if (res.ok) {
-        const data = await res.json();
-        setInventory(Array.isArray(data) ? data : []);
-      }
+      const data = await utils.produce.listInventory.fetch();
+      setInventory(Array.isArray(data) ? (data as InventoryItem[]) : []);
     } catch {
       // ignore
     }
@@ -140,13 +145,28 @@ export default function ProduceScanner() {
 
   const loadHistory = async () => {
     try {
-      const res = await fetch("/api/freshguard/history");
-      if (res.ok) {
-        const data = await res.json();
-        setHistoryList(Array.isArray(data) ? data : []);
-      }
+      const data = await utils.produce.listHistory.fetch();
+      setHistoryList(Array.isArray(data) ? (data as HistoryItem[]) : []);
     } catch {
       // ignore
+    }
+  };
+
+  /** Save a successful classification to this user's history (never blocks showing the result). */
+  const saveScanToHistory = async (data: PredictionResult) => {
+    try {
+      await recordScan.mutateAsync({
+        fruit: data.fruit,
+        fruitName: data.fruit_kr,
+        freshness: data.freshness_status,
+        freshnessLabel: data.freshness_kr,
+        pFresh: data.p_fresh,
+        confidence: data.confidence,
+        imageUrl: data.image_url ?? "",
+      });
+      await loadHistory();
+    } catch {
+      toast.error("Result shown, but it could not be saved to your history.");
     }
   };
 
@@ -185,7 +205,7 @@ export default function ProduceScanner() {
       }
       const data: PredictionResult = await res.json();
       setResult(data);
-      loadHistory();
+      void saveScanToHistory(data);
       toast.success(`Identified ${data.fruit_kr} as ${data.freshness_kr}.`);
     } catch (err: any) {
       toast.error(err.message || "Failed to analyze produce freshness");
@@ -208,7 +228,7 @@ export default function ProduceScanner() {
       }
       const data: PredictionResult = await res.json();
       setResult(data);
-      loadHistory();
+      void saveScanToHistory(data);
       toast.success(`Identified sample: ${data.fruit_kr}.`);
     } catch (err: any) {
       toast.error(err.message || "Sample analysis failed");
@@ -225,31 +245,21 @@ export default function ProduceScanner() {
       expiry.setDate(expiry.getDate() + (result.shelf_life_days || 3));
       const expiryStr = toLocalDateInput(expiry);
 
-      const res = await fetch("/api/freshguard/inventory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: result.fruit_kr,
-          fruit: result.fruit,
-          freshness_status: result.freshness_status,
-          p_fresh: result.p_fresh,
-          confidence: result.confidence,
-          image_url: result.image_url,
-          shelf_life_days: result.shelf_life_days,
-          storage_tips: result.storage_tips,
-          expiry_date: expiryStr,
-        }),
+      await addInventoryMutation.mutateAsync({
+        name: result.fruit_kr,
+        fruit: result.fruit,
+        freshness: result.freshness_status,
+        pFresh: result.p_fresh,
+        confidence: result.confidence,
+        imageUrl: result.image_url ?? "",
+        storageTip: result.storage_tips,
+        expiryDate: expiryStr,
       });
-
-      if (res.ok) {
-        toast.success(`Saved ${result.fruit_kr} to Fridge Inventory!`);
-        loadInventory();
-        setActiveTab("inventory");
-      } else {
-        toast.error("Failed to add to inventory");
-      }
-    } catch {
-      toast.error("Failed to add to inventory");
+      toast.success(`Saved ${result.fruit_kr} to Fridge Inventory!`);
+      await loadInventory();
+      setActiveTab("inventory");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to add to inventory");
     } finally {
       setIsAddingToInventory(false);
     }
@@ -257,29 +267,21 @@ export default function ProduceScanner() {
 
   const deleteInventoryItem = async (id: number) => {
     try {
-      const res = await fetch(`/api/freshguard/inventory/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        toast.success("Item removed from inventory");
-        loadInventory();
-      } else {
-        toast.error("Failed to delete item");
-      }
-    } catch {
-      toast.error("Failed to delete item");
+      await deleteInventoryMutation.mutateAsync({ id });
+      toast.success("Item removed from inventory");
+      await loadInventory();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete item");
     }
   };
 
   const clearHistory = async () => {
     try {
-      const res = await fetch("/api/freshguard/history", { method: "DELETE" });
-      if (res.ok) {
-        toast.success("History cleared");
-        loadHistory();
-      } else {
-        toast.error("Failed to clear history");
-      }
-    } catch {
-      toast.error("Failed to clear history");
+      await clearHistoryMutation.mutateAsync();
+      toast.success("History cleared");
+      await loadHistory();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to clear history");
     }
   };
 

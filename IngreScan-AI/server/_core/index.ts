@@ -62,8 +62,19 @@ async function startServer() {
         return;
       }
 
-      const targetPath = req.url.replace(/^\/api\/freshguard/, "/api");
-      const targetUrl = `http://127.0.0.1:5000${targetPath}`;
+      // Only the stateless classification endpoints are reachable from the web app. Pantry and history
+      // are stored per user in MySQL (tRPC "produce" router), never in the Flask service's shared SQLite.
+      const parsed = new URL(req.url.replace(/^\/api\/freshguard/, "/api"), "http://internal");
+      const route = parsed.pathname.replace(/\/+$/, "");
+      const allowed =
+        (req.method === "POST" && route === "/api/predict") ||
+        (req.method === "GET" && (route === "/api/samples" || route === "/api/fruits"));
+      if (!allowed) {
+        res.status(404).json({ error: "Not found." });
+        return;
+      }
+      if (route === "/api/predict") parsed.searchParams.set("persist", "0");
+      const targetUrl = `http://127.0.0.1:5000${parsed.pathname}${parsed.search}`;
 
       const headers: Record<string, string> = {};
       if (req.headers["content-type"]) {

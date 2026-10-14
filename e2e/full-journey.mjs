@@ -18,6 +18,8 @@ for (const q of [
   "delete from chat_messages where scan_id in (select id from food_scans where product_name like 'E2E %' or product_name='Secret Scan')",
   "delete from food_scans where product_name like 'E2E %' or product_name='Secret Scan'",
   "delete from users where openId='other-user'",
+  "delete from produce_inventory where user_id=1",
+  "delete from produce_scans where user_id=1",
   "delete from medical_conditions where user_id=1",
   "delete from medications where user_id=1",
 ]) sql(q);
@@ -202,13 +204,36 @@ await step("Open Food Facts: invalid barcode shows error state", async () => {
 });
 
 // ---------- Fresh produce (Flask via proxy) ----------
-await step("Produce: sample inspection via Flask, save to pantry", async () => {
+await step("Produce: classify sample (real model), history is stored in MySQL", async () => {
   await page.goto(BASE + "/produce", { waitUntil: "networkidle" });
   await page.getByRole("button", { name: /^Apple$/ }).first().click();
-  await page.getByText(/Fresh|Normal|Rotten/).first().waitFor({ timeout: 30000 });
   await page.getByText(/Identification Confidence/).waitFor({ timeout: 30000 });
+  await page.waitForTimeout(1000);
+  expect(sql("select count(*) from produce_scans where user_id=1") === "1", "history row in MySQL for the user");
+  expect(sql("select fruit_name from produce_scans where user_id=1") === "Apple", "English name stored");
+});
+await step("Produce: save to pantry stores a per-user row and shows in the Pantry tab", async () => {
   await page.getByRole("button", { name: /Save to Fridge/i }).click();
-  await page.waitForTimeout(1500);
+  await page.getByRole("tab", { name: /Fridge Pantry \(1\)/ }).waitFor({ timeout: 10000 });
+  expect(sql("select count(*) from produce_inventory where user_id=1") === "1", "pantry row in MySQL");
+  expect(/^\d{4}-\d{2}-\d{2}$/.test(sql("select expiry_date from produce_inventory where user_id=1")), "expiry date stored");
+  await page.getByText("Apple").first().waitFor();
+});
+await step("Produce: data survives a reload (read back from MySQL)", async () => {
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("tab", { name: /Fridge Pantry \(1\)/ }).waitFor({ timeout: 10000 });
+  await page.getByRole("tab", { name: /History/ }).click();
+  await page.getByText(/Confidence: \d/).first().waitFor({ timeout: 10000 });
+});
+await step("Produce: remove pantry item and clear history", async () => {
+  await page.getByRole("tab", { name: /Fridge Pantry/ }).click();
+  await page.getByRole("button", { name: /Remove \/ Consumed/ }).first().click();
+  await page.getByRole("tab", { name: /Fridge Pantry \(0\)/ }).waitFor({ timeout: 10000 });
+  expect(sql("select count(*) from produce_inventory where user_id=1") === "0", "pantry row deleted");
+  await page.getByRole("tab", { name: /History/ }).click();
+  await page.getByRole("button", { name: /Clear History/ }).click();
+  await page.waitForTimeout(1200);
+  expect(sql("select count(*) from produce_scans where user_id=1") === "0", "history cleared in MySQL");
 });
 
 // ---------- Mobile shell ----------
