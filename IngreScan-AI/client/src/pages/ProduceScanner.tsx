@@ -2,6 +2,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/brand/PageHeader";
 import { StatusTag } from "@/components/brand/StatusTag";
 import { EthyleneAlerts } from "@/components/features/EthyleneAlerts";
+import { ShelfScan } from "@/components/features/ShelfScan";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -145,6 +146,7 @@ export default function ProduceScanner() {
   const [historyList, setHistoryList] = useState<HistoryItem[]>([]);
   const [isAddingToInventory, setIsAddingToInventory] = useState(false);
   const [activeTab, setActiveTab] = useState("scan");
+  const [scanMode, setScanMode] = useState<"single" | "shelf">("single");
 
   // On-device inference (ONNX Runtime Web) is the default; the Flask service is the automatic fallback.
   const deviceSupported = useRef(isOnDeviceSupported()).current;
@@ -496,7 +498,36 @@ export default function ProduceScanner() {
           </TabsList>
 
           {/* TAB 1: AI SCANNER */}
-          <TabsContent value="scan">
+          <TabsContent value="scan" className="space-y-6">
+            <div className="flex gap-2" role="group" aria-label="Scan mode" data-testid="scan-mode">
+              <Button
+                size="sm"
+                variant={scanMode === "single" ? "dark" : "outline"}
+                aria-pressed={scanMode === "single"}
+                onClick={() => setScanMode("single")}
+                data-testid="scan-mode-single"
+              >
+                <Apple className="h-4 w-4" /> Single item
+              </Button>
+              <Button
+                size="sm"
+                variant={scanMode === "shelf" ? "dark" : "outline"}
+                aria-pressed={scanMode === "shelf"}
+                onClick={() => setScanMode("shelf")}
+                data-testid="scan-mode-shelf"
+              >
+                <Refrigerator className="h-4 w-4" /> Scan a whole shelf
+              </Button>
+            </div>
+            {scanMode === "shelf" ? (
+              <ShelfScan
+                onAdded={async () => {
+                  await loadInventory();
+                  setActiveTab("inventory");
+                }}
+                onUseSingle={() => setScanMode("single")}
+              />
+            ) : (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
               {/* Left Column: Upload & Camera & Samples */}
               <div className="lg:col-span-5">
@@ -820,6 +851,7 @@ export default function ProduceScanner() {
                   </section>
               </div>
             </div>
+            )}
           </TabsContent>
 
           {/* TAB 2: INVENTORY */}

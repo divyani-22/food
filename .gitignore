@@ -50,3 +50,6 @@ Thumbs.db
 IngreScan-AI/uploads/*
 !IngreScan-AI/uploads/.gitkeep
 IngreScan-AI/data/
+
+# Optional multi-item detector weights (downloaded by tools/fetch_detector.py)
+models/detector/

@@ -128,5 +128,5 @@ def test_meta_matches_checkpoint_and_model_file(verification):
 
 
 def test_only_one_copy_of_the_model_is_committed():
-    copies = [p for p in ROOT.rglob("*.onnx") if "node_modules" not in p.parts and "dist" not in p.parts]
+    copies = [p for p in ROOT.rglob("*.onnx") if "node_modules" not in p.parts and "dist" not in p.parts and "detector" not in p.parts]  # detector weights are a separate, git-ignored download
     assert copies == [MODEL], copies

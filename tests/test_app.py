@@ -327,3 +327,64 @@ def test_import_script_emits_english_sql_for_one_user(client, appmod, tmp_path):
     assert "Refrigerate at 0" in sql      # Korean tip replaced by that fruit's English tip
     assert "'Bell Pepper', 'normal', 'Normal'" in sql   # label translated, bad status normalised
     assert "1 pantry items, 1 history rows for user 7" in proc.stderr
+
+
+# ---- multi-item detection (/api/detect) with a fake localiser; the real one is in test_detector_integration.py ----
+class FakeDetector:
+    def __init__(self, found=None, available=True):
+        self.found, self.available = found or [], available
+
+    def is_available(self):
+        return (True, "") if self.available else (False, "Detector model not found. Run: python tools/fetch_detector.py")
+
+    def detect(self, image):
+        return self.found
+
+
+def test_detect_503_when_detector_missing(client, appmod, monkeypatch):
+    monkeypatch.setattr(appmod, "_detector", FakeDetector(available=False))
+    r = client.post("/api/detect", data={"file": (io.BytesIO(png_bytes()), "x.png")})
+    assert r.status_code == 503
+    assert r.get_json()["code"] == "detector_not_installed" and "fetch_detector" in r.get_json()["error"]
+
+
+def test_detect_no_image_and_bad_image(client, appmod, monkeypatch):
+    monkeypatch.setattr(appmod, "_detector", FakeDetector())
+    assert client.post("/api/detect").status_code == 400
+    assert client.post("/api/detect", data={"file": (io.BytesIO(b"junk"), "a.png")}).status_code == 400
+    assert client.post("/api/detect", json={"image": "!!!"}).status_code == 400
+
+
+def test_detect_returns_items_with_classifier_labels_and_thumbnails(client, appmod, monkeypatch):
+    found = [{"box": [2, 2, 20, 20], "score": 0.9, "coco_class": 49, "label": "orange"},
+             {"box": [22, 3, 38, 25], "score": 0.5, "coco_class": 46, "label": "banana"}]
+    monkeypatch.setattr(appmod, "_detector", FakeDetector(found))
+    r = client.post("/api/detect", json={"image": base64.b64encode(png_bytes()).decode()})
+    assert r.status_code == 200, r.get_json()
+    d = r.get_json()
+    assert d["image"] == {"width": 40, "height": 30} and len(d["items"]) == 2
+    first = d["items"][0]
+    # classifier (stub: apple, strongly) overrides the detector label
+    assert first["fruit"] == "apple" and first["detector_label"] == "orange"
+    assert first["box"] == {"x": 2.0, "y": 2.0, "w": 18.0, "h": 18.0}
+    assert first["image_url"].startswith("/static/uploads/") and first["shelf_life_days"] > 0
+    assert len(list(client.up.iterdir())) == 2
+    assert d["rejected"] == [] and d["detector"]["license"] == "Apache-2.0"
+
+
+def test_detect_drops_low_classifier_confidence(client, appmod, monkeypatch):
+    found = [{"box": [2, 2, 20, 20], "score": 0.9, "coco_class": 47, "label": "apple"}]
+    monkeypatch.setattr(appmod, "_detector", FakeDetector(found))
+    # near-uniform logits -> confidence ~10 percent, below the 70 percent minimum
+    monkeypatch.setattr(appmod, "model", lambda t: (FakeT([[0.0] * 10]), FakeT([[0.0, 1.0]])))
+    r = client.post("/api/detect", data={"file": (io.BytesIO(png_bytes()), "x.png")})
+    d = r.get_json()
+    assert r.status_code == 200 and d["items"] == []
+    assert d["rejected"][0]["reason"] == "low_classifier_confidence"
+    assert list(client.up.iterdir()) == []
+
+
+def test_detect_zero_detections_is_ok(client, appmod, monkeypatch):
+    monkeypatch.setattr(appmod, "_detector", FakeDetector([]))
+    r = client.post("/api/detect", data={"file": (io.BytesIO(png_bytes()), "x.png")})
+    assert r.status_code == 200 and r.get_json()["items"] == []

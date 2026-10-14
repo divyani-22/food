@@ -320,6 +320,107 @@ def predict():
             saved_path.unlink(missing_ok=True)
         return jsonify({"error": str(e)}), 500
 
+_detector = None
+
+
+def get_detector():
+    global _detector
+    if _detector is None:
+        import detector as det
+        _detector = det.Detector()
+    return _detector
+
+
+def _load_request_image():
+    """Image from a multipart 'file' or a JSON {"image": base64}. Returns (image, error_response)."""
+    if "file" in request.files and request.files["file"].filename != "":
+        try:
+            with Image.open(request.files["file"].stream) as img:
+                img.load()
+                return img.copy(), None
+        except Exception:
+            return None, _bad_request("Invalid or unsupported image file.")
+    body = request.get_json(silent=True)
+    if isinstance(body, dict) and isinstance(body.get("image"), str) and body["image"]:
+        raw_b64 = body["image"]
+        if raw_b64.startswith("data:") and "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        try:
+            with Image.open(io.BytesIO(base64.b64decode(raw_b64, validate=False))) as img:
+                img.load()
+                return img.copy(), None
+        except Exception:
+            return None, _bad_request("Invalid base64 image data.")
+    return None, _bad_request("No image provided. Upload a file or send base64.")
+
+
+@app.route("/api/detect", methods=["POST"])
+def detect_items():
+    """Find several fruit/vegetables in one photo and classify each crop with the FreshGuard model.
+
+    The COCO detector only localises; labels and freshness always come from the classifier, and a
+    detection is kept only if the classifier is at least MIN_CLASSIFIER_CONFIDENCE percent sure.
+    """
+    import detector as det
+    detector = get_detector()
+    ok, why = detector.is_available()
+    if not ok:
+        return jsonify({"error": "Detector not installed. " + why, "code": "detector_not_installed"}), 503
+
+    image, err = _load_request_image()
+    if err is not None:
+        return err
+    image = ImageOps.exif_transpose(image).convert("RGB")
+    width, height = image.size
+
+    saved = []
+    try:
+        try:
+            found = detector.detect(image)
+        except det.DetectorUnavailable as e:
+            return jsonify({"error": "Detector not installed. " + str(e), "code": "detector_not_installed"}), 503
+
+        items, rejected = [], []
+        for d in found:
+            left, top, right, bottom = det.pad_box(d["box"], width, height)
+            crop = image.crop((left, top, right, bottom))
+            result = run_inference(crop)
+            x1, y1, x2, y2 = d["box"]
+            base = {
+                "box": {"x": round(x1, 1), "y": round(y1, 1), "w": round(x2 - x1, 1), "h": round(y2 - y1, 1)},
+                "detector_label": d["label"],
+                "detector_score": round(d["score"] * 100, 1),
+            }
+            if result["confidence"] < det.MIN_CLASSIFIER_CONFIDENCE:
+                rejected.append({**base, "fruit": result["fruit"], "confidence": result["confidence"],
+                                 "reason": "low_classifier_confidence"})
+                continue
+            thumb = crop.copy()
+            thumb.thumbnail((256, 256))
+            name = f"{uuid.uuid4().hex}.jpg"
+            path = UPLOAD_FOLDER / name
+            thumb.save(path, "JPEG", quality=85)
+            saved.append(path)
+            items.append({**base, **result, "image_url": f"/static/uploads/{name}"})
+
+        return jsonify({
+            "items": items,
+            "rejected": rejected,
+            "image": {"width": width, "height": height},
+            "min_confidence": det.MIN_CLASSIFIER_CONFIDENCE,
+            "detector": {"model": det.MODEL_NAME, "license": det.MODEL_LICENSE,
+                         "classes": sorted(set(det.COCO_PRODUCE.values()))},
+            "note": "The detector only knows apple, banana, orange and carrot as produce; other items "
+                    "(mango, bell pepper, potato, tomato, cucumber, strawberry) are often missed.",
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        for p in saved:
+            p.unlink(missing_ok=True)
+        return jsonify({"error": str(e)}), 500
+
+
 def _to_float(value, default):
     try:
         f = float(value)
