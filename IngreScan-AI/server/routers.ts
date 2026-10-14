@@ -12,6 +12,7 @@ import { invokeLLM } from "./_core/llm";
 import fs from "fs";
 import { randomBytes } from "crypto";
 import path from "path";
+import { ALT_MARKET_ATTRIBUTION, allowAltMarketCall, countryFromRegion, lookupAlternativeMarket } from "./lib/altMarket";
 import { fetchOffProduct, isWellFormedBarcode, searchOffProducts } from "./lib/offClient";
 import {
   clampRiskScore,
@@ -480,6 +481,20 @@ Return the analysis with consumer education focus as a JSON array with this stru
         });
 
         return analysisResult;
+      }),
+
+    /** Real community price/availability data (Open Food Facts + Open Prices) for a scan's alternatives. Never throws on upstream failure. */
+    alternativeMarket: protectedProcedure
+      .input(z.object({ scanId: z.number().int() }))
+      .query(async ({ ctx, input }) => {
+        await requireOwnedScan(input.scanId, ctx.user.id);
+        if (!allowAltMarketCall(ctx.user.id)) {
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many price lookups. Please wait a minute and try again." });
+        }
+        const [alternatives, profile] = await Promise.all([db.getAlternatives(input.scanId), db.getUserProfile(ctx.user.id)]);
+        const country = countryFromRegion(profile?.region);
+        const items = await Promise.all(alternatives.slice(0, 8).map((a) => lookupAlternativeMarket(a, country)));
+        return { country, items, attribution: ALT_MARKET_ATTRIBUTION };
       }),
 
     suggestAlternatives: protectedProcedure

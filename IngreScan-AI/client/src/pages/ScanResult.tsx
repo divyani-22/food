@@ -12,6 +12,7 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { AIChatBox } from "@/components/AIChatBox";
 import { HealthAlerts } from "@/components/features/HealthAlerts";
+import { WhereToFindIt, useAlternativeMarket, useSeenOnce } from "@/components/features/AlternativeMarket";
 
 function parseSources(raw?: string | null): string {
   if (!raw) return "";
@@ -35,6 +36,10 @@ export default function ScanResult() {
   const suggestAlternativesMutation = trpc.analysis.suggestAlternatives.useMutation();
   const { data: chatHistory, refetch: refetchChat } = trpc.chat.getHistory.useQuery({ scanId }, { enabled: scanId > 0 });
   const sendMessageMutation = trpc.chat.sendMessage.useMutation();
+  // Real community price/availability data: only requested once alternatives exist and their list is near the viewport.
+  const [altListEl, setAltListEl] = useState<HTMLElement | null>(null);
+  const altSeen = useSeenOnce(altListEl);
+  const market = useAlternativeMarket(scanId, altSeen && (data?.alternatives.length ?? 0) > 0);
 
   useEffect(() => {
     if (chatHistory) {
@@ -241,7 +246,7 @@ export default function ScanResult() {
           </CardHeader>
           <CardContent>
             {alternatives.length > 0 ? (
-              <ul className="space-y-3">
+              <ul ref={setAltListEl} className="space-y-3">
                 {alternatives.map((alt) => (
                   <li key={alt.id} className="space-y-3 rounded-2xl bg-fog p-4 md:p-5">
                     <h4 className="flex items-start gap-2 text-lg font-bold leading-tight text-graphite">
@@ -261,6 +266,14 @@ export default function ScanResult() {
                         <p className="text-graphite">{alt.scientificJustification}</p>
                       </div>
                     )}
+                    <WhereToFindIt
+                      item={market.data?.items.find((i) => i.alternativeId === alt.id)}
+                      loading={!market.isError && !market.data && (market.isFetching || !altSeen)}
+                      failed={market.isError}
+                      retrying={market.isFetching}
+                      onRetry={() => void market.refetch()}
+                      attribution={market.data?.attribution}
+                    />
                     {alt.sources && (
                       <div className="flex items-start gap-1.5 break-words text-xs text-muted-foreground">
                         <ExternalLink className="mt-0.5 h-3 w-3 shrink-0" />
