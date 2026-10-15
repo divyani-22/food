@@ -201,6 +201,8 @@ export function createWhatsappServices({ env, fetchImpl = fetch }: ServiceDeps):
       if (res.status === 400) return null;
       if (!res.ok) throw new Error(`FreshGuard responded ${res.status}`);
       const d: any = await res.json();
+      // The classifier flags photos that do not look like produce (energy score); do not report a fruit for those.
+      if (d.is_produce === false) return null;
       return {
         fruit: String(d.fruit_kr ?? d.fruit ?? ""),
         confidence: Number(d.confidence),
