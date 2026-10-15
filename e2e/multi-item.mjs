@@ -221,8 +221,10 @@ try {
   await sp.waitForTimeout(1200);
   check("DB: 'Use anyway' saves the scan to history", Number(sql(`select count(*) from produce_scans where user_id=${aliceId}`)) === scansBefore + 1);
   await sp.setInputFiles('input[type="file"][accept="image/*"]:not([capture])', appleSample);
-  await sp.getByRole("button", { name: /Save to Fridge Pantry/ }).waitFor({ timeout: 60000 });
-  check("UI single: a real apple photo goes straight to the verdict (no warning)", (await sp.getByTestId("not-produce-card").count()) === 0 && /apple/i.test(await sp.locator("h2").first().innerText()));
+  // The previous (Use anyway) result still shows a Save button for an instant, so wait for the new verdict heading.
+  await sp.getByRole("heading", { level: 2, name: /apple/i }).first().waitFor({ timeout: 60000 });
+  const h2s = await sp.locator("h2").allInnerTexts();
+  check("UI single: a real apple photo goes straight to the verdict (no warning)", (await sp.getByTestId("not-produce-card").count()) === 0 && /apple/i.test(await sp.locator("h2").first().innerText()), JSON.stringify(h2s));
   check("UI single: no uncaught page errors", serrors.length === 0, serrors.join(" | "));
   await sp.screenshot({ path: path.join(OUT, "apple-verdict-390.png"), fullPage: true });
   const sd = await browser.newContext({ viewport: { width: 1280, height: 900 } });
