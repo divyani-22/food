@@ -21,7 +21,7 @@ import { protectedProcedure, router } from "./_core/trpc";
 import { invokeLLM, isRealLLMConfigured } from "./_core/llm";
 import * as db from "./db";
 import * as dbf from "./dbFeatures";
-import { getLLMText, parseTimestampInput } from "./logic";
+import { getLLMText, isValidYmd, parseTimestampInput } from "./logic";
 
 const FRESHNESS = z.enum(["fresh", "normal", "rotten"]);
 
@@ -266,7 +266,7 @@ export const receiptRouter = router({
     .mutation(async ({ ctx, input }) => {
       // Validate everything first so a bad row cannot leave a half-imported receipt behind.
       const prepared = input.items.map((item) => {
-        const expiry = parseTimestampInput(`${item.expiryDate}T00:00:00Z`);
+        const expiry = isValidYmd(item.expiryDate) ? parseTimestampInput(`${item.expiryDate}T00:00:00Z`) : null;
         if (!expiry) throw new TRPCError({ code: "BAD_REQUEST", message: `Invalid expiry date for "${item.name}"` });
         return { item, expiry };
       });

@@ -19,6 +19,7 @@ import {
   computeBmi,
   computeExpiry,
   firstCategory,
+  isValidYmd,
   getLLMText,
   normalizeGrade,
   normalizeNova,
@@ -37,6 +38,26 @@ async function requireOwnedScan(scanId: number, userId: number) {
   const scan = await db.getFoodScan(scanId, userId);
   if (!scan) throw new TRPCError({ code: "NOT_FOUND", message: "Scan not found" });
   return scan;
+}
+
+/** Serialises "replace derived rows" work per scan so overlapping requests (double submit) cannot interleave and duplicate rows. */
+const scanLocks = new Map<number, Promise<unknown>>();
+async function withScanLock<T>(scanId: number, fn: () => Promise<T>): Promise<T> {
+  const prev = scanLocks.get(scanId) ?? Promise.resolve();
+  const run = prev.then(fn, fn);
+  const tail = run.catch(() => undefined);
+  scanLocks.set(scanId, tail);
+  try {
+    return await run;
+  } finally {
+    if (scanLocks.get(scanId) === tail) scanLocks.delete(scanId);
+  }
+}
+
+/** Models sometimes return the bare array the prompt describes instead of the wrapper object. */
+function listFromLLM(parsed: any, key: string): any[] {
+  if (Array.isArray(parsed)) return parsed;
+  return Array.isArray(parsed?.[key]) ? parsed[key] : [];
 }
 
 /** Produce images are served from this app's own /static (uploads or bundled samples); no external URLs. */
@@ -123,9 +144,12 @@ const userProfileSchema = z.object({
   region: z.string().trim().max(64).optional(),
 });
 
+/** TIMESTAMP columns (MySQL) only hold 1970-2038; out-of-range dates would otherwise surface as a 500 from the driver. */
+const timestampDate = z.date().refine((d) => parseTimestampInput(d) !== null, "Date is out of the supported range");
+
 const medicalConditionSchema = z.object({
   condition: z.string().trim().min(1).max(2000),
-  diagnosedDate: z.date().optional(),
+  diagnosedDate: timestampDate.optional(),
   notes: z.string().max(5000).optional(),
 });
 
@@ -133,8 +157,8 @@ const medicationSchema = z.object({
   name: z.string().trim().min(1).max(255),
   dosage: z.string().max(100).optional(),
   frequency: z.string().max(100).optional(),
-  startDate: z.date().optional(),
-  endDate: z.date().optional(),
+  startDate: timestampDate.optional(),
+  endDate: timestampDate.optional(),
   isCurrent: z.boolean().default(true),
   notes: z.string().max(5000).optional(),
 });
@@ -198,7 +222,12 @@ export const appRouter = router({
       .input(userProfileSchema)
       .mutation(async ({ ctx, input }) => {
         // Calculate BMI if height and weight provided
-        const bmi = input.bmi ?? computeBmi(input.height, input.weight);
+        // A partial update (only weight, or only height) must use the stored other half, otherwise BMI goes stale.
+        let bmi = input.bmi;
+        if (bmi === undefined && (input.height !== undefined || input.weight !== undefined)) {
+          const existing = await db.getUserProfile(ctx.user.id);
+          bmi = computeBmi(input.height ?? existing?.height, input.weight ?? existing?.weight);
+        }
 
         return db.upsertUserProfile({
           userId: ctx.user.id,
@@ -461,7 +490,7 @@ Return the analysis with consumer education focus as a JSON array with this stru
           console.error("[Analysis] Unparseable LLM response:", err);
           throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI analysis returned an invalid response. Please try again." });
         }
-        const parsedIngredients = (Array.isArray(analysisResult?.ingredients) ? analysisResult.ingredients : [])
+        const parsedIngredients = listFromLLM(analysisResult, "ingredients")
           .map(sanitizeIngredient)
           .filter((i: any): i is NonNullable<typeof i> => i !== null);
         if (parsedIngredients.length === 0) {
@@ -469,14 +498,16 @@ Return the analysis with consumer education focus as a JSON array with this stru
         }
 
         // Replace any previous analysis so re-running does not duplicate rows
-        await db.deleteScanIngredients(input.scanId);
-        for (const ingredient of parsedIngredients) {
-          await db.addScanIngredient({ scanId: input.scanId, ...ingredient });
-        }
+        await withScanLock(input.scanId, async () => {
+          await db.deleteScanIngredients(input.scanId);
+          for (const ingredient of parsedIngredients) {
+            await db.addScanIngredient({ scanId: input.scanId, ...ingredient });
+          }
+        });
 
         // Update scan with risk score
         await db.updateFoodScan(input.scanId, ctx.user.id, {
-          riskScore: clampRiskScore(analysisResult.overallRiskScore),
+          riskScore: clampRiskScore(analysisResult?.overallRiskScore),
           analysisComplete: true,
         });
 
@@ -575,14 +606,18 @@ Return as JSON array:
           console.error("[Alternatives] Unparseable LLM response:", err);
           throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI returned an invalid response. Please try again." });
         }
-        const alts = (Array.isArray(result?.alternatives) ? result.alternatives : [])
+        const alts = listFromLLM(result, "alternatives")
           .map(sanitizeAlternative)
           .filter((a: any): a is NonNullable<typeof a> => a !== null);
 
         // Replace previous suggestions so repeated requests do not pile up duplicates
-        if (alts.length > 0) await db.deleteAlternatives(input.scanId);
-        for (const alt of alts) {
-          await db.addAlternative({ scanId: input.scanId, ...alt });
+        if (alts.length > 0) {
+          await withScanLock(input.scanId, async () => {
+            await db.deleteAlternatives(input.scanId);
+            for (const alt of alts) {
+              await db.addAlternative({ scanId: input.scanId, ...alt });
+            }
+          });
         }
 
         return alts;
@@ -702,7 +737,7 @@ Be helpful, accurate, educational, and personalized to the user's health profile
         storageTip: z.string().max(2000).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        if (Number.isNaN(new Date(`${input.expiryDate}T00:00:00Z`).getTime())) {
+        if (!isValidYmd(input.expiryDate)) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid expiry date" });
         }
         const id = await db.addProduceInventoryItem({
