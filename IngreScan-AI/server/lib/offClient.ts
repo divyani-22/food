@@ -95,11 +95,13 @@ export type OffCacheOptions = {
 };
 
 function envInt(name: string, fallback: number): number {
-  const n = Number(process.env[name]);
+  const raw = (process.env[name] ?? "").trim();
+  if (raw === "") return fallback; // an empty variable is "unset", not 0
+  const n = Number(raw);
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
-function defaultCacheOptions(): OffCacheOptions {
+export function defaultCacheOptions(): OffCacheOptions {
   return {
     // Off under vitest (NODE_ENV=test) so unrelated tests never see stale entries; off-tests enable it explicitly.
     enabled: process.env.OFF_CACHE_DISABLED !== "true" && process.env.NODE_ENV !== "test",

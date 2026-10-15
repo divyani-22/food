@@ -431,7 +431,8 @@ export function createHandlerDeps(env: WhatsappEnv = getWhatsappEnv()): HandlerD
  * checks need the exact raw bytes. Routes answer 503 until the provider's credentials are configured.
  */
 export function registerWhatsappRoutes(app: Express, depsOverride?: HandlerDeps) {
-  if (process.env.TRUST_PROXY) app.set("trust proxy", Number(process.env.TRUST_PROXY) || 1);
+  // TRUST_PROXY is applied once at startup by configureTrustProxy (index.ts). Do not re-parse it here: this used to
+  // turn TRUST_PROXY=0 into 1 hop and a subnet list such as "loopback" into 1 hop, letting clients spoof X-Forwarded-For.
   const env = getWhatsappEnv();
   const deps = depsOverride ?? createHandlerDeps(env);
 

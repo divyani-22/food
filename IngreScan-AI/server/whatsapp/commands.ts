@@ -63,7 +63,8 @@ export function parseCommand(input: string | undefined | null): Command {
   const compact = stripped.replace(/[\s-]/g, "");
   if (/^\d{8,14}$/.test(compact) && /^[\d\s-]+$/.test(stripped)) return { type: "barcode", digits: compact };
 
-  const sp = stripped.indexOf(" ");
+  // Any whitespace (including a line break, which cleanInput keeps) separates the command word from its argument.
+  const sp = stripped.search(/\s/);
   const word = (sp === -1 ? stripped : stripped.slice(0, sp)).toUpperCase();
   const arg = sp === -1 ? "" : stripped.slice(sp + 1).trim();
 

@@ -126,6 +126,14 @@ export function errorHandler(): (err: any, req: Request, res: Response, next: Ne
     } else if (type === "request.aborted") {
       status = 400;
       message = "Request aborted.";
+    } else {
+      // Errors raised by Express/body-parser carry a 4xx status for client faults (for example URIError "Failed to decode
+      // param" -> 400); report those as such instead of a logged 500.
+      const declared = Number(err?.status ?? err?.statusCode);
+      if (Number.isInteger(declared) && declared >= 400 && declared < 500) {
+        status = declared;
+        message = declared === 413 ? "Request body is too large." : declared === 415 ? "Unsupported media type." : "Bad request.";
+      }
     }
     if (status >= 500) {
       log("error", "unhandled_route_error", { reqId: res.locals.reqId, method: req.method, path: (req.originalUrl || "").split("?")[0], ...errorFields(err) });

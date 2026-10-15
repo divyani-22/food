@@ -33,6 +33,12 @@ function decodePixels(bytes: Uint8Array, contentType: string): Gray | null {
       height = img.height;
       rgba = img.data;
     } else if (/png/i.test(contentType)) {
+      // PNG.sync.read allocates width*height*4 bytes from the IHDR before decoding a single pixel, so a tiny file can
+      // claim billions of pixels. Check the declared size first (IHDR: 8-byte signature, length, "IHDR", width, height).
+      if (buf.length >= 24 && buf.toString("ascii", 12, 16) === "IHDR") {
+        const declared = buf.readUInt32BE(16) * buf.readUInt32BE(20);
+        if (declared > MAX_PIXELS) return null;
+      }
       const img = PNG.sync.read(buf);
       width = img.width;
       height = img.height;

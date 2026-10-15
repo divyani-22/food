@@ -105,7 +105,7 @@ export function securityHeaders(opts: SecurityOptions = optionsFromEnv()): Reque
       res.setHeader("Content-Security-Policy-Report-Only", full);
     }
     // API answers carry per-user data: never store them in shared caches.
-    if (req.path.startsWith("/api/")) res.setHeader("Cache-Control", "no-store");
+    if (req.path.toLowerCase().startsWith("/api/")) res.setHeader("Cache-Control", "no-store");
     next();
   };
 }
@@ -130,7 +130,9 @@ export function sameOriginGuard(allowed: string[] = []): RequestHandler {
   if (publicBase) extra.add(publicBase);
   return (req, res, next) => {
     if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
-    if (!req.path.startsWith("/api/") || req.path.startsWith("/api/whatsapp/")) return next();
+    // Express routing is case-insensitive, so match the lower-cased path: "/API/trpc/..." reaches the same handlers.
+    const lowerPath = req.path.toLowerCase();
+    if (!lowerPath.startsWith("/api/") || lowerPath.startsWith("/api/whatsapp/")) return next();
     const o = req.headers.origin;
     if (!o) return next();
     let host: string | null = null;

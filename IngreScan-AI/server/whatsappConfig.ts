@@ -37,7 +37,7 @@ export function getWhatsappEnv(env: NodeJS.ProcessEnv = process.env): WhatsappEn
     botNumber: env.WHATSAPP_BOT_NUMBER || "",
     reminderTemplate: { name: templateName, language: env.WHATSAPP_REMINDER_LANGUAGE || "en" },
     useEmoji: env.WHATSAPP_USE_EMOJI === "true",
-    remindersEnabled: env.WHATSAPP_REMINDERS !== "off",
+    remindersEnabled: !["off", "false", "0", "no"].includes((env.WHATSAPP_REMINDERS ?? "").trim().toLowerCase()),
     allowSchemeVariants: env.WHATSAPP_TRUST_SCHEME_VARIANTS === "true",
   };
 }

@@ -20,7 +20,11 @@ export function normalizePhone(input: string | undefined | null): string | null 
 
 /** Twilio addressing: "whatsapp:+15551234567". */
 export function toTwilioAddress(e164: string): string {
-  return "whatsapp:" + (e164.startsWith("+") ? e164 : "+" + e164);
+  // The Twilio console shows senders as "whatsapp:+1415...", which is what operators paste into TWILIO_WHATSAPP_FROM.
+  const n = normalizePhone(e164);
+  if (n) return "whatsapp:" + n;
+  const bare = e164.trim().replace(WA_PREFIX, "");
+  return "whatsapp:" + (bare.startsWith("+") ? bare : "+" + bare);
 }
 
 /** Meta addressing: digits only. */
