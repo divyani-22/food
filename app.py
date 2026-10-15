@@ -6,6 +6,7 @@ import uuid
 import sqlite3
 import base64
 import re
+import numpy as np
 from contextlib import closing
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -23,6 +24,8 @@ from torchvision import transforms
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from werkzeug.exceptions import HTTPException
 from flask_cors import CORS
+
+import ood
 
 # --- App Configuration ---
 BASE_DIR = Path(__file__).resolve().parent
@@ -162,6 +165,7 @@ def run_inference(image: Image.Image):
 
     with torch.no_grad():
         pf, pb = model(tensor)
+        fruit_logits = pf[0].cpu().numpy()
         fruit_probs = torch.softmax(pf, dim=1)[0].cpu().numpy()
         fresh_probs = torch.softmax(pb, dim=1)[0].cpu().numpy()
 
@@ -199,7 +203,10 @@ def run_inference(image: Image.Image):
         "shelf_life_days": shelf_days,
         "storage_tips": fruit_meta.get("storage", DEFAULT_STORAGE_TIP),
         "cooking_tips": cooking_guide,
-        "top_candidates": all_fruits[:4]
+        "top_candidates": all_fruits[:4],
+        # Out-of-distribution verdict (see ood.py, docs/non-produce-rejection.md). Additive fields: the fruit
+        # above is still the closed-set argmax even when is_produce is false.
+        **ood.assess(fruit_logits),
     }
 
 
@@ -295,7 +302,8 @@ def predict():
 
         # Save to this service's own scan history, used only by the standalone page.
         # The IngreScan web app sends persist=0 and stores history per user in MySQL instead.
-        if request.args.get("persist", "1") != "0":
+        # A photo flagged as not produce is not written to the standalone history (the response still carries it).
+        if request.args.get("persist", "1") != "0" and result["is_produce"]:
             with closing(sqlite3.connect(DB_PATH)) as conn:
                 conn.execute("""
                     INSERT INTO scan_history (fruit_type, fruit_name_kr, freshness, freshness_kr, p_fresh, confidence, image_url)
@@ -321,6 +329,8 @@ def predict():
         return jsonify({"error": str(e)}), 500
 
 _detector = None
+# Decided from tools/eval_shelf.py numbers, see docs/multi-item-detection.md
+SHELF_SECOND_PASS_DEFAULT = False
 
 
 def get_detector():
@@ -354,12 +364,64 @@ def _load_request_image():
     return None, _bad_request("No image provided. Upload a file or send base64.")
 
 
+def _env_flag(name, default):
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _batch_fruit_logits(crops):
+    """Fruit logits (N, n_fruit) for several PIL crops in one forward pass (second pass only)."""
+    batch = torch.stack([inference_transform(c.convert("RGB")) for c in crops]).to(DEVICE)
+    with torch.no_grad():
+        pf, _ = model(batch)
+    return pf.cpu().numpy()
+
+
+def _second_pass(image, existing_boxes):
+    """Sliding-window proposals scored by the classifier with a much stricter bar than the detector path.
+
+    Returns (boxes, stats). Boxes are xyxy ints, best first, already NMS'd and de-duplicated against
+    `existing_boxes`. Every returned box is later classified like any other crop and marked second_pass.
+    """
+    import detector as det
+    width, height = image.size
+    windows = det.propose_windows(width, height)
+    stats = {"windows": len(windows), "passed_bar": 0, "added": 0}
+    if not windows:
+        return [], stats
+    logits = np.concatenate([_batch_fruit_logits([image.crop(w) for w in windows[i:i + 32]])
+                             for i in range(0, len(windows), 32)])
+    min_l = ood.env_float("SHELF_SECOND_PASS_MIN_LIKELIHOOD", ood.DEFAULT_SECOND_PASS_MIN_LIKELIHOOD)
+    min_c = det.SECOND_PASS_MIN_CONFIDENCE
+    boxes, scores = [], []
+    for w, lg in zip(windows, logits):
+        e = ood.energy_score(lg)
+        conf = ood.max_softmax(lg) * 100
+        if ood.likelihood_from_energy(e) >= min_l and conf >= min_c:
+            boxes.append(w)
+            scores.append(e)
+    stats["passed_bar"] = len(boxes)
+    if not boxes:
+        return [], stats
+    keep = det.select_extra(np.array(boxes, dtype=np.float32), np.array(scores), existing_boxes)
+    stats["added"] = len(keep)
+    return [boxes[i] for i in keep], stats
+
+
 @app.route("/api/detect", methods=["POST"])
 def detect_items():
     """Find several fruit/vegetables in one photo and classify each crop with the FreshGuard model.
 
     The COCO detector only localises; labels and freshness always come from the classifier, and a
-    detection is kept only if the classifier is at least MIN_CLASSIFIER_CONFIDENCE percent sure.
+    detection is kept only if the classifier is at least MIN_CLASSIFIER_CONFIDENCE percent sure and the
+    crop does not look like a non-produce image (out-of-distribution score, PRODUCE_MIN_LIKELIHOOD).
+    Kept items can carry needs_check / check_reasons; the web app leaves those unticked.
+
+    Environment (read per request): PRODUCE_MIN_LIKELIHOOD (0 disables the OOD gate),
+    SHELF_CHECKS (default 1), SHELF_SECOND_PASS (default per docs/multi-item-detection.md),
+    SHELF_SURE_LIKELIHOOD (default 0.8).
     """
     import detector as det
     detector = get_detector()
@@ -373,6 +435,11 @@ def detect_items():
     image = ImageOps.exif_transpose(image).convert("RGB")
     width, height = image.size
 
+    min_likelihood = ood.min_likelihood()
+    sure_likelihood = max(min_likelihood, ood.env_float("SHELF_SURE_LIKELIHOOD", ood.DEFAULT_SHELF_SURE_LIKELIHOOD))
+    checks_on = _env_flag("SHELF_CHECKS", True)
+    second_pass_on = _env_flag("SHELF_SECOND_PASS", SHELF_SECOND_PASS_DEFAULT)
+
     saved = []
     try:
         try:
@@ -381,33 +448,64 @@ def detect_items():
             return jsonify({"error": "Detector not installed. " + str(e), "code": "detector_not_installed"}), 503
 
         items, rejected = [], []
-        for d in found:
-            left, top, right, bottom = det.pad_box(d["box"], width, height)
+        pass_stats = None
+
+        def handle(box, label, score, second_pass):
+            left, top, right, bottom = det.pad_box(box, width, height)
             crop = image.crop((left, top, right, bottom))
             result = run_inference(crop)
-            x1, y1, x2, y2 = d["box"]
+            x1, y1, x2, y2 = box
             base = {
-                "box": {"x": round(x1, 1), "y": round(y1, 1), "w": round(x2 - x1, 1), "h": round(y2 - y1, 1)},
-                "detector_label": d["label"],
-                "detector_score": round(d["score"] * 100, 1),
+                "box": {"x": round(float(x1), 1), "y": round(float(y1), 1),
+                        "w": round(float(x2 - x1), 1), "h": round(float(y2 - y1), 1)},
+                "detector_label": label,
+                "detector_score": round(score * 100, 1) if score is not None else None,
+                "source": "second_pass" if second_pass else "detector",
             }
+            if min_likelihood > 0 and result["produce_likelihood"] < min_likelihood:
+                rejected.append({**base, "fruit": result["fruit"], "confidence": result["confidence"],
+                                 "produce_likelihood": result["produce_likelihood"], "reason": "not_produce"})
+                return
             if result["confidence"] < det.MIN_CLASSIFIER_CONFIDENCE:
                 rejected.append({**base, "fruit": result["fruit"], "confidence": result["confidence"],
+                                 "produce_likelihood": result["produce_likelihood"],
                                  "reason": "low_classifier_confidence"})
-                continue
+                return
+            reasons = []
+            if checks_on:
+                reasons = det.check_reasons(
+                    detector_label=label, fruit=result["fruit"], confidence=result["confidence"],
+                    top_candidates=result["top_candidates"],
+                    produce_likelihood=result["produce_likelihood"] if min_likelihood > 0 else None,
+                    sure_likelihood=sure_likelihood, second_pass=second_pass)
             thumb = crop.copy()
             thumb.thumbnail((256, 256))
             name = f"{uuid.uuid4().hex}.jpg"
             path = UPLOAD_FOLDER / name
             thumb.save(path, "JPEG", quality=85)
             saved.append(path)
-            items.append({**base, **result, "image_url": f"/static/uploads/{name}"})
+            items.append({**base, **result, "image_url": f"/static/uploads/{name}",
+                          "needs_check": bool(reasons), "check_reasons": reasons})
+
+        for d in found:
+            handle(d["box"], d["label"], d["score"], False)
+
+        if second_pass_on:
+            existing = [d["box"] for d in found]
+            extra, pass_stats = _second_pass(image, existing)
+            for box in extra:
+                handle([float(v) for v in box], None, None, True)
+
+        # reading order for the review list: top-to-bottom bands, then left-to-right
+        items.sort(key=lambda it: (round(it["box"]["y"] / 40), it["box"]["x"]))
 
         return jsonify({
             "items": items,
             "rejected": rejected,
             "image": {"width": width, "height": height},
             "min_confidence": det.MIN_CLASSIFIER_CONFIDENCE,
+            "ood": {"method": ood.METHOD, "min_likelihood": min_likelihood, "sure_likelihood": sure_likelihood},
+            "second_pass": {"enabled": second_pass_on, **(pass_stats or {})},
             "detector": {"model": det.MODEL_NAME, "license": det.MODEL_LICENSE,
                          "classes": sorted(set(det.COCO_PRODUCE.values()))},
             "note": "The detector only knows apple, banana, orange and carrot as produce; other items "

@@ -40,6 +40,7 @@ import {
   Cpu,
   Cloud,
   Loader2,
+  TriangleAlert,
 } from "lucide-react";
 
 interface PredictionResult {
@@ -60,6 +61,12 @@ interface PredictionResult {
     name_kr: string;
     probability: number;
   }>;
+  /**
+   * Out-of-distribution verdict from the server (energy score, docs/non-produce-rejection.md). Absent on the
+   * on-device path and on older servers: absent means "unknown", never "not produce".
+   */
+  is_produce?: boolean;
+  produce_likelihood?: number;
 }
 
 interface InventoryItem {
@@ -141,6 +148,8 @@ export default function ProduceScanner() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<PredictionResult | null>(null);
+  // The user chose "Use anyway" for a result the server flagged as not produce.
+  const [useAnyway, setUseAnyway] = useState(false);
   const [samples, setSamples] = useState<Array<{ filename: string; label: string; url: string }>>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [historyList, setHistoryList] = useState<HistoryItem[]>([]);
@@ -266,6 +275,7 @@ export default function ProduceScanner() {
   const inspect = async (source: InspectionSource) => {
     setIsAnalyzing(true);
     setResult(null);
+    setUseAnyway(false);
     try {
       let data: PredictionResult | null = null;
       if (wantsDevice) {
@@ -288,8 +298,13 @@ export default function ProduceScanner() {
         setLastRun({ engine: "server", ms: Math.round(performance.now() - started) });
       }
       setResult(data);
-      void saveScanToHistory(data);
-      toast.success(source.successMessage(data));
+      if (data.is_produce === false) {
+        // Flagged: no confident fruit name, nothing saved until the user chooses "Use anyway".
+        toast.warning("This does not look like fresh produce.");
+      } else {
+        void saveScanToHistory(data);
+        toast.success(source.successMessage(data));
+      }
     } catch (err: any) {
       toast.error(err.message || source.failureMessage);
     } finally {
@@ -338,6 +353,14 @@ export default function ProduceScanner() {
       successMessage: (data) => `Identified sample: ${data.fruit_kr}.`,
       failureMessage: "Sample analysis failed",
     });
+  };
+
+  const notProduce = result?.is_produce === false && !useAnyway;
+
+  const confirmUseAnyway = () => {
+    if (!result) return;
+    setUseAnyway(true);
+    void saveScanToHistory(result);
   };
 
   const addToInventory = async () => {
@@ -469,6 +492,7 @@ export default function ProduceScanner() {
               onClick={() => {
                 setSelectedImage(null);
                 setResult(null);
+                setUseAnyway(false);
               }}
             >
               <RotateCcw className="h-4 w-4" /> Reset
@@ -708,6 +732,46 @@ export default function ProduceScanner() {
                               ? "Running EfficientNet-B0 on this device"
                               : "Running EfficientNet-B0 multitask neural classification"}
                         </p>
+                      </div>
+                    </div>
+                  </Card>
+                ) : result && notProduce ? (
+                  <Card className="gap-0 py-0 md:py-0" data-testid="not-produce-card">
+                    <div className="space-y-5 p-5 md:p-7">
+                      <div className="flex items-start gap-3">
+                        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-fog">
+                          <TriangleAlert className="h-7 w-7 text-sunset-orange" />
+                        </span>
+                        <div className="min-w-0">
+                          <h2 className="fn-heading-sm text-graphite">This does not look like fresh produce</h2>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Produce match: {Math.round((result.produce_likelihood ?? 0) * 100)}% (low)
+                          </p>
+                        </div>
+                      </div>
+                      <p className="rounded-2xl bg-fog p-4 text-sm leading-relaxed text-muted-foreground">
+                        FreshGuard can only inspect {supportedProduce.join(", ")}. This photo does not match any of them
+                        well enough, so no fruit name or freshness verdict is shown. Try a clear, well-lit close-up of a
+                        single item. The closest guess was {result.fruit_kr}, which is not reliable here.
+                      </p>
+                      <div className="flex flex-col gap-3 sm:flex-row">
+                        <Button
+                          size="lg"
+                          className="w-full sm:flex-1"
+                          onClick={() => fileInputRef.current?.click()}
+                          data-testid="not-produce-retry"
+                        >
+                          <Upload className="h-5 w-5" /> Try another photo
+                        </Button>
+                        <Button
+                          size="lg"
+                          variant="secondary"
+                          className="w-full sm:flex-1"
+                          onClick={confirmUseAnyway}
+                          data-testid="not-produce-use-anyway"
+                        >
+                          Use anyway
+                        </Button>
                       </div>
                     </div>
                   </Card>
