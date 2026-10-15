@@ -498,3 +498,44 @@ describe("dietary constraint helpers", () => {
     expect(findHardConflicts(["swordfish"], { conditions: ["pregnant"] })).toHaveLength(1);
   });
 });
+
+describe("safety review additions", () => {
+  it("disclaimer never tells anyone to stop a medicine and says so explicitly", () => {
+    expect(HEALTH_DISCLAIMER).toMatch(/doctor, pharmacist/);
+    expect(HEALTH_DISCLAIMER).toMatch(/Do not stop, skip or change a prescribed medicine/);
+    const r = ev({
+      conditions: ["pregnant", "celiac"],
+      medications: [{ name: "warfarin" }, { name: "phenelzine" }, { name: "simvastatin" }, { name: "levothyroxine" }, { name: "lisinopril" }, { name: "felodipine" }],
+      ingredients: [{ name: "Spinach" }, { name: "Aged cheddar" }, { name: "Grapefruit juice" }, { name: "Soy" }, { name: "Potassium chloride" }, { name: "Cranberry juice" }, { name: "Wheat" }],
+    });
+    expect(r.length).toBeGreaterThan(5);
+    for (const a of r) {
+      expect(a.disclaimer).toBe(HEALTH_DISCLAIMER);
+      expect(`${a.title} ${a.message} ${a.reason}`).not.toMatch(/\b(stop taking|stop your|discontinue|skip (a|your) dose|do not take your)\b/i);
+    }
+  });
+  it("flags cranberry and grapefruit for warfarin users", () => {
+    expect(ids(ev({ medications: [{ name: "warfarin" }], ingredients: [{ name: "Cranberry juice" }] }))).toContain("med.warfarin.drinks");
+    expect(ids(ev({ medications: [{ name: "warfarin" }], ingredients: [{ name: "Apple" }] }))).not.toContain("med.warfarin.drinks");
+  });
+  it("flags grapefruit for felodipine / nifedipine", () => {
+    expect(detectMedications([{ name: "Felodipine 5mg" }]).has("ccb_felodipine")).toBe(true);
+    expect(ids(ev({ medications: [{ name: "nifedipine" }], ingredients: [{ name: "Grapefruit" }] }))).toContain("med.ccb.grapefruit");
+  });
+  it("flags sesame, tahini and the OFF sesame tag for sesame allergy", () => {
+    expect(detectConditions(["sesame allergy"]).has("sesame")).toBe(true);
+    expect(ids(ev({ conditions: ["sesame allergy"], ingredients: [{ name: "Tahini" }] }))).toContain("allergy.sesame");
+    expect(ids(ev({ conditions: ["sesame allergy"], allergensTags: ["en:sesame-seeds"] }))).toContain("allergy.sesame");
+    expect(describeDietaryConstraints(["sesame allergy"])).toContain("No sesame, tahini or sesame oil.");
+  });
+  it("flags soy sauce and beer for celiac, and soy sauce for wheat allergy, but not ginger ale", () => {
+    expect(ids(ev({ conditions: ["celiac"], ingredients: [{ name: "Soy sauce" }] }))).toContain("allergy.gluten.celiac");
+    expect(ids(ev({ conditions: ["celiac"], ingredients: [{ name: "Beer" }] }))).toContain("allergy.gluten.celiac");
+    expect(ids(ev({ conditions: ["wheat allergy"], ingredients: [{ name: "Soy sauce" }] }))).toContain("allergy.wheat");
+    expect(ids(ev({ conditions: ["celiac"], ingredients: [{ name: "Ginger ale" }] }))).not.toContain("allergy.gluten.celiac");
+  });
+  it("flags coffee, walnut and calcium for levothyroxine users at info level", () => {
+    const r = ev({ medications: [{ name: "levothyroxine" }], ingredients: [{ name: "Coffee" }, { name: "Walnut" }] });
+    expect(r.find((a) => a.id === "med.levothyroxine.absorption")?.severity).toBe("info");
+  });
+});

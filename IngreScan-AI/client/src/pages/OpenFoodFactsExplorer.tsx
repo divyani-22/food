@@ -176,15 +176,15 @@ export default function OpenFoodFactsExplorer() {
   const getNutriscoreColor = (grade: string | null) => {
     switch (grade) {
       case "A":
-        return "bg-verdant-green text-white";
+        return "bg-verdant-ink text-white";
       case "B":
-        return "bg-sky-blue text-white";
+        return "bg-sky-ink text-white";
       case "C":
         return "bg-amber-ink text-white";
       case "D":
-        return "bg-ember-orange text-white";
+        return "bg-ember-deep text-white";
       case "E":
-        return "bg-alert-red text-white";
+        return "bg-alert-ink text-white";
       default:
         return "bg-muted-foreground text-white";
     }
@@ -193,13 +193,13 @@ export default function OpenFoodFactsExplorer() {
   const getNovaColor = (group: number | null) => {
     switch (group) {
       case 1:
-        return "bg-verdant-green text-white";
+        return "bg-verdant-ink text-white";
       case 2:
-        return "bg-sky-blue text-white";
+        return "bg-sky-ink text-white";
       case 3:
         return "bg-amber-ink text-white";
       case 4:
-        return "bg-signal-red-orange text-white";
+        return "bg-negative-ink text-white";
       default:
         return "bg-muted-foreground text-white";
     }
@@ -322,8 +322,8 @@ export default function OpenFoodFactsExplorer() {
 
             {/* Product Details Display */}
             {isProductLoading ? (
-              <div className="flex flex-col items-center gap-3 rounded-3xl bg-white px-5 py-16 text-center text-muted-foreground">
-                <Loader2 className="h-7 w-7 animate-spin text-ember-orange" />
+              <div role="status" className="flex flex-col items-center gap-3 rounded-3xl bg-white px-5 py-16 text-center text-muted-foreground">
+                <Loader2 className="h-7 w-7 animate-spin text-ember-orange" aria-hidden="true" />
                 <p className="text-sm">Querying Open Food Facts database for barcode {activeBarcode}...</p>
               </div>
             ) : isProductError ? (
@@ -596,8 +596,8 @@ export default function OpenFoodFactsExplorer() {
             </section>
 
             {isSearchLoading ? (
-              <div className="flex flex-col items-center gap-3 rounded-3xl bg-white px-5 py-16 text-center text-muted-foreground">
-                <Loader2 className="h-7 w-7 animate-spin text-ember-orange" />
+              <div role="status" className="flex flex-col items-center gap-3 rounded-3xl bg-white px-5 py-16 text-center text-muted-foreground">
+                <Loader2 className="h-7 w-7 animate-spin text-ember-orange" aria-hidden="true" />
                 <p className="text-sm">Searching Open Food Facts...</p>
               </div>
             ) : isSearchError ? (

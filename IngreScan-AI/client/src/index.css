@@ -7,6 +7,12 @@
   --font-sans: var(--font-sans-stack);
   --radius-3xl: var(--radius-fn);
   --color-ember-orange: var(--fn-ember-orange);
+  --color-ember-deep: var(--fn-ember-deep);
+  --color-verdant-ink: var(--fn-verdant-ink);
+  --color-sunset-ink: var(--fn-sunset-ink);
+  --color-negative-ink: var(--fn-negative-ink);
+  --color-sky-ink: var(--fn-sky-ink);
+  --color-alert-ink: var(--fn-alert-ink);
   --color-verdant-green: var(--fn-verdant-green);
   --color-signal-red-orange: var(--fn-signal-red-orange);
   --color-sky-blue: var(--fn-sky-blue);
@@ -77,6 +83,14 @@
   --fn-alert-red: #ff001e;         /* severe */
   --fn-plum: #bd4be5;              /* data category */
   --fn-iris: #5856de;              /* data category */
+  /* Contrast-safe "ink" companions (WCAG 2.1 AA, ratios in docs/accessibility.md). The bright brand tokens above stay
+   * for fills, dots, icons and focus-free decoration; anything that is TEXT, or carries white text, uses these. */
+  --fn-ember-deep: #c94000;        /* filled brand buttons (white text 4.98:1), orange text (4.57:1 on fog) */
+  --fn-verdant-ink: #00802e;       /* green text / badge fill with white text (5.09:1 on white, 4.67:1 on fog) */
+  --fn-sunset-ink: #b35200;        /* caution text (5.09:1 on white, 4.67:1 on fog) */
+  --fn-negative-ink: #d12b00;      /* red text, destructive fill with white text (5.18:1, 4.75:1 on fog) */
+  --fn-sky-ink: #00779a;           /* badge fill with white text (5.12:1) */
+  --fn-alert-ink: #d60018;         /* severe badge fill with white text (5.42:1) */
   --fn-graphite: #2f2f2f;          /* text, dark buttons */
   --fn-charcoal: #000000;
   --fn-fog: #f5f5f5;               /* alternate surface */
@@ -95,7 +109,7 @@
   --card-foreground: var(--fn-graphite);
   --popover: var(--fn-paper-white);
   --popover-foreground: var(--fn-graphite);
-  --primary: var(--fn-ember-orange);
+  --primary: var(--fn-ember-deep);
   --primary-foreground: var(--fn-paper-white);
   --secondary: var(--fn-fog);
   --secondary-foreground: var(--fn-graphite);
@@ -103,15 +117,15 @@
   --muted-foreground: var(--fn-ink-muted);
   --accent: var(--fn-fog);
   --accent-foreground: var(--fn-graphite);
-  --destructive: var(--fn-signal-red-orange);
+  --destructive: var(--fn-negative-ink);
   --destructive-foreground: var(--fn-paper-white);
   --border: var(--fn-hairline);
   --input: var(--fn-hairline);
-  --ring: var(--fn-ember-orange);
+  --ring: var(--fn-ember-deep);
 
   --positive: var(--fn-verdant-green);
   --caution: var(--fn-sunset-orange);
-  --negative: var(--fn-signal-red-orange);
+  --negative: var(--fn-negative-ink);
 
   /* Data palette (charts / categories only) */
   --chart-1: var(--fn-ember-orange);
@@ -122,12 +136,12 @@
 
   --sidebar: var(--fn-paper-white);
   --sidebar-foreground: var(--fn-graphite);
-  --sidebar-primary: var(--fn-ember-orange);
+  --sidebar-primary: var(--fn-ember-deep);
   --sidebar-primary-foreground: var(--fn-paper-white);
   --sidebar-accent: var(--fn-fog);
   --sidebar-accent-foreground: var(--fn-graphite);
   --sidebar-border: var(--fn-hairline);
-  --sidebar-ring: var(--fn-ember-orange);
+  --sidebar-ring: var(--fn-ember-deep);
 
   --font-sans-stack: "Aquawax Pro", "Nunito Sans", "DM Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
@@ -140,7 +154,7 @@
   --card-foreground: #f5f5f5;
   --popover: var(--fn-graphite);
   --popover-foreground: #f5f5f5;
-  --primary: var(--fn-ember-orange);
+  --primary: var(--fn-ember-deep);
   --primary-foreground: #ffffff;
   --secondary: #3a3a3a;
   --secondary-foreground: #f5f5f5;
@@ -148,7 +162,7 @@
   --muted-foreground: #b5b5b5;
   --accent: #3a3a3a;
   --accent-foreground: #f5f5f5;
-  --destructive: var(--fn-signal-red-orange);
+  --destructive: var(--fn-negative-ink);
   --destructive-foreground: #ffffff;
   --border: #3a3a3a;
   --input: #3a3a3a;
@@ -262,7 +276,7 @@
     font-size: 0.875rem;
     line-height: 1.2;
     font-weight: 700;
-    color: var(--fn-ember-orange);
+    color: var(--fn-ember-deep);
   }
   /* Data numerals */
   .fn-metric {
@@ -340,4 +354,58 @@
       max-width: 1200px; /* Foodnoms page max-width */
     }
   }
+}
+/* ---------------------------------------------------------------------------
+ * Accessibility layer (WCAG 2.1 AA). See docs/accessibility.md for ratios.
+ * ------------------------------------------------------------------------ */
+
+/* Bright brand colours fail AA as TEXT on white/fog (orange 3.2:1, green 2.8:1, sunset 2.8:1, red 3.7:1, sky 2.7:1).
+ * Any text-* utility for them resolves to the matching "ink" token for text nodes; SVG icons (decorative, always paired
+ * with a text label) keep the bright Foodnoms colour. Fills, dots and progress bars are untouched. */
+@layer utilities {
+  .text-ember-orange:not(svg),
+  .hover\:text-ember-orange:hover:not(svg) { color: var(--fn-ember-deep); }
+  .text-verdant-green:not(svg) { color: var(--fn-verdant-ink); }
+  .text-sunset-orange:not(svg) { color: var(--fn-sunset-ink); }
+  .text-signal-red-orange:not(svg),
+  .hover\:text-signal-red-orange:hover:not(svg) { color: var(--fn-negative-ink); }
+  .text-alert-red:not(svg) { color: var(--fn-alert-ink); }
+  .text-sky-blue:not(svg) { color: var(--fn-sky-ink); }
+}
+
+/* Skip link: first Tab stop on every page, visible only while focused. */
+.fn-skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 200;
+  transform: translateY(-200%);
+  border-radius: var(--radius-fn);
+  background: var(--fn-graphite);
+  color: #fff;
+  padding: 0.75rem 1.25rem;
+  font-weight: 700;
+  font-size: 0.9375rem;
+  text-decoration: none;
+}
+.fn-skip-link:focus { transform: none; }
+
+/* Keyboard focus indicator. Unlayered on purpose: it must win over component-level `outline-none` and the faint
+ * translucent focus rings. Solid Ember Deep (4.98:1 on white, 4.57:1 on Fog, 3:1+ against every adjacent surface)
+ * with a 2px gap so it also separates from same-colour filled buttons. Mouse clicks do not trigger :focus-visible. */
+:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+main:focus-visible,
+[role="dialog"]:focus-visible,
+[role="alertdialog"]:focus-visible { outline: none; }
+[role="option"]:focus-visible,
+[role="menuitem"]:focus-visible,
+[role="menuitemcheckbox"]:focus-visible,
+[role="menuitemradio"]:focus-visible { outline-width: 2px; outline-offset: -3px; }
+
+@media (forced-colors: active) {
+  :focus-visible { outline-color: Highlight; }
 }

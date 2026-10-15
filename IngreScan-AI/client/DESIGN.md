@@ -30,6 +30,8 @@ Tokens live in `src/index.css` (`--fn-*` raw tokens → shadcn semantic tokens �
 | `muted-foreground` | #6b6b6b | Secondary text | — |
 | `fog` | #f5f5f5 | Alternate surface, inputs, tags, icon tiles | — |
 
+Accessibility: white text on brand orange needs `ember-deep` (#c94000, 4.98:1); `primary` already maps to it. Bright brand colours as TEXT resolve to ink tokens (`verdant-ink` #00802e, `sunset-ink` #b35200, `negative-ink` #d12b00, `sky-ink`, `alert-ink`) automatically; use `bg-*-ink`/`bg-ember-deep` for fills carrying white text. See `docs/accessibility.md`.
+
 Rule: **never chromatic text on a chromatic background.** Status = colored dot/icon + graphite text on Fog or white
 (`<StatusTag tone="positive">Fresh</StatusTag>`). White text on a solid brand fill (buttons) is fine.
 

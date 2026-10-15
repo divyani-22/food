@@ -96,8 +96,8 @@ def client(appmod, tmp_path, monkeypatch):
     monkeypatch.setattr(appmod, "UPLOAD_FOLDER", tmp_path / "up")
     (tmp_path / "up").mkdir()
     appmod.init_db()
-    # logits: apple strongly, p_fresh ~ 0.9 ("fresh" is index 1)
-    monkeypatch.setattr(appmod, "model", lambda t: (FakeT([[5, 0, 0, 0, 0, 0, 0, 0, 0, 0]]),
+    # logits: apple strongly (energy ~9, i.e. clearly produce), p_fresh ~ 0.9 ("fresh" is index 1)
+    monkeypatch.setattr(appmod, "model", lambda t: (FakeT([[9, 0, 0, 0, 0, 0, 0, 0, 0, 0]]),
                                                     FakeT([[0.0, 2.2]])))
     appmod.app.config["TESTING"] = True
     c = appmod.app.test_client()
@@ -375,8 +375,8 @@ def test_detect_returns_items_with_classifier_labels_and_thumbnails(client, appm
 def test_detect_drops_low_classifier_confidence(client, appmod, monkeypatch):
     found = [{"box": [2, 2, 20, 20], "score": 0.9, "coco_class": 47, "label": "apple"}]
     monkeypatch.setattr(appmod, "_detector", FakeDetector(found))
-    # near-uniform logits -> confidence ~10 percent, below the 70 percent minimum
-    monkeypatch.setattr(appmod, "model", lambda t: (FakeT([[0.0] * 10]), FakeT([[0.0, 1.0]])))
+    # two equally strong fruits -> confidence ~50 percent (below the 70 percent minimum) but clearly produce-like energy
+    monkeypatch.setattr(appmod, "model", lambda t: (FakeT([[9.0, 9.0] + [0.0] * 8]), FakeT([[0.0, 1.0]])))
     r = client.post("/api/detect", data={"file": (io.BytesIO(png_bytes()), "x.png")})
     d = r.get_json()
     assert r.status_code == 200 and d["items"] == []
@@ -388,3 +388,89 @@ def test_detect_zero_detections_is_ok(client, appmod, monkeypatch):
     monkeypatch.setattr(appmod, "_detector", FakeDetector([]))
     r = client.post("/api/detect", data={"file": (io.BytesIO(png_bytes()), "x.png")})
     assert r.status_code == 200 and r.get_json()["items"] == []
+
+
+# ---- non-produce rejection (out-of-distribution score) ----
+NOT_PRODUCE = [[1.0, 0.5, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1]]  # low, flat logits: energy ~2.8
+
+
+def _set_logits(monkeypatch, appmod, logits):
+    monkeypatch.setattr(appmod, "model", lambda t: (FakeT(logits), FakeT([[0.0, 2.2]])))
+
+
+def test_predict_reports_produce_fields_and_keeps_old_fields(client):
+    d = client.post("/api/predict", data={"file": (io.BytesIO(png_bytes()), "x.png")}).get_json()
+    for key in ("fruit", "fruit_kr", "confidence", "p_fresh", "freshness_status", "top_candidates", "image_url"):
+        assert key in d
+    assert d["is_produce"] is True and d["produce_likelihood"] > 0.5
+    assert d["produce_score"] == pytest.approx(9.0, abs=0.01) and d["ood_method"] == "energy"
+
+
+def test_predict_flags_non_produce_but_still_200_and_does_not_persist(client, appmod, monkeypatch):
+    _set_logits(monkeypatch, appmod, NOT_PRODUCE)
+    r = client.post("/api/predict", data={"file": (io.BytesIO(png_bytes()), "x.png")})
+    d = r.get_json()
+    assert r.status_code == 200 and d["is_produce"] is False and d["produce_likelihood"] < 0.5
+    assert d["fruit"]  # closed-set argmax is still reported for backwards compatibility
+    assert client.get("/api/history").get_json() == []
+
+
+def test_predict_threshold_is_configurable_and_zero_disables(client, appmod, monkeypatch):
+    _set_logits(monkeypatch, appmod, NOT_PRODUCE)
+    monkeypatch.setenv("PRODUCE_MIN_LIKELIHOOD", "0")
+    d = client.post("/api/predict", data={"file": (io.BytesIO(png_bytes()), "x.png")}).get_json()
+    assert d["is_produce"] is True and d["produce_min_likelihood"] == 0.0
+    assert d["produce_likelihood"] < 0.5  # the score is still reported
+    monkeypatch.setenv("PRODUCE_MIN_LIKELIHOOD", "0.99")
+    _set_logits(monkeypatch, appmod, [[9.0] + [0.0] * 9])
+    d = client.post("/api/predict", data={"file": (io.BytesIO(png_bytes()), "x.png")}).get_json()
+    assert d["is_produce"] is False  # a strict threshold flags even a confident apple
+
+
+def test_detect_rejects_non_produce_crops(client, appmod, monkeypatch):
+    found = [{"box": [2, 2, 20, 20], "score": 0.9, "coco_class": 47, "label": "apple"}]
+    monkeypatch.setattr(appmod, "_detector", FakeDetector(found))
+    _set_logits(monkeypatch, appmod, [[6.5] + [0.0] * 9])  # energy 6.5 -> likelihood ~0.58 -> kept but not "sure"
+    d = client.post("/api/detect", data={"file": (io.BytesIO(png_bytes()), "x.png")}).get_json()
+    assert len(d["items"]) == 1 and d["items"][0]["needs_check"] is True
+    assert "low_produce_likelihood" in d["items"][0]["check_reasons"]
+    _set_logits(monkeypatch, appmod, [[3.0] + [0.0] * 9])  # confident softmax (~95%) but low energy: not produce
+    d = client.post("/api/detect", data={"file": (io.BytesIO(png_bytes()), "x.png")}).get_json()
+    assert d["items"] == [] and d["rejected"][0]["reason"] == "not_produce"
+    assert len(list(client.up.iterdir())) == 1  # only the first (kept) item has a thumbnail; the rejected crop has none
+
+
+def test_detect_marks_label_mismatch_and_clean_item(client, appmod, monkeypatch):
+    found = [{"box": [2, 2, 20, 20], "score": 0.9, "coco_class": 49, "label": "orange"},
+             {"box": [22, 3, 38, 25], "score": 0.9, "coco_class": 47, "label": "apple"}]
+    monkeypatch.setattr(appmod, "_detector", FakeDetector(found))
+    d = client.post("/api/detect", data={"file": (io.BytesIO(png_bytes()), "x.png")}).get_json()
+    by_label = {i["detector_label"]: i for i in d["items"]}  # stub classifier says apple, strongly
+    assert by_label["orange"]["needs_check"] is True and by_label["orange"]["check_reasons"] == ["label_mismatch"]
+    assert by_label["apple"]["needs_check"] is False and by_label["apple"]["check_reasons"] == []
+    assert by_label["apple"]["source"] == "detector"
+
+
+def test_detect_checks_can_be_disabled(client, appmod, monkeypatch):
+    found = [{"box": [2, 2, 20, 20], "score": 0.9, "coco_class": 49, "label": "orange"}]
+    monkeypatch.setattr(appmod, "_detector", FakeDetector(found))
+    monkeypatch.setenv("SHELF_CHECKS", "0")
+    d = client.post("/api/detect", data={"file": (io.BytesIO(png_bytes()), "x.png")}).get_json()
+    assert d["items"][0]["needs_check"] is False
+
+
+def test_detect_second_pass_flag_uses_stricter_bar(client, appmod, monkeypatch):
+    monkeypatch.setattr(appmod, "_detector", FakeDetector([]))
+    monkeypatch.setenv("SHELF_SECOND_PASS", "1")
+    monkeypatch.setattr(appmod, "_batch_fruit_logits",
+                        lambda crops: np.array([[10.0] + [0.0] * 9] * len(crops)))
+    buf = io.BytesIO()
+    Image.new("RGB", (400, 300), "white").save(buf, "PNG")
+    d = client.post("/api/detect", data={"file": (io.BytesIO(buf.getvalue()), "x.png")}).get_json()
+    assert d["second_pass"]["enabled"] is True and d["second_pass"]["windows"] > 0
+    assert 0 < len(d["items"]) <= 6  # capped
+    assert all(i["source"] == "second_pass" and i["needs_check"] for i in d["items"])
+    # off by default
+    monkeypatch.delenv("SHELF_SECOND_PASS")
+    d = client.post("/api/detect", data={"file": (io.BytesIO(buf.getvalue()), "x.png")}).get_json()
+    assert d["second_pass"]["enabled"] is False

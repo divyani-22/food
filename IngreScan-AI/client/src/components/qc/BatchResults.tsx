@@ -202,7 +202,7 @@ export function BatchResults({
             {summary.rule.description}
           </p>
           <div className="overflow-x-auto rounded-2xl bg-fog p-1">
-            <Table>
+            <Table containerProps={{ tabIndex: 0, role: "region", "aria-label": "Per-check results table (scrollable)" }}>
               <TableHeader>
                 <TableRow>
                   <TableHead>Check</TableHead>

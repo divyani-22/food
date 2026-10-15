@@ -67,7 +67,7 @@ export function HealthAlerts({ scanId }: { scanId: number }) {
 
       <p className="flex items-start gap-2 text-xs text-muted-foreground">
         <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-        <span>{data?.disclaimer ?? "This is general information, not medical advice. Check with your doctor, pharmacist or dietitian before changing your diet or medication."}</span>
+        <span>{data?.disclaimer ?? "This is general information, not medical advice. Check with your doctor, pharmacist or dietitian before changing your diet. Do not stop, skip or change a prescribed medicine because of this alert."}</span>
       </p>
     </section>
   );

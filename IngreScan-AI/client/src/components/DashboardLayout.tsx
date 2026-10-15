@@ -231,7 +231,7 @@ function DashboardLayoutContent({
             </div>
           </SidebarHeader>
 
-          <SidebarContent className="gap-1 px-1">
+          <SidebarContent role="navigation" aria-label="Main" className="gap-1 px-1">
             {menuGroups.map(group => (
               <SidebarGroup key={group} className="py-1">
                 <SidebarGroupLabel className="px-3 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
@@ -246,6 +246,7 @@ function DashboardLayoutContent({
                         <SidebarMenuItem key={item.path}>
                           <SidebarMenuButton
                             isActive={isActive}
+                            aria-current={isActive ? "page" : undefined}
                             onClick={() => goTo(item.path)}
                             tooltip={item.label}
                             className="h-11"
@@ -308,10 +309,10 @@ function DashboardLayoutContent({
         />
       </div>
 
-      <SidebarInset className="min-h-[100dvh] bg-fog">
+      <SidebarInset id="main-content" tabIndex={-1} className="min-h-[100dvh] bg-fog">
         {isMobile && (
           <div className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-border bg-white/90 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-            <button onClick={() => goTo("/")} className="min-w-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button onClick={() => goTo("/")} className="flex h-11 min-w-0 items-center rounded-xl">
               <BrandMark size="sm" />
             </button>
           </div>

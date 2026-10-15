@@ -120,3 +120,57 @@ def test_detector_reports_missing_model(tmp_path):
     assert not ok and "fetch_detector" in why
     with pytest.raises(d.DetectorUnavailable):
         det.detect(Image.new("RGB", (64, 64)))
+
+
+# ---- second pass + consistency checks ----
+def test_propose_windows_cover_image_and_are_capped():
+    w = d.propose_windows(1200, 900)
+    assert 0 < len(w) <= d.SECOND_PASS_MAX_WINDOWS
+    assert all(0 <= x1 < x2 <= 1200 and 0 <= y1 < y2 <= 900 for x1, y1, x2, y2 in w)
+    assert len(set(w)) == len(w)
+    assert any(x2 == 1200 for _, _, x2, _ in w) and any(y2 == 900 for _, _, _, y2 in w)  # edges reachable
+    assert len(d.propose_windows(1200, 900, max_windows=5)) == 5
+    assert d.propose_windows(40, 30) == []  # smaller than min_side
+
+
+def test_propose_windows_is_deterministic():
+    assert d.propose_windows(800, 600) == d.propose_windows(800, 600)
+
+
+def test_select_extra_skips_covered_nms_and_caps():
+    existing = [[0, 0, 100, 100]]
+    boxes = np.array([[10, 10, 90, 90],       # inside an existing item -> dropped
+                      [0, 0, 300, 300],       # contains the existing item -> dropped
+                      [200, 200, 300, 300],   # new
+                      [210, 205, 310, 305],   # overlaps the new one, worse score -> NMS
+                      [400, 0, 500, 100],     # new
+                      [600, 0, 700, 100]], dtype=float)
+    scores = np.array([9, 9, 8, 7, 6, 5], dtype=float)
+    assert d.select_extra(boxes, scores, existing, max_extra=10) == [2, 4, 5]
+    assert d.select_extra(boxes, scores, existing, max_extra=2) == [2, 4]
+    assert d.select_extra(boxes[:2], scores[:2], existing) == []
+    assert d.select_extra(np.zeros((0, 4)), np.zeros(0), existing) == []
+
+
+def test_covered_fraction():
+    assert d.covered_fraction([0, 0, 10, 10], [[0, 0, 10, 10]]) == 1.0
+    assert d.covered_fraction([0, 0, 10, 10], [[5, 0, 15, 10]]) == pytest.approx(0.5)
+    assert d.covered_fraction([0, 0, 10, 10], []) == 0.0
+
+
+def test_check_reasons():
+    top_clear = [{"probability": 95.0}, {"probability": 3.0}]
+    assert d.check_reasons(detector_label="apple", fruit="apple", confidence=95, top_candidates=top_clear,
+                           produce_likelihood=0.95) == []
+    assert d.check_reasons(detector_label="orange", fruit="carrot", confidence=95, top_candidates=top_clear,
+                           produce_likelihood=0.95) == [d.REASON_LABEL_MISMATCH]
+    # classifier names a fruit COCO cannot name: not informative, no mismatch
+    assert d.check_reasons(detector_label="apple", fruit="tomato", confidence=95, top_candidates=top_clear,
+                           produce_likelihood=0.95) == []
+    assert d.check_reasons(detector_label="apple", fruit="apple", confidence=80, top_candidates=top_clear,
+                           produce_likelihood=0.6) == [d.REASON_LOW_PRODUCE]
+    assert d.check_reasons(detector_label="apple", fruit="apple", confidence=80,
+                           top_candidates=[{"probability": 55.0}, {"probability": 40.0}]) == [d.REASON_AMBIGUOUS]
+    assert d.check_reasons(detector_label=None, fruit="mango", confidence=99, top_candidates=top_clear,
+                           second_pass=True) == [d.REASON_SECOND_PASS]
+    assert d.check_reasons(detector_label=None, fruit="mango", confidence=99) == []  # no detector label, not second pass

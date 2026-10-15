@@ -23,11 +23,23 @@ interface DetectedItem {
   shelf_life_days: number;
   storage_tips: string;
   image_url: string;
+  /** Present when the server ran the consistency checks; such items start unticked. */
+  needs_check?: boolean;
+  check_reasons?: string[];
+  source?: "detector" | "second_pass";
+  produce_likelihood?: number;
 }
+
+const CHECK_REASON_TEXT: Record<string, string> = {
+  label_mismatch: "The box finder and the freshness model disagree about the type.",
+  low_produce_likelihood: "This might not be fresh produce.",
+  ambiguous_type: "Two types look alike here.",
+  second_pass: "Found by the extra search, not the main finder.",
+};
 
 interface DetectResponse {
   items: DetectedItem[];
-  rejected: Array<{ box: DetectedItem["box"]; fruit: string; confidence: number }>;
+  rejected: Array<{ box: DetectedItem["box"]; fruit: string; confidence: number; reason?: string }>;
   image: { width: number; height: number };
   min_confidence: number;
   detector: { model: string; license: string; classes: string[] };
@@ -132,7 +144,8 @@ export function ShelfScan({ onAdded, onUseSingle }: { onAdded: () => void | Prom
       }
       const data = (await res.json()) as DetectResponse;
       setMeta(data);
-      setRows(data.items.map(it => ({ ...it, selected: true, chosenFruit: it.fruit })));
+      // Items that need a check start unticked: the user ticks them to confirm ("use anyway").
+      setRows(data.items.map(it => ({ ...it, selected: !it.needs_check, chosenFruit: it.fruit })));
       if (data.items.length > 0) toast.success(`Found ${data.items.length} item${data.items.length === 1 ? "" : "s"}.`);
     } catch (err: any) {
       setError({ message: err?.message || "Detection failed.", notInstalled: false });
@@ -188,6 +201,8 @@ export function ShelfScan({ onAdded, onUseSingle }: { onAdded: () => void | Prom
   const W = meta?.image.width ?? 1;
   const H = meta?.image.height ?? 1;
   const fewItems = rows !== null && meta !== null && meta.items.length < FEW_ITEMS;
+  const checkCount = rows?.filter(r => r.needs_check).length ?? 0;
+  const notProduceCount = meta?.rejected.filter(r => r.reason === "not_produce").length ?? 0;
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start" data-testid="shelf-scan">
@@ -228,7 +243,7 @@ export function ShelfScan({ onAdded, onUseSingle }: { onAdded: () => void | Prom
                               fill="none"
                               stroke={strokeFor(r.freshness_status)}
                               strokeWidth={Math.max(2, W / 300)}
-                              strokeDasharray={r.selected ? undefined : "8 6"}
+                              strokeDasharray={r.selected && !r.needs_check ? undefined : "8 6"}
                               rx={4}
                             />
                             <rect x={r.box.x} y={r.box.y} width={fs * 1.6} height={fs * 1.4} fill={strokeFor(r.freshness_status)} rx={3} />
@@ -310,7 +325,11 @@ export function ShelfScan({ onAdded, onUseSingle }: { onAdded: () => void | Prom
                   ? `${meta.items.length} item${meta.items.length === 1 ? "" : "s"} found`
                   : "No items found"}
               </CardTitle>
-              <CardDescription>Untick anything that is not food you want to track, or change its type.</CardDescription>
+              <CardDescription>
+                {checkCount > 0
+                  ? `${checkCount} item${checkCount === 1 ? " needs" : "s need"} a check and ${checkCount === 1 ? "is" : "are"} unticked. Tick it if it is right, or change its type.`
+                  : "Untick anything that is not food you want to track, or change its type."}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {fewItems && (
@@ -320,13 +339,24 @@ export function ShelfScan({ onAdded, onUseSingle }: { onAdded: () => void | Prom
                       ? "No fruit or vegetables were recognised in this photo."
                       : "Only one item was recognised."}{" "}
                     The finder only knows apples, bananas, oranges and carrots as produce, so mangoes, peppers, potatoes, tomatoes, cucumbers
-                    and strawberries are often missed. Items it found but the freshness model was not sure about are dropped
+                    and strawberries are often missed. Items it found but the freshness model was not sure about, or that did not look
+                    like fresh produce, are dropped
                     {meta!.rejected.length > 0 ? ` (${meta!.rejected.length} dropped here)` : ""}.
                   </p>
                   <Button variant="secondary" size="sm" onClick={onUseSingle}>
                     Scan a single item instead
                   </Button>
                 </div>
+              )}
+
+              {notProduceCount > 0 && (
+                <p className="flex items-start gap-2 text-xs text-muted-foreground" data-testid="shelf-not-produce-note">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-sunset-orange" />
+                  <span>
+                    {notProduceCount} region{notProduceCount === 1 ? "" : "s"} did not look like fresh produce and{" "}
+                    {notProduceCount === 1 ? "was" : "were"} skipped. A real item that is missing can be added with the single-item scan.
+                  </span>
+                </p>
               )}
 
               {rows.length > 0 && (
@@ -367,7 +397,17 @@ export function ShelfScan({ onAdded, onUseSingle }: { onAdded: () => void | Prom
                               {r.freshness_status[0].toUpperCase() + r.freshness_status.slice(1)}
                             </StatusTag>
                             <span className="text-xs text-muted-foreground">{r.confidence}% sure</span>
+                            {r.needs_check && (
+                              <span data-testid={`shelf-item-check-tag-${i}`}>
+                                <StatusTag tone="caution">Check this item</StatusTag>
+                              </span>
+                            )}
                           </div>
+                          {r.needs_check && r.check_reasons && r.check_reasons.length > 0 && (
+                            <p className="text-xs text-muted-foreground" data-testid={`shelf-item-check-reason-${i}`}>
+                              {r.check_reasons.map(c => CHECK_REASON_TEXT[c] ?? c).join(" ")}
+                            </p>
+                          )}
                         </div>
                         <div className="w-full sm:w-44">
                           <Select value={r.chosenFruit} onValueChange={v => update(i, { chosenFruit: v })}>

@@ -152,7 +152,7 @@ export default function Home() {
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/80">
         <div className="container flex h-16 items-center justify-between gap-4 md:h-[72px]">
-          <Link href="/" className="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <Link href="/" className="inline-flex h-11 items-center rounded-xl">
             <BrandMark />
           </Link>
           <nav className="hidden items-center gap-8 text-[15px] font-semibold text-graphite lg:flex" aria-label="Sections">
@@ -161,24 +161,20 @@ export default function Home() {
             <Link href="/about" className="hover:text-ember-orange">About</Link>
           </nav>
           <div className="flex items-center gap-2">
-            <Link href="/produce" className="hidden md:block">
-              <Button variant="ghost" className="gap-2">
+            <Button variant="ghost" className="hidden gap-2 md:inline-flex" asChild><Link href="/produce">
                 <Sparkles className="h-4 w-4 text-verdant-green" />
                 Fresh Produce AI
-              </Button>
-            </Link>
-            <Link href="/scanner">
-              <Button className="gap-2 max-sm:h-10 max-sm:px-4">
+              </Link></Button>
+            <Button className="gap-2 max-sm:px-4" asChild><Link href="/scanner">
                 <ScanLine className="h-4 w-4" />
                 <span className="sm:hidden">Scan</span>
                 <span className="hidden sm:inline">Packaged Scanner</span>
-              </Button>
-            </Link>
+              </Link></Button>
           </div>
         </div>
       </header>
 
-      <main className="flex-1">
+      <main id="main-content" tabIndex={-1} className="flex-1">
         {/* Hero */}
         <section className="overflow-hidden pt-12 md:pt-20">
           <div className="container">
@@ -193,22 +189,18 @@ export default function Home() {
                 ingredients with <strong className="font-bold text-graphite">IngreScan-AI</strong>.
               </p>
               <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
-                <Link href="/scanner">
-                  <Button size="lg" className="w-full sm:w-auto">
+                <Button size="lg" className="w-full sm:w-auto" asChild><Link href="/scanner">
                     <ScanLine className="h-5 w-5" />
                     Scan Packaged Food
-                  </Button>
-                </Link>
-                <Link href="/produce">
-                  <Button size="lg" variant="dark" className="w-full sm:w-auto">
+                  </Link></Button>
+                <Button size="lg" variant="dark" className="w-full sm:w-auto" asChild><Link href="/produce">
                     <Sparkles className="h-5 w-5" />
                     Inspect Fresh Produce
-                  </Button>
-                </Link>
+                  </Link></Button>
               </div>
               <Link
                 href="/dashboard"
-                className="mt-5 inline-flex items-center gap-1.5 text-[15px] font-bold text-graphite underline decoration-ember-orange decoration-2 underline-offset-4 hover:text-ember-orange"
+                className="mt-5 inline-flex min-h-11 items-center gap-1.5 text-[15px] font-bold text-graphite underline decoration-ember-orange decoration-2 underline-offset-4 hover:text-ember-orange"
               >
                 Open Dashboard <ArrowRight className="h-4 w-4" />
               </Link>
@@ -263,12 +255,10 @@ export default function Home() {
                       </li>
                     ))}
                   </ul>
-                  <Link href={p.href}>
-                    <Button variant="outline" className="mt-8">
+                  <Button variant="outline" className="mt-8" asChild><Link href={p.href}>
                       {p.cta}
                       <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </Link>
+                    </Link></Button>
                 </div>
                 <div className={i % 2 === 1 ? "md:order-1" : ""}>
                   <div className="fn-surface flex h-[360px] justify-center overflow-hidden px-6 pt-10 sm:h-[420px] md:pt-14 lg:h-[460px]">
@@ -345,12 +335,10 @@ export default function Home() {
                 </p>
               </div>
               {isAuthenticated ? (
-                <Link href="/dashboard">
-                  <Button size="lg" className="shrink-0">
+                <Button size="lg" className="shrink-0" asChild><Link href="/dashboard">
                     Open Dashboard
                     <ArrowRight className="h-5 w-5" />
-                  </Button>
-                </Link>
+                  </Link></Button>
               ) : (
                 <Button size="lg" className="shrink-0" asChild>
                   <a href={getLoginUrl()}>
@@ -373,10 +361,10 @@ export default function Home() {
               © 2025 Smart Food Risk Analyzer. Supporting Label Padhega India.
             </p>
           </div>
-          <nav className="flex flex-wrap gap-x-6 gap-y-2 text-[15px] font-semibold text-graphite" aria-label="Footer">
-            <Link href="/about" className="hover:text-ember-orange">About</Link>
-            <Link href="/privacy" className="hover:text-ember-orange">Privacy Policy</Link>
-            <Link href="/terms" className="hover:text-ember-orange">Terms of Service</Link>
+          <nav className="flex flex-wrap gap-x-6 text-[15px] font-semibold text-graphite" aria-label="Footer">
+            <Link href="/about" className="inline-flex min-h-11 min-w-11 items-center justify-center hover:text-ember-orange">About</Link>
+            <Link href="/privacy" className="inline-flex min-h-11 items-center hover:text-ember-orange">Privacy Policy</Link>
+            <Link href="/terms" className="inline-flex min-h-11 items-center hover:text-ember-orange">Terms of Service</Link>
           </nav>
         </div>
       </footer>

@@ -15,7 +15,7 @@ export default function NotFound() {
       <header className="flex h-16 items-center px-4 sm:px-6 md:px-10">
         <BrandMark />
       </header>
-      <main className="flex flex-1 items-center justify-center px-4 pb-16">
+      <main id="main-content" tabIndex={-1} className="flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-lg rounded-3xl bg-white px-6 py-10 text-center sm:px-10 sm:py-12">
           <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-fog">
             <SearchX className="h-8 w-8 text-ember-orange" />

@@ -70,7 +70,7 @@ export default function ScanResult() {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="space-y-8 pb-24 md:space-y-10">
+        <div className="space-y-8 pb-24 md:space-y-10" role="status" aria-busy="true" aria-label="Loading scan">
           <Skeleton className="h-24 w-full rounded-3xl bg-white" />
           <Skeleton className="h-40 w-full rounded-3xl bg-white" />
           <Skeleton className="h-64 w-full rounded-3xl bg-white" />
@@ -169,7 +169,7 @@ export default function ScanResult() {
                 <li key={ingredient.id} className="space-y-4 rounded-2xl bg-fog p-4 md:p-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 space-y-1">
-                      <h4 className="break-words text-lg font-bold leading-tight text-graphite">{ingredient.name}</h4>
+                      <h3 className="break-words text-lg font-bold leading-tight text-graphite">{ingredient.name}</h3>
                       {ingredient.scientificName && <p className="break-words text-sm italic text-muted-foreground">{ingredient.scientificName}</p>}
                       {ingredient.category && (
                         <span className="mt-1 inline-flex rounded-3xl bg-white px-2.5 py-1 text-xs font-bold text-graphite">
@@ -249,10 +249,10 @@ export default function ScanResult() {
               <ul ref={setAltListEl} className="space-y-3">
                 {alternatives.map((alt) => (
                   <li key={alt.id} className="space-y-3 rounded-2xl bg-fog p-4 md:p-5">
-                    <h4 className="flex items-start gap-2 text-lg font-bold leading-tight text-graphite">
+                    <h3 className="flex items-start gap-2 text-lg font-bold leading-tight text-graphite">
                       <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-verdant-green" aria-hidden="true" />
                       <span className="min-w-0 break-words">{alt.productName}</span>
-                    </h4>
+                    </h3>
                     {alt.brand && (
                       <p className="text-sm font-bold text-graphite">
                         Brand: <span className="font-normal">{alt.brand}</span>

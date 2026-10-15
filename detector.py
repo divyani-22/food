@@ -192,6 +192,112 @@ def select_produce(boxes, scores, classes, *, score_threshold: float = SCORE_THR
     return result
 
 
+# ---------------------------------------------------------------- second pass + consistency (pure)
+SECOND_PASS_SCALES = (0.5, 0.34, 0.24)  # window side as a fraction of the shorter image side
+SECOND_PASS_OVERLAP = 0.5               # stride = side * (1 - overlap)
+SECOND_PASS_MAX_WINDOWS = 120
+SECOND_PASS_MAX_EXTRA = 6
+SECOND_PASS_MIN_CONFIDENCE = 90.0       # percent, stricter than MIN_CLASSIFIER_CONFIDENCE
+SECOND_PASS_NMS_IOU = 0.25
+SECOND_PASS_COVERED = 0.4               # window overlapping an existing item by this fraction of its area is dropped
+AMBIGUOUS_MARGIN = 25.0                 # percent points between the top two fruits below which a crop is "ambiguous"
+
+REASON_LABEL_MISMATCH = "label_mismatch"
+REASON_LOW_PRODUCE = "low_produce_likelihood"
+REASON_AMBIGUOUS = "ambiguous_type"
+REASON_SECOND_PASS = "second_pass"
+
+
+def propose_windows(width: int, height: int, scales=SECOND_PASS_SCALES, overlap: float = SECOND_PASS_OVERLAP,
+                    min_side: int = 64, max_windows: int = SECOND_PASS_MAX_WINDOWS) -> list[tuple[int, int, int, int]]:
+    """Square sliding windows (xyxy ints) at several scales, deterministic, capped in count.
+
+    Coarse scales come first so that, when the cap bites, large windows are kept and fine ones are dropped.
+    """
+    short = min(width, height)
+    out: list[tuple[int, int, int, int]] = []
+    seen = set()
+    for sc in scales:
+        side = int(round(short * sc))
+        if side < min_side:
+            continue
+        stride = max(1, int(round(side * (1.0 - overlap))))
+        xs = list(range(0, max(width - side, 0) + 1, stride))
+        ys = list(range(0, max(height - side, 0) + 1, stride))
+        if xs[-1] + side < width:
+            xs.append(width - side)
+        if ys[-1] + side < height:
+            ys.append(height - side)
+        for y in ys:
+            for x in xs:
+                box = (x, y, min(x + side, width), min(y + side, height))
+                if box not in seen:
+                    seen.add(box)
+                    out.append(box)
+    return out[:max_windows]
+
+
+def covered_fraction(box, others: Iterable) -> float:
+    """Largest fraction of `box` area that lies inside any single box in `others`."""
+    box = np.asarray(box, dtype=np.float32)
+    best = 0.0
+    for o in others:
+        best = max(best, _containment(box, np.asarray(o, dtype=np.float32)))
+    return best
+
+
+def select_extra(boxes, scores, existing, *, max_extra: int = SECOND_PASS_MAX_EXTRA,
+                 nms_iou: float = SECOND_PASS_NMS_IOU, covered: float = SECOND_PASS_COVERED) -> list[int]:
+    """Choose second-pass proposals: not already covered by an existing item, NMS among themselves, capped.
+
+    Also drops a proposal that mostly contains an existing item (a window around a detected fruit).
+    Returns indices into `boxes`, best score first.
+    """
+    boxes = np.asarray(boxes, dtype=np.float32).reshape(-1, 4)
+    scores = np.asarray(scores, dtype=np.float32)
+    existing = [np.asarray(e, dtype=np.float32) for e in existing]
+    ok = []
+    for i in range(len(boxes)):
+        if covered_fraction(boxes[i], existing) > covered:
+            continue
+        if any(_containment(e, boxes[i]) > 0.6 for e in existing):
+            continue
+        ok.append(i)
+    if not ok:
+        return []
+    ok_arr = np.array(ok)
+    keep = nms(boxes[ok_arr], scores[ok_arr], nms_iou)
+    return [int(ok_arr[k]) for k in keep][:max_extra]
+
+
+def check_reasons(*, detector_label: str | None, fruit: str, confidence: float, top_candidates=None,
+                  produce_likelihood: float | None = None, sure_likelihood: float = 0.8,
+                  second_pass: bool = False) -> list[str]:
+    """Why a kept shelf item should be double-checked by the user (empty list means no concern).
+
+    - label_mismatch: the localiser's COCO class and a classifier fruit that COCO can also name disagree
+      (for example detector "orange" vs classifier "carrot");
+    - low_produce_likelihood: out-of-distribution score above the reject level but below `sure_likelihood`;
+    - ambiguous_type: the classifier's top two fruits are within AMBIGUOUS_MARGIN percentage points;
+    - second_pass: found by the sliding-window pass instead of the detector.
+    """
+    reasons: list[str] = []
+    if second_pass:
+        reasons.append(REASON_SECOND_PASS)
+    elif detector_label and detector_label != fruit and fruit in COCO_PRODUCE.values():
+        # Only a conflict between two labels the localiser itself can produce is informative. If the classifier
+        # names a fruit COCO has no class for (tomato, mango, ...), the localiser cannot agree by construction.
+        reasons.append(REASON_LABEL_MISMATCH)
+    if produce_likelihood is not None and produce_likelihood < sure_likelihood:
+        reasons.append(REASON_LOW_PRODUCE)
+    tc = list(top_candidates or [])
+    if len(tc) >= 2:
+        margin = float(tc[0].get("probability", 0)) - float(tc[1].get("probability", 0))
+        if margin < AMBIGUOUS_MARGIN:
+            reasons.append(REASON_AMBIGUOUS)
+    return reasons
+
+
 # ---------------------------------------------------------------- runtime
 class DetectorUnavailable(RuntimeError):
     """The model file or onnxruntime is missing."""

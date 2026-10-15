@@ -20,7 +20,7 @@ export function EmptyState({
       <div className="grid h-12 w-12 place-items-center rounded-2xl bg-fog">
         <Icon className="h-6 w-6 text-ember-orange" aria-hidden="true" />
       </div>
-      <h3 className="fn-heading-sm mt-4 text-graphite">{title}</h3>
+      <h2 className="fn-heading-sm mt-4 text-graphite">{title}</h2>
       <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">{description}</p>
       {actionLabel && onAction ? (
         <Button className="mt-6" onClick={onAction}>

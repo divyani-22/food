@@ -41,12 +41,10 @@ export default function Dashboard() {
           title="Dashboard"
           description="Welcome back! Monitor your food safety journey."
           actions={
-            <Link href="/scanner">
-              <Button>
+            <Button asChild><Link href="/scanner">
                 <ScanLine className="h-4 w-4" />
                 New scan
-              </Button>
-            </Link>
+              </Link></Button>
           }
         />
 
@@ -65,12 +63,10 @@ export default function Dashboard() {
                 </p>
               </div>
             </div>
-            <Link href="/fridge">
-              <Button variant="dark" size="sm" className="w-full shrink-0 sm:w-auto">
+            <Button variant="dark" size="sm" className="w-full shrink-0 sm:w-auto" asChild><Link href="/fridge">
                 Open Fridge Tracker
                 <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
+              </Link></Button>
           </div>
         )}
 
@@ -81,7 +77,7 @@ export default function Dashboard() {
           <Card className="gap-5">
             <div className="flex items-center justify-between px-5 md:px-7">
               <h2 className="fn-heading-sm text-graphite">Your kitchen</h2>
-              <Link href="/fridge" className="inline-flex items-center gap-1 text-sm font-bold text-graphite hover:text-ember-orange">
+              <Link href="/fridge" className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-graphite hover:text-ember-orange">
                 Fridge <ChevronRight className="h-4 w-4" />
               </Link>
             </div>
@@ -104,7 +100,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between px-5 md:px-7">
               <h2 className="fn-heading-sm text-graphite">Latest score</h2>
               {latestScored && (
-                <Link href={`/scan/${latestScored.id}`} className="inline-flex items-center gap-1 text-sm font-bold text-graphite hover:text-ember-orange">
+                <Link href={`/scan/${latestScored.id}`} className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-graphite hover:text-ember-orange">
                   Report <ChevronRight className="h-4 w-4" />
                 </Link>
               )}
@@ -172,7 +168,7 @@ export default function Dashboard() {
         <section>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="fn-heading-sm text-graphite">Recent Scans</h2>
-            <Link href="/history"><Button variant="ghost" size="sm">View All <ChevronRight className="h-4 w-4" /></Button></Link>
+            <Button variant="ghost" size="sm" asChild><Link href="/history">View All <ChevronRight className="h-4 w-4" /></Link></Button>
           </div>
           {scansLoading ? (
             <div className="space-y-3"><Skeleton className="h-20 w-full rounded-3xl" /><Skeleton className="h-20 w-full rounded-3xl" /></div>
@@ -214,7 +210,7 @@ export default function Dashboard() {
               </span>
               <p className="mt-4 text-lg font-bold text-graphite">No scans yet</p>
               <p className="mt-1 max-w-sm text-sm text-muted-foreground">Scan an ingredient label to get your first personalised risk report.</p>
-              <Link href="/scanner"><Button className="mt-6">Start Your First Scan</Button></Link>
+              <Button className="mt-6" asChild><Link href="/scanner">Start Your First Scan</Link></Button>
             </div>
           )}
         </section>
@@ -230,7 +226,7 @@ export default function Dashboard() {
                 <p className="mt-1 text-sm text-muted-foreground">Add your health information for personalized risk analysis</p>
               </div>
             </div>
-            <Link href="/profile"><Button className="w-full sm:w-auto">Set Up Profile</Button></Link>
+            <Button className="w-full sm:w-auto" asChild><Link href="/profile">Set Up Profile</Link></Button>
           </div>
         )}
       </div>
