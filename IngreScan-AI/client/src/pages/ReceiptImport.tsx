@@ -1,7 +1,7 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/brand/PageHeader";
 import { StatusTag } from "@/components/brand/StatusTag";
-import { ReceiptHeader, ReceiptRow, validateRow, type ReviewRow, type RowErrors } from "@/components/receipt/ReceiptReview";
+import { ReceiptHeader, ReceiptRow, parseQuantity, validateRow, type ReviewRow, type RowErrors } from "@/components/receipt/ReceiptReview";
 import { EmptyState } from "@/components/qc/States";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -183,7 +183,7 @@ export default function ReceiptImport() {
     importItems.mutate({
       items: included.map((r) => ({
         name: r.name.trim(),
-        quantity: Number(r.quantity),
+        quantity: parseQuantity(r.quantity),
         unit: r.unit,
         category: r.category,
         storageLocation: r.location as "fridge" | "freezer" | "pantry",

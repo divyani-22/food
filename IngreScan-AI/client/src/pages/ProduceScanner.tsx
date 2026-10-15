@@ -167,6 +167,11 @@ export default function ProduceScanner() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  // Bumped when an inspection starts and when the page is reset, so a slow, superseded run can never overwrite the
+  // result of a newer one (or reappear after "Reset").
+  const runIdRef = useRef(0);
+  const inFlightRef = useRef(false); // synchronous twin of isAnalyzing (state lags one render behind a fast double click)
+  const [dragOver, setDragOver] = useState(false);
 
   // Load samples, inventory, and history on mount
   useEffect(() => {
@@ -213,6 +218,8 @@ export default function ProduceScanner() {
   const clearHistoryMutation = trpc.produce.clearHistory.useMutation();
 
   const loadInventory = async () => {
+    // Storage alerts are derived from the pantry, so they must follow every pantry change.
+    void utils.insights.ethyleneAlerts.invalidate();
     try {
       const data = await utils.produce.listInventory.fetch();
       setInventory(Array.isArray(data) ? (data as InventoryItem[]) : []);
@@ -253,7 +260,11 @@ export default function ProduceScanner() {
     const file = input.files?.[0];
     // Reset so selecting the same file again still fires onChange
     input.value = "";
-    if (!file) return;
+    acceptFile(file);
+  };
+
+  const acceptFile = (file: File | undefined) => {
+    if (!file || isAnalyzing || inFlightRef.current) return;
     if (!file.type.startsWith("image/")) {
       toast.error("Please select an image file");
       return;
@@ -273,6 +284,9 @@ export default function ProduceScanner() {
    * Both paths feed the same result state, history and pantry code.
    */
   const inspect = async (source: InspectionSource) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    const runId = ++runIdRef.current;
     setIsAnalyzing(true);
     setResult(null);
     setUseAnyway(false);
@@ -297,6 +311,7 @@ export default function ProduceScanner() {
         data = await source.callServer();
         setLastRun({ engine: "server", ms: Math.round(performance.now() - started) });
       }
+      if (runId !== runIdRef.current) return; // reset (or a newer inspection) happened meanwhile
       setResult(data);
       if (data.is_produce === false) {
         // Flagged: no confident fruit name, nothing saved until the user chooses "Use anyway".
@@ -306,9 +321,12 @@ export default function ProduceScanner() {
         toast.success(source.successMessage(data));
       }
     } catch (err: any) {
-      toast.error(err.message || source.failureMessage);
+      if (runId === runIdRef.current) toast.error(err.message || source.failureMessage);
     } finally {
-      setIsAnalyzing(false);
+      if (runId === runIdRef.current) {
+        inFlightRef.current = false;
+        setIsAnalyzing(false);
+      }
     }
   };
 
@@ -332,6 +350,7 @@ export default function ProduceScanner() {
     });
 
   const analyzeSample = async (sampleFilename: string, sampleUrl: string) => {
+    if (isAnalyzing || inFlightRef.current) return;
     setSelectedImage(sampleUrl);
     await inspect({
       getBlob: async () => {
@@ -358,7 +377,7 @@ export default function ProduceScanner() {
   const notProduce = result?.is_produce === false && !useAnyway;
 
   const confirmUseAnyway = () => {
-    if (!result) return;
+    if (!result || useAnyway) return;
     setUseAnyway(true);
     void saveScanToHistory(result);
   };
@@ -392,6 +411,7 @@ export default function ProduceScanner() {
   };
 
   const deleteInventoryItem = async (id: number) => {
+    if (deleteInventoryMutation.isPending) return;
     try {
       await deleteInventoryMutation.mutateAsync({ id });
       toast.success("Item removed from inventory");
@@ -490,6 +510,9 @@ export default function ProduceScanner() {
             <Button
               variant="outline"
               onClick={() => {
+                runIdRef.current++; // ignore an inspection that is still running
+                inFlightRef.current = false;
+                setIsAnalyzing(false);
                 setSelectedImage(null);
                 setResult(null);
                 setUseAnyway(false);
@@ -615,7 +638,19 @@ export default function ProduceScanner() {
                     </div>
 
                     {/* Image Preview Box */}
-                    <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-fog">
+                    <div
+                      className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-fog ${dragOver ? "ring-2 ring-ember-orange" : ""}`}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragOver(true);
+                      }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragOver(false);
+                        acceptFile(e.dataTransfer.files?.[0]);
+                      }}
+                    >
                       {selectedImage ? (
                         <img
                           src={selectedImage}
@@ -652,12 +687,14 @@ export default function ProduceScanner() {
                       />
                       <Button
                         variant="secondary"
+                        disabled={isAnalyzing}
                         onClick={() => fileInputRef.current?.click()}
                         className="w-full"
                       >
                         <Upload className="h-4 w-4" /> Upload File
                       </Button>
                       <Button
+                        disabled={isAnalyzing}
                         onClick={() => cameraInputRef.current?.click()}
                         className="w-full"
                       >
@@ -674,6 +711,7 @@ export default function ProduceScanner() {
                             <Button
                               key={sample.filename}
                               variant="secondary"
+                              disabled={isAnalyzing}
                               onClick={() => analyzeSample(sample.filename, sample.url)}
                               className="min-w-0 justify-start px-4 text-sm"
                             >
@@ -684,6 +722,7 @@ export default function ProduceScanner() {
                           <>
                             <Button
                               variant="secondary"
+                              disabled={isAnalyzing}
                               onClick={() => analyzeSample("apple.jpg", "/static/samples/apple.jpg")}
                               className="text-sm"
                             >
@@ -691,6 +730,7 @@ export default function ProduceScanner() {
                             </Button>
                             <Button
                               variant="secondary"
+                              disabled={isAnalyzing}
                               onClick={() => analyzeSample("banana.jpg", "/static/samples/banana.jpg")}
                               className="text-sm"
                             >
@@ -698,6 +738,7 @@ export default function ProduceScanner() {
                             </Button>
                             <Button
                               variant="secondary"
+                              disabled={isAnalyzing}
                               onClick={() => analyzeSample("tomato.jpg", "/static/samples/tomato.jpg")}
                               className="text-sm"
                             >
@@ -988,6 +1029,7 @@ export default function ProduceScanner() {
                       )}
                       <Button
                         variant="outline"
+                        disabled={deleteInventoryMutation.isPending}
                         onClick={() => deleteInventoryItem(item.id)}
                         className="mt-1 w-full"
                       >
@@ -1010,7 +1052,7 @@ export default function ProduceScanner() {
                 </p>
               </div>
               {historyList.length > 0 && (
-                <Button variant="outline" onClick={clearHistory}>
+                <Button variant="outline" onClick={clearHistory} disabled={clearHistoryMutation.isPending}>
                   <Trash2 className="h-4 w-4 text-signal-red-orange" /> Clear History
                 </Button>
               )}

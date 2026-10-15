@@ -8,6 +8,7 @@ import { CheckCircle, ExternalLink, Lightbulb, MessageSquare, Leaf, Loader2, Sca
 import { PageHeader } from "@/components/brand/PageHeader";
 import { StatusTag, riskTone, scoreTone, type Tone } from "@/components/brand/StatusTag";
 import { cn } from "@/lib/utils";
+import { ErrorState } from "@/components/qc/States";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { AIChatBox } from "@/components/AIChatBox";
@@ -32,7 +33,7 @@ export default function ScanResult() {
   const [showChat, setShowChat] = useState(false);
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
 
-  const { data, isLoading } = trpc.scanner.getScan.useQuery({ scanId }, { enabled: scanId > 0, retry: false });
+  const { data, isLoading, error: scanError, refetch: refetchScan } = trpc.scanner.getScan.useQuery({ scanId }, { enabled: scanId > 0, retry: false });
   const suggestAlternativesMutation = trpc.analysis.suggestAlternatives.useMutation();
   const { data: chatHistory, refetch: refetchChat } = trpc.chat.getHistory.useQuery({ scanId }, { enabled: scanId > 0 });
   const sendMessageMutation = trpc.chat.sendMessage.useMutation();
@@ -75,6 +76,15 @@ export default function ScanResult() {
           <Skeleton className="h-40 w-full rounded-3xl bg-white" />
           <Skeleton className="h-64 w-full rounded-3xl bg-white" />
         </div>
+      </DashboardLayout>
+    );
+  }
+
+  // A network or server failure is not the same as a missing scan: offer a retry instead of "not found".
+  if (!data && scanError && scanError.data?.code !== "NOT_FOUND" && scanError.data?.code !== "BAD_REQUEST") {
+    return (
+      <DashboardLayout>
+        <ErrorState message={`Could not load this scan. ${scanError.message}`} onRetry={() => void refetchScan()} />
       </DashboardLayout>
     );
   }

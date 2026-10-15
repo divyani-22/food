@@ -9,9 +9,10 @@ import { trpc } from "@/lib/trpc";
 import { ScanLine, History, MessageSquare, User, Sparkles, Refrigerator, Barcode, AlertTriangle, ArrowRight, ChevronRight, ImageIcon, Type } from "lucide-react";
 import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/qc/States";
 
 export default function Dashboard() {
-  const { data: scans, isLoading: scansLoading } = trpc.scanner.getUserScans.useQuery({ limit: 5 });
+  const { data: scans, isLoading: scansLoading, error: scansError, refetch: refetchScans } = trpc.scanner.getUserScans.useQuery({ limit: 5 });
   const { data: inventory = [] } = trpc.inventory.list.useQuery();
   const { data: profile, isLoading: profileLoading } = trpc.profile.get.useQuery();
 
@@ -172,6 +173,8 @@ export default function Dashboard() {
           </div>
           {scansLoading ? (
             <div className="space-y-3"><Skeleton className="h-20 w-full rounded-3xl" /><Skeleton className="h-20 w-full rounded-3xl" /></div>
+          ) : scansError ? (
+            <ErrorState message={`Could not load your recent scans. ${scansError.message}`} onRetry={() => void refetchScans()} />
           ) : scans && scans.length > 0 ? (
             <div className="overflow-hidden rounded-3xl bg-white">
               {scans.map((scan) => {

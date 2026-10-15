@@ -55,6 +55,15 @@ describe("profile.upsert BMI", () => {
     const older = await caller.profile.upsert({ age: 40 });
     expect(older?.bmi).toBeCloseTo(27.8, 1);
   });
+
+  it("null clears stored profile values and the BMI that depended on them; undefined keeps them", async () => {
+    const { caller } = await user("bf-clear");
+    await caller.profile.upsert({ age: 30, gender: "female", height: 170, weight: 70, dietType: "vegan", exerciseFrequency: "light" });
+    const kept = await caller.profile.upsert({ region: "India" });
+    expect(kept).toMatchObject({ age: 30, gender: "female", height: 170, weight: 70, dietType: "vegan" });
+    const cleared = await caller.profile.upsert({ age: null, gender: null, weight: null, dietType: null, exerciseFrequency: null });
+    expect(cleared).toMatchObject({ age: null, gender: null, weight: null, dietType: null, exerciseFrequency: null, height: 170, bmi: null });
+  });
 });
 
 describe("dates", () => {

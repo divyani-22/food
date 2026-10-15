@@ -92,9 +92,15 @@ export default function FridgeTracker() {
   const utils = trpc.useUtils();
   const { data: items = [], isLoading } = trpc.inventory.list.useQuery();
 
+  // The storage alerts and the rescue recipes are derived from the same pantry, so refresh them with the list.
+  const refreshPantry = () => {
+    void utils.inventory.list.invalidate();
+    void utils.insights.ethyleneAlerts.invalidate();
+  };
+
   const addMutation = trpc.inventory.add.useMutation({
     onSuccess: () => {
-      utils.inventory.list.invalidate();
+      refreshPantry();
       toast.success("Food item added to tracker!");
       setIsAddOpen(false);
       resetForm();
@@ -106,7 +112,7 @@ export default function FridgeTracker() {
 
   const consumeMutation = trpc.inventory.consume.useMutation({
     onSuccess: () => {
-      utils.inventory.list.invalidate();
+      refreshPantry();
       toast.success("Marked as consumed! Zero food waste.");
     },
     onError: (err) => {
@@ -116,7 +122,7 @@ export default function FridgeTracker() {
 
   const deleteMutation = trpc.inventory.delete.useMutation({
     onSuccess: () => {
-      utils.inventory.list.invalidate();
+      refreshPantry();
       toast.success("Item removed from tracker");
     },
     onError: (err) => {
@@ -634,6 +640,7 @@ export default function FridgeTracker() {
                     <Button
                       variant="ghost"
                       className="px-3"
+                      disabled={consumeMutation.isPending || deleteMutation.isPending}
                       onClick={() => consumeMutation.mutate({ id: item.id })}
                     >
                       <CheckCircle2 className="h-4 w-4 text-verdant-green" />
@@ -656,6 +663,7 @@ export default function FridgeTracker() {
                         size="icon"
                         aria-label={`Remove ${item.title}`}
                         className="text-signal-red-orange"
+                        disabled={consumeMutation.isPending || deleteMutation.isPending}
                         onClick={() => deleteMutation.mutate({ id: item.id })}
                       >
                         <Trash2 className="h-4 w-4" />

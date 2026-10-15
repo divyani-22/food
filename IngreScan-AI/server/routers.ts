@@ -132,14 +132,15 @@ async function resolveImageForLLM(url: string): Promise<string> {
 
 // ============= Input Schemas =============
 
+// null clears a stored value; undefined leaves it unchanged.
 const userProfileSchema = z.object({
-  age: z.number().int().min(0).max(130).optional(),
-  gender: z.enum(["male", "female", "other"]).optional(),
-  height: z.number().int().min(30).max(300).optional(), // cm (int column)
-  weight: z.number().int().min(1).max(700).optional(), // kg (int column)
-  bmi: z.number().min(0).max(200).optional(),
-  exerciseFrequency: z.enum(["sedentary", "light", "moderate", "active", "very_active"]).optional(),
-  dietType: z.enum(["veg", "non_veg", "vegan", "keto", "other"]).optional(),
+  age: z.number().int().min(0).max(130).nullable().optional(),
+  gender: z.enum(["male", "female", "other"]).nullable().optional(),
+  height: z.number().int().min(30).max(300).nullable().optional(), // cm (int column)
+  weight: z.number().int().min(1).max(700).nullable().optional(), // kg (int column)
+  bmi: z.number().min(0).max(200).nullable().optional(),
+  exerciseFrequency: z.enum(["sedentary", "light", "moderate", "active", "very_active"]).nullable().optional(),
+  dietType: z.enum(["veg", "non_veg", "vegan", "keto", "other"]).nullable().optional(),
   // Country or city; lets the AI suggest brands that are actually sold near the user. Empty string clears it.
   region: z.string().trim().max(64).optional(),
 });
@@ -226,7 +227,10 @@ export const appRouter = router({
         let bmi = input.bmi;
         if (bmi === undefined && (input.height !== undefined || input.weight !== undefined)) {
           const existing = await db.getUserProfile(ctx.user.id);
-          bmi = computeBmi(input.height ?? existing?.height, input.weight ?? existing?.weight);
+          const height = input.height === undefined ? existing?.height : input.height;
+          const weight = input.weight === undefined ? existing?.weight : input.weight;
+          // Clearing height or weight also clears the now-meaningless BMI.
+          bmi = computeBmi(height, weight) ?? null;
         }
 
         return db.upsertUserProfile({

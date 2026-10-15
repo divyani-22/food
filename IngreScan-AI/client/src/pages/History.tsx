@@ -7,9 +7,10 @@ import { ScanLine, Calendar, ChevronRight, Type, Image as ImageIcon } from "luci
 import { PageHeader } from "@/components/brand/PageHeader";
 import { StatusTag, scoreTone, type Tone } from "@/components/brand/StatusTag";
 import { cn } from "@/lib/utils";
+import { ErrorState } from "@/components/qc/States";
 
 export default function History() {
-  const { data: scans, isLoading } = trpc.scanner.getUserScans.useQuery({ limit: 100 });
+  const { data: scans, isLoading, error, refetch } = trpc.scanner.getUserScans.useQuery({ limit: 100 });
 
   return (
     <DashboardLayout>
@@ -31,6 +32,8 @@ export default function History() {
             <Skeleton className="h-28 w-full rounded-3xl bg-white" />
             <Skeleton className="h-28 w-full rounded-3xl bg-white" />
           </div>
+        ) : error ? (
+          <ErrorState message={`Could not load your scans. ${error.message}`} onRetry={() => void refetch()} />
         ) : scans && scans.length > 0 ? (
           <ul className="grid gap-3">
             {scans.map((scan) => {

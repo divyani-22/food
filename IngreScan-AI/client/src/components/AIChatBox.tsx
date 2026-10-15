@@ -186,7 +186,8 @@ export function AIChatBox({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Enter that confirms an IME candidate (keyCode 229 / isComposing) must not send the half-typed message.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
       e.preventDefault();
       handleSubmit(e);
     }
