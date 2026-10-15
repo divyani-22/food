@@ -175,9 +175,21 @@ export function ensureOnDeviceModel(): Promise<EngineInfo> {
 /** Run the full on-device pipeline on an image file/blob. */
 export async function classifyOnDevice(blob: Blob): Promise<OnDeviceClassification> {
   const t0 = performance.now();
-  const loaded = await ensureOnDeviceModel();
+  let loaded = await ensureOnDeviceModel();
   if (!backend) throw new Error("On-device model is not available.");
-  const out = await backend.run(blob);
+  let out: RunOutput;
+  try {
+    out = await backend.run(blob);
+  } catch (err) {
+    // The worker died after the model was ready (crash, OOM kill): every later call would reject the same way.
+    // Forget it and reload once, which falls back to the main thread when the worker cannot start again.
+    if (!(err instanceof WorkerStartError)) throw err;
+    resetOnDevice();
+    await ensureOnDeviceModel();
+    if (!backend) throw new Error("On-device model is not available.");
+    out = await (backend as Backend).run(blob);
+    loaded = info ?? loaded;
+  }
   const result = buildPredictionResult(loaded.meta, out.fruitLogits, out.freshLogits);
   return {
     result,

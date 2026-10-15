@@ -32,11 +32,26 @@ export type BarcodeCheck = BarcodeValid | BarcodeInvalid;
 
 const DIGITS_ONLY = /^\d+$/;
 
+/**
+ * Whitespace, ASCII and Unicode hyphens/dashes, and invisible format characters (zero-width space/joiners, LRM/RLM,
+ * bidi embedding marks, word joiner, BOM, soft hyphen) that web pages and chat apps add around pasted codes.
+ * Built from code points so the source stays pure ASCII.
+ */
+const INVISIBLE_OR_SEPARATOR = new RegExp(
+  "[\\s\\-" +
+    [0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2212, 0xad, 0x34f, 0x180e, 0xfeff].map((c) => String.fromCharCode(c)).join("") +
+    String.fromCharCode(0x200b) + "-" + String.fromCharCode(0x200f) +
+    String.fromCharCode(0x202a) + "-" + String.fromCharCode(0x202e) +
+    String.fromCharCode(0x2060) + "-" + String.fromCharCode(0x2064) +
+    "]",
+  "g",
+);
+
 /** Strip spaces, hyphens and common invisible characters that appear when copying or typing codes. */
 export function normalizeBarcodeInput(raw: string): string {
   return String(raw ?? "")
     .normalize("NFKC")
-    .replace(/[\s\-​ ]/g, "");
+    .replace(INVISIBLE_OR_SEPARATOR, "");
 }
 
 /**

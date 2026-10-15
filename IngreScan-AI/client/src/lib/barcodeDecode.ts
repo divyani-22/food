@@ -417,6 +417,8 @@ export async function startLiveDecoding(
           found = await decodeCanvasZxing(canvas, ++frame % 4 === 0);
         }
         if (!stopped && found.length) onCandidates(found);
+      } catch {
+        // A bad frame (drawImage on a stalled video, a throwing consumer) must not end the scan loop for good.
       } finally {
         busy = false;
       }

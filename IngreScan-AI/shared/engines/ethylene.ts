@@ -210,6 +210,9 @@ const PROCESSED = new Set([
   "juice", "sauce", "jam", "puree", "powder", "dried", "dry", "canned", "tinned", "frozen", "chip",
   "pickle", "pickled", "ketchup", "paste", "cake", "pie", "oil", "vinegar", "flavour", "flavor", "flavoured",
   "flavored", "syrup", "jelly", "yogurt", "yoghurt", "smoothie", "soup", "cereal", "bar", "candy",
+  // baked goods, confectionery, drinks and spices that merely name a fruit/herb ("banana bread", "mint tea",
+  // "red pepper flakes"). "cooky" is what singular() makes of "cookies".
+  "bread", "muffin", "cookie", "cooky", "biscuit", "chocolate", "tea", "cream", "flake", "extract", "essence", "toothpaste",
 ]);
 
 /** Resolve a free-text grocery name to a canonical key, or null. */
@@ -227,8 +230,9 @@ export function canonicalProduceKey(name: string): string | null {
       if (hit) return hit;
     }
   }
-  // typo tolerance: single-word names of 5+ letters, unique best match
-  if (toks.length <= 3) {
+  // typo tolerance: single-word names of 5+ letters, unique best match. Never for multi-word names:
+  // "free range eggs" must not become orange, "grade A eggs" grape, "beach towel" peach.
+  if (toks.length === 1) {
     const found = new Set<string>();
     for (const t of toks) {
       if (t.length < 5) continue;

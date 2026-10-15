@@ -776,8 +776,11 @@ const SIZE_REGEXES: readonly RegExp[] = [
 /** Combining diacritical marks U+0300..U+036F, built from code points to keep the source pure ASCII. */
 const COMBINING_MARKS = new RegExp("[" + String.fromCharCode(0x300) + "-" + String.fromCharCode(0x36f) + "]", "g");
 
+/** Zero-width space/joiners, word joiner, BOM and soft hyphen: invisible, must not split or alter a word. */
+const INVISIBLES = new RegExp("[" + String.fromCharCode(0x200b) + "-" + String.fromCharCode(0x200d) + String.fromCharCode(0x2060, 0xfeff, 0xad) + "]", "g");
+
 function foldAscii(s: string): string {
-  return s.normalize("NFKD").replace(COMBINING_MARKS, "");
+  return s.replace(INVISIBLES, "").normalize("NFKD").replace(COMBINING_MARKS, "");
 }
 
 export interface NormalizedName {
@@ -1083,7 +1086,8 @@ function pad2(n: number): string {
 /** YYYY-MM-DD for the UTC calendar date of `now` plus `days`. */
 export function addDaysIso(now: Date, days: number): string {
   const base = Number.isFinite(now.getTime()) ? now : new Date(0);
-  const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate() + Math.trunc(days)));
+  const n = Number.isFinite(days) ? Math.trunc(days) : 0;
+  const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate() + n));
   return `${d.getUTCFullYear().toString().padStart(4, "0")}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
 }
 

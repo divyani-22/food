@@ -608,8 +608,13 @@ export function normalizeReceiptUnit(u: unknown): ReceiptUnit | null {
 }
 
 const WEIGHT_UNIT_PAT = "kgs?|gms?|grams?|gr|mg|ml|ltrs?|litres?|liters?|oz|lbs?|dozen|doz|g|l";
-const SIZE_RE = new RegExp(`(\\d+(?:\\.\\d+)?)\\s*(${WEIGHT_UNIT_PAT})\\b`, "i");
-const SIZE_ALL_RE = new RegExp(`\\(?\\b\\d+(?:\\.\\d+)?\\s*(?:${WEIGHT_UNIT_PAT})\\b\\)?`, "gi");
+/** Decimal quantity: "1.5" or a European decimal comma with 1-2 digits ("1,5"). Never a thousands group ("1,000"). */
+const DEC_NUM = "(?<![\\d,.])\\d+(?:\\.\\d+|,\\d{1,2}(?!\\d))?";
+/** Rate: up to three decimals with a dot, or a decimal comma with 1-2 digits. */
+const RATE_NUM = "\\d+(?:\\.\\d{1,3}|,\\d{1,2}(?!\\d))?";
+const toNum = (x: string): number => Number(x.replace(",", "."));
+const SIZE_RE = new RegExp(`(${DEC_NUM})\\s*(${WEIGHT_UNIT_PAT})\\b`, "i");
+const SIZE_ALL_RE = new RegExp(`\\(?\\b${DEC_NUM}\\s*(?:${WEIGHT_UNIT_PAT})\\b\\)?`, "gi");
 const CUR = `(?:${CURRENCY_WORD}\\s*)?`;
 
 function round(n: number, dp: number): number {
@@ -685,28 +690,28 @@ function parseLineInfo(rawLine: string, onOcrFix: () => void): LineInfo {
     s = s.replace(pk[0], " ");
   }
   // 1. "<weight> @ <rate>" e.g. "1.5 kg @ 40.00" or "1.250 kg @ 1.90/kg"
-  let m = new RegExp(`(\\d+(?:\\.\\d+)?)\\s*(${WEIGHT_UNIT_PAT})\\s*@\\s*${CUR}(\\d+(?:\\.\\d{1,3})?)(?:\\s*(?:/|per\\s*)\\s*(${WEIGHT_UNIT_PAT}))?`, "i").exec(s);
+  let m = new RegExp(`(${DEC_NUM})\\s*(${WEIGHT_UNIT_PAT})\\s*@\\s*${CUR}(${RATE_NUM})(?:\\s*(?:/|per\\s*)\\s*(${WEIGHT_UNIT_PAT}))?`, "i").exec(s);
   if (m) {
-    info.sizeValue = Number(m[1]);
+    info.sizeValue = toNum(m[1]);
     info.sizeUnit = normalizeReceiptUnit(m[2]) ?? undefined;
-    rate = { value: Number(m[3]), unit: normalizeReceiptUnit(m[4] ?? m[2]) };
+    rate = { value: toNum(m[3]), unit: normalizeReceiptUnit(m[4] ?? m[2]) };
     s = s.replace(m[0], " ");
     info.hadPriceInformation = true;
   }
   // 2. "@ <rate>/<unit>" or "@ 0.59 lb"
   if (!rate) {
-    m = new RegExp(`@\\s*${CUR}(\\d+(?:\\.\\d{1,3})?)\\s*(?:/|per\\s*)?\\s*(kgs?|lbs?|oz|g|l|ea|each)\\b`, "i").exec(s);
+    m = new RegExp(`@\\s*${CUR}(${RATE_NUM})\\s*(?:/|per\\s*)?\\s*(kgs?|lbs?|oz|g|l|ea|each)\\b`, "i").exec(s);
     if (m) {
-      rate = { value: Number(m[1]), unit: normalizeReceiptUnit(m[2]) };
+      rate = { value: toNum(m[1]), unit: normalizeReceiptUnit(m[2]) };
       s = s.replace(m[0], " ");
       info.hadPriceInformation = true;
     }
   }
   // 3. "<rate>/<unit>"
   if (!rate) {
-    const m3 = new RegExp(`${CUR}(\\d+(?:\\.\\d{1,3})?)\\s*(?:/|per\\s+)\\s*(kgs?|lbs?|oz|gms?|g|l|ltr|ea|each|dozen|doz)\\b`, "i").exec(s);
+    const m3 = new RegExp(`${CUR}(${RATE_NUM})\\s*(?:/|per\\s+)\\s*(kgs?|lbs?|oz|gms?|g|l|ltr|ea|each|dozen|doz)\\b`, "i").exec(s);
     if (m3) {
-      rate = { value: Number(m3[1]), unit: normalizeReceiptUnit(m3[2]) };
+      rate = { value: toNum(m3[1]), unit: normalizeReceiptUnit(m3[2]) };
       s = s.replace(m3[0], " ");
       info.hadPriceInformation = true;
     }
@@ -765,7 +770,7 @@ function parseLineInfo(rawLine: string, onOcrFix: () => void): LineInfo {
   if (info.sizeValue === undefined) {
     m = SIZE_RE.exec(s);
     if (m) {
-      info.sizeValue = Number(m[1]);
+      info.sizeValue = toNum(m[1]);
       info.sizeUnit = normalizeReceiptUnit(m[2]) ?? undefined;
       s = s.replace(m[0], " ");
     }
@@ -1073,7 +1078,10 @@ function parseReceiptTextUnsafe(text: unknown, options: ParseReceiptOptions): Pa
   if (longLines > 0) warnings.push(`${longLines} very long line(s) were truncated.`);
 
   const ebill = options.ebill === true;
-  const mInfo = ebill && options.merchant ? MERCHANT_INFO[options.merchant] : undefined;
+  const mInfo =
+    ebill && typeof options.merchant === "string" && Object.prototype.hasOwnProperty.call(MERCHANT_INFO, options.merchant)
+      ? MERCHANT_INFO[options.merchant]
+      : undefined;
   const currency = detectCurrency(folded) ?? mInfo?.currency;
   const store = mInfo ? mInfo.name : detectStore(lines);
 

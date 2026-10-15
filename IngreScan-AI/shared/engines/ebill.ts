@@ -445,7 +445,14 @@ function headerDateToIso(value: string | undefined): string | undefined {
   if (m) {
     const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
     const mi = months.indexOf(m[2].toLowerCase());
-    if (mi >= 0) return `${m[3]}-${String(mi + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    if (mi >= 0) {
+      const wy = Number(m[3]);
+      const wd = Number(m[1]);
+      const chk = new Date(Date.UTC(wy, mi, wd));
+      // Reject impossible written dates ("31 Feb 2026") instead of emitting an invalid ISO string.
+      if (chk.getUTCFullYear() !== wy || chk.getUTCMonth() !== mi || chk.getUTCDate() !== wd) return undefined;
+      return `${m[3]}-${String(mi + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    }
   }
   return d.toISOString().slice(0, 10);
 }

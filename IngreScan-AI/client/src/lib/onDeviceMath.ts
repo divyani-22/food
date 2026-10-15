@@ -82,12 +82,22 @@ export function softmax(logits: ArrayLike<number>): number[] {
   return exps.map((e) => e / sum);
 }
 
-/** Python's round(x, 1) for the values used here (ties go to the even neighbour, like Python). */
+/**
+ * Python's round(x, 1): the exact binary value is rounded to the nearest tenth, and only a true tie (x = odd / 4,
+ * such as 0.25 or 12.75, which are exactly representable) goes to the even neighbour. Multiplying by 10 first would
+ * turn values like 12.35 (really 12.3499...) into a false tie and disagree with Python.
+ */
 export function round1(x: number): number {
-  const t = x * 10;
-  const f = Math.floor(t);
-  if (t - f === 0.5) return (f % 2 === 0 ? f : f + 1) / 10;
-  return Math.round(t) / 10;
+  if (!Number.isFinite(x)) return x;
+  const q = x * 4;
+  if (Number.isInteger(q) && Math.abs(q % 2) === 1) {
+    const t = x * 10; // exact: x is a multiple of 0.25
+    const f = Math.floor(t);
+    return (f % 2 === 0 ? f : f + 1) / 10;
+  }
+  // Number.prototype.toFixed rounds the exact binary value to the nearest tenth.
+  const r = Number(x.toFixed(1));
+  return r === 0 && x >= 0 ? 0 : r;
 }
 
 /** Same rules as fruit_info.evaluate_freshness (thresholds and wording come from fruitInfo.json). */
