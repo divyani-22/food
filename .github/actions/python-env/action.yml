@@ -1,0 +1,26 @@
+name: Python env
+description: Python 3.12, CPU-only torch, requirements.txt, and the cached YOLOX detector weights.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: pip
+        cache-dependency-path: requirements.txt
+    - name: Install CPU torch, then requirements
+      shell: bash
+      run: bash scripts/ci/install-python-deps.sh
+    - name: Read pinned detector SHA
+      id: detector
+      shell: bash
+      run: echo "sha=$(bash scripts/ci/detector-sha.sh)" >> "$GITHUB_OUTPUT"
+    - name: Cache detector weights
+      id: detector-cache
+      uses: actions/cache@v4
+      with:
+        path: models/detector
+        key: detector-yolox-s-${{ steps.detector.outputs.sha }}
+    - name: Fetch detector weights (SHA-256 verified by the tool)
+      shell: bash
+      run: python tools/fetch_detector.py

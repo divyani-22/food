@@ -1,5 +1,7 @@
 # FoodIQ – Smart Food AI & Freshness Safety Platform
 
+[![CI](https://github.com/madhavzanwar/tech4food/actions/workflows/ci.yml/badge.svg)](https://github.com/madhavzanwar/tech4food/actions/workflows/ci.yml) Pipeline details: [docs/ci.md](docs/ci.md)
+
 An all-in-one AI-powered food intelligence platform combining **Fresh Produce Inspection** and **Packaged Food Risk Analysis**.
 
 ---

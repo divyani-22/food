@@ -1,0 +1,194 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # cancel superseded PR runs; never cancel a run on main
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: "22"
+  # keep in sync with the playwright version the e2e scripts were written against
+  PLAYWRIGHT_VERSION: "1.56.1"
+  # fixed CI-only credential for the throwaway MariaDB service container (not a secret)
+  MYSQL_CI_PASSWORD: ci-root-pw
+
+jobs:
+  node:
+    name: Web app (typecheck, vitest, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: IngreScan-AI
+    steps:
+      - uses: actions/checkout@v4
+      # pnpm version comes from the `packageManager` field of IngreScan-AI/package.json
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: IngreScan-AI/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: IngreScan-AI/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm check
+      - name: Unit and integration tests (vitest)
+        run: pnpm test
+      - name: Production build
+        run: pnpm build
+
+  python:
+    name: Flask + models (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/python-env
+      - name: pytest (includes the real-model and detector tests)
+        run: python -m pytest tests -q
+
+  e2e:
+    name: e2e (Playwright, SQLite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: IngreScan-AI/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: IngreScan-AI/pnpm-lock.yaml
+      - uses: ./.github/actions/python-env
+      - name: Install web app dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: IngreScan-AI
+      # the e2e scripts `import "playwright"` from the repo root; there is no root package.json
+      - name: Install Playwright package
+        run: npm install --no-save --no-package-lock --no-audit --no-fund "playwright@${PLAYWRIGHT_VERSION}"
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
+      - name: Install Chromium and system libraries
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Install system libraries only (browser restored from cache)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - name: Run e2e scripts
+        run: E2E_ARTIFACT_DIR="$RUNNER_TEMP/e2e-artifacts" node e2e/run-ci.mjs
+      - name: Upload logs and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-sqlite-artifacts
+          path: ${{ runner.temp }}/e2e-artifacts
+          retention-days: 7
+          if-no-files-found: ignore
+
+  e2e-mysql:
+    name: e2e (MySQL schema path)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: ci-root-pw
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: IngreScan-AI/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: IngreScan-AI/pnpm-lock.yaml
+      - uses: ./.github/actions/python-env
+      - name: Install web app dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: IngreScan-AI
+      - name: Install Playwright package
+        run: npm install --no-save --no-package-lock --no-audit --no-fund "playwright@${PLAYWRIGHT_VERSION}"
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
+      - name: Install Chromium and system libraries
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Install system libraries only (browser restored from cache)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - name: MySQL client and ffmpeg (fake camera feed for barcode-scan)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          command -v mysql >/dev/null || sudo apt-get install -y --no-install-recommends mariadb-client
+          mysql --version
+      - name: Wait for MariaDB
+        run: |
+          for i in $(seq 1 30); do
+            mysql -h 127.0.0.1 -P 3306 -u root -p"$MYSQL_CI_PASSWORD" -e 'select 1' >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          echo "MariaDB did not become ready" >&2
+          exit 1
+      - name: Run MySQL e2e scripts (drizzle-kit migrate, then barcode-scan and on-device-inference)
+        run: E2E_MYSQL_URL="mysql://root:${MYSQL_CI_PASSWORD}@127.0.0.1:3306" E2E_ARTIFACT_DIR="$RUNNER_TEMP/e2e-artifacts" node e2e/run-ci.mjs --db mysql
+      - name: Upload logs and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-mysql-artifacts
+          path: ${{ runner.temp }}/e2e-artifacts
+          retention-days: 7
+          if-no-files-found: ignore
+
+  security:
+    name: Security (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: IngreScan-AI/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Dependency audit (production dependencies)
+        continue-on-error: true
+        working-directory: IngreScan-AI
+        run: pnpm audit --prod
+      # gitleaks container image: no licence key or token needed (the gitleaks GitHub Action needs a licence for orgs)
+      - name: Secret scan (gitleaks, working tree)
+        continue-on-error: true
+        run: >-
+          docker run --rm -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.21.2
+          detect --source /repo --no-git --redact --no-banner --verbose
