@@ -209,21 +209,25 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const getApiKey = () =>
-  ENV.forgeApiKey || process.env.OPENAI_API_KEY || "";
-
-const resolveApiUrl = () => {
-  if (ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0) {
-    return `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`;
+/**
+ * The API key and the endpoint it is sent to must come from the same provider: a Forge key only ever goes to the
+ * Forge URL (default forge.manus.im), an OpenAI key only to OPENAI_BASE_URL / api.openai.com. Mixing them (for
+ * example BUILT_IN_FORGE_API_URL set without its key while OPENAI_API_KEY is set) would leak one provider's
+ * credential to the other's server.
+ */
+const resolveProvider = (): { apiKey: string; url: string } => {
+  if (ENV.forgeApiKey) {
+    const base = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0 ? ENV.forgeApiUrl.replace(/\/$/, "") : "https://forge.manus.im";
+    return { apiKey: ENV.forgeApiKey, url: `${base}/v1/chat/completions` };
   }
+  const apiKey = process.env.OPENAI_API_KEY || "";
   if (process.env.OPENAI_BASE_URL) {
-    return `${process.env.OPENAI_BASE_URL.replace(/\/$/, "")}/chat/completions`;
+    return { apiKey, url: `${process.env.OPENAI_BASE_URL.replace(/\/$/, "")}/chat/completions` };
   }
-  if (process.env.OPENAI_API_KEY) {
-    return "https://api.openai.com/v1/chat/completions";
-  }
-  return "https://forge.manus.im/v1/chat/completions";
+  return { apiKey, url: "https://api.openai.com/v1/chat/completions" };
 };
+
+const getApiKey = () => resolveProvider().apiKey;
 
 const normalizeResponseFormat = ({
   responseFormat,
@@ -446,12 +450,33 @@ function generateFallbackResponse(params: InvokeParams): InvokeResult {
   };
 }
 
+const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS) || 60_000;
+
+export class LLMUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LLMUnavailableError";
+  }
+}
+
+/** True when a real LLM API key is configured (the local keyword engine is a demo fallback, not a real model). */
+export function isRealLLMConfigured(): boolean {
+  return Boolean(getApiKey());
+}
+
+/** Local keyword engine is allowed outside production, or when explicitly enabled. */
+export function isLocalFallbackAllowed(): boolean {
+  return process.env.NODE_ENV !== "production" || process.env.ALLOW_LOCAL_LLM_FALLBACK === "true";
+}
+
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const apiKey = getApiKey();
 
-  // If no external API key is provided, use the intelligent built-in nutrition analyzer
+  // No API key: the built-in keyword engine is a demo/offline mode only. It must never
+  // masquerade as real analysis in production unless explicitly opted in.
   if (!apiKey) {
-    return generateFallbackResponse(params);
+    if (isLocalFallbackAllowed()) return generateFallbackResponse(params);
+    throw new LLMUnavailableError("AI service is not configured. Set OPENAI_API_KEY (or the Forge API key).");
   }
 
   const {
@@ -465,7 +490,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
   } = params;
 
-  const isForge = Boolean(ENV.forgeApiKey && ENV.forgeApiUrl);
+  const isForge = Boolean(ENV.forgeApiKey);
 
   const payload: Record<string, unknown> = {
     model: isForge ? "gemini-2.5-flash" : (process.env.OPENAI_MODEL || "gpt-4o-mini"),
@@ -502,24 +527,27 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.response_format = normalizedResponseFormat;
   }
 
+  let response: Response;
   try {
-    const response = await fetch(resolveApiUrl(), {
+    response = await fetch(resolveProvider().url, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
     });
-
-    if (!response.ok) {
-      console.warn(`[LLM] API call failed (${response.status}), falling back to local nutrition engine`);
-      return generateFallbackResponse(params);
-    }
-
-    return (await response.json()) as InvokeResult;
   } catch (error) {
-    console.warn("[LLM] Network error contacting API, falling back to local nutrition engine:", error);
-    return generateFallbackResponse(params);
+    console.error("[LLM] Request failed:", error);
+    throw new LLMUnavailableError("AI service is unreachable or timed out. Please try again.");
   }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.error(`[LLM] API call failed (${response.status}): ${detail.slice(0, 300)}`);
+    throw new LLMUnavailableError(`AI service returned an error (${response.status}). Please try again.`);
+  }
+
+  return (await response.json()) as InvokeResult;
 }

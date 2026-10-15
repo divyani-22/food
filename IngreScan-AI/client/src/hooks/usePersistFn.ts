@@ -3,7 +3,7 @@ import { useRef } from "react";
 type noop = (...args: any[]) => any;
 
 /**
- * usePersistFn 可以替代 useCallback 以降低心智负担
+ * usePersistFn can replace useCallback to reduce mental overhead (stable function identity)
  */
 export function usePersistFn<T extends noop>(fn: T) {
   const fnRef = useRef<T>(fn);

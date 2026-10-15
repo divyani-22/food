@@ -8,14 +8,14 @@
 - Normalize (ImageNet mean/std)
 - Augmentation: Flip, ColorJitter, Rotation
 
-## Fruit Classes (10종)
+## Fruit Classes (10 types)
 apple, banana, bell_pepper, carrot, cucumber,
 mango, orange, potato, strawberry, tomato
 
 ## Freshness Classes
-- 원본 데이터: fresh / normal / rotten (3-class)
-- 학습 모델: fresh / rotten (2-class)
-- 최종 출력: 3-class (후처리로 normal 구간 생성)
+- Original data: fresh / normal / rotten (3-class)
+- Trained model: fresh / rotten (2-class)
+- Final output: 3-class (the normal range is created by post-processing)
 
 ## 3-Class Mapping Rule
 if p_fresh ≥ 0.7 -> fresh

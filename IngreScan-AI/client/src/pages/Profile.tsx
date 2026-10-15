@@ -6,9 +6,19 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, UserRound, HeartPulse, Pill, Activity } from "lucide-react";
+import { PageHeader } from "@/components/brand/PageHeader";
+import { StatusTag } from "@/components/brand/StatusTag";
+import { WhatsAppCard } from "@/components/features/WhatsAppCard";
+
+// Parse a numeric input to a positive integer, or undefined if empty/invalid
+// (the server rejects NaN and the DB columns are integers).
+function toInt(v: string): number | undefined {
+  const n = Math.round(parseFloat(v));
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
 
 export default function Profile() {
   const { data: profile, refetch: refetchProfile } = trpc.profile.get.useQuery();
@@ -21,6 +31,7 @@ export default function Profile() {
   const [weight, setWeight] = useState("");
   const [exerciseFrequency, setExerciseFrequency] = useState("");
   const [dietType, setDietType] = useState("");
+  const [region, setRegion] = useState("");
 
   const [newCondition, setNewCondition] = useState("");
   const [newMedication, setNewMedication] = useState({ name: "", dosage: "", isCurrent: true });
@@ -39,18 +50,21 @@ export default function Profile() {
       setWeight(profile.weight?.toString() || "");
       setExerciseFrequency(profile.exerciseFrequency || "");
       setDietType(profile.dietType || "");
+      setRegion(profile.region || "");
     }
   }, [profile]);
 
   const handleSaveProfile = async () => {
+    if (upsertProfileMutation.isPending) return;
     try {
       await upsertProfileMutation.mutateAsync({
-        age: age ? parseInt(age) : undefined,
-        gender: gender as any,
-        height: height ? parseInt(height) : undefined,
-        weight: weight ? parseInt(weight) : undefined,
-        exerciseFrequency: exerciseFrequency as any,
-        dietType: dietType as any,
+        age: toInt(age) ?? null,
+        gender: (gender || null) as any,
+        height: toInt(height) ?? null,
+        weight: toInt(weight) ?? null,
+        exerciseFrequency: (exerciseFrequency || null) as any,
+        dietType: (dietType || null) as any,
+        region: region.trim(),
       });
       toast.success("Profile updated successfully");
       refetchProfile();
@@ -59,15 +73,22 @@ export default function Profile() {
     }
   };
 
+  // Ref guards: mutation.isPending reaches React a tick late, so a fast double click would otherwise get through.
+  const addingCondition = useRef(false);
+  const addingMedication = useRef(false);
+
   const handleAddCondition = async () => {
-    if (!newCondition.trim()) return;
+    if (!newCondition.trim() || addingCondition.current) return;
+    addingCondition.current = true;
     try {
-      await addConditionMutation.mutateAsync({ condition: newCondition });
+      await addConditionMutation.mutateAsync({ condition: newCondition.trim() });
       toast.success("Medical condition added");
       setNewCondition("");
       refetchConditions();
     } catch (error: any) {
       toast.error(error.message || "Failed to add condition");
+    } finally {
+      addingCondition.current = false;
     }
   };
 
@@ -82,14 +103,21 @@ export default function Profile() {
   };
 
   const handleAddMedication = async () => {
-    if (!newMedication.name.trim()) return;
+    if (!newMedication.name.trim() || addingMedication.current) return;
+    addingMedication.current = true;
     try {
-      await addMedicationMutation.mutateAsync(newMedication);
+      await addMedicationMutation.mutateAsync({
+        name: newMedication.name.trim(),
+        dosage: newMedication.dosage.trim() || undefined,
+        isCurrent: newMedication.isCurrent,
+      });
       toast.success("Medication added");
       setNewMedication({ name: "", dosage: "", isCurrent: true });
       refetchMedications();
     } catch (error: any) {
       toast.error(error.message || "Failed to add medication");
+    } finally {
+      addingMedication.current = false;
     }
   };
 
@@ -103,23 +131,25 @@ export default function Profile() {
     }
   };
 
-  const bmi = height && weight ? (parseInt(weight) / Math.pow(parseInt(height) / 100, 2)).toFixed(1) : null;
+  const hNum = toInt(height);
+  const wNum = toInt(weight);
+  const bmi = hNum && wNum ? (wNum / Math.pow(hNum / 100, 2)).toFixed(1) : null;
 
   return (
     <DashboardLayout>
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Health Profile</h1>
-          <p className="text-muted-foreground mt-2">Manage your personal and health information</p>
-        </div>
+      <div className="mx-auto max-w-4xl space-y-8 md:space-y-10">
+        <PageHeader
+          eyebrow="Profile"
+          title="Health Profile"
+          description="Manage your personal and health information"
+        />
 
         <Card>
           <CardHeader>
-            <CardTitle>Personal Details</CardTitle>
-            <CardDescription>Basic information for personalized analysis</CardDescription>
+            <SectionTitle icon={<UserRound className="h-5 w-5 text-ember-orange" />} title="Personal Details" description="Basic information for personalized analysis" />
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
+          <CardContent className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2 md:gap-5">
               <div className="space-y-2">
                 <Label htmlFor="age">Age</Label>
                 <Input id="age" type="number" placeholder="25" value={age} onChange={(e) => setAge(e.target.value)} />
@@ -127,7 +157,7 @@ export default function Profile() {
               <div className="space-y-2">
                 <Label htmlFor="gender">Gender</Label>
                 <Select value={gender} onValueChange={setGender}>
-                  <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
+                  <SelectTrigger id="gender" className="w-full"><SelectValue placeholder="Select gender" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="male">Male</SelectItem>
                     <SelectItem value="female">Female</SelectItem>
@@ -145,15 +175,18 @@ export default function Profile() {
               </div>
             </div>
             {bmi && (
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">Your BMI: <span className="text-lg font-bold text-foreground">{bmi}</span></p>
+              <div className="flex items-center gap-4 rounded-2xl bg-fog p-4">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white" aria-hidden="true">
+                  <Activity className="h-5 w-5 text-verdant-green" />
+                </span>
+                <p className="text-sm font-bold text-muted-foreground">Your BMI: <span className="fn-metric ml-1 text-2xl text-graphite">{bmi}</span></p>
               </div>
             )}
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid gap-4 md:grid-cols-2 md:gap-5">
               <div className="space-y-2">
                 <Label htmlFor="exercise">Exercise Frequency</Label>
                 <Select value={exerciseFrequency} onValueChange={setExerciseFrequency}>
-                  <SelectTrigger><SelectValue placeholder="Select frequency" /></SelectTrigger>
+                  <SelectTrigger id="exercise" className="w-full"><SelectValue placeholder="Select frequency" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="sedentary">Sedentary</SelectItem>
                     <SelectItem value="light">Light (1-2 days/week)</SelectItem>
@@ -166,7 +199,7 @@ export default function Profile() {
               <div className="space-y-2">
                 <Label htmlFor="diet">Diet Type</Label>
                 <Select value={dietType} onValueChange={setDietType}>
-                  <SelectTrigger><SelectValue placeholder="Select diet type" /></SelectTrigger>
+                  <SelectTrigger id="diet" className="w-full"><SelectValue placeholder="Select diet type" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="veg">Vegetarian</SelectItem>
                     <SelectItem value="non_veg">Non-Vegetarian</SelectItem>
@@ -176,26 +209,46 @@ export default function Profile() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="region">Country or city</Label>
+                <Input
+                  id="region"
+                  value={region}
+                  maxLength={64}
+                  onChange={(e) => setRegion(e.target.value)}
+                  placeholder="e.g. India, Mumbai"
+                />
+                <p className="text-xs text-muted-foreground">Used to suggest healthier alternatives that are sold where you live. Optional.</p>
+              </div>
             </div>
-            <Button onClick={handleSaveProfile}>Save Profile</Button>
+            <div className="flex justify-end border-t border-border pt-6">
+              <Button onClick={handleSaveProfile} disabled={upsertProfileMutation.isPending} className="w-full sm:w-auto">
+                {upsertProfileMutation.isPending ? "Saving..." : "Save Profile"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Medical Conditions</CardTitle>
-            <CardDescription>Track conditions that may affect food choices</CardDescription>
+            <SectionTitle icon={<HeartPulse className="h-5 w-5 text-signal-red-orange" />} title="Medical Conditions" description="Track conditions that may affect food choices" />
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <Input placeholder="e.g., Diabetes, Hypertension" value={newCondition} onChange={(e) => setNewCondition(e.target.value)} />
-              <Button onClick={handleAddCondition}><Plus className="h-4 w-4" /></Button>
-            </div>
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleAddCondition();
+              }}
+            >
+              <Input placeholder="e.g., Diabetes, Hypertension" aria-label="Medical condition" value={newCondition} onChange={(e) => setNewCondition(e.target.value)} maxLength={2000} className="min-w-0 flex-1" />
+              <Button type="submit" variant="dark" size="icon" disabled={addConditionMutation.isPending || !newCondition.trim()} aria-label="Add condition"><Plus className="h-4 w-4" /></Button>
+            </form>
             <div className="space-y-2">
               {conditions?.map((condition) => (
-                <div key={condition.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <span>{condition.condition}</span>
-                  <Button variant="ghost" size="sm" onClick={() => handleDeleteCondition(condition.id)}><Trash2 className="h-4 w-4" /></Button>
+                <div key={condition.id} className="flex items-center justify-between gap-3 rounded-2xl bg-fog py-1.5 pl-4 pr-1.5">
+                  <span className="min-w-0 break-words font-bold text-graphite">{condition.condition}</span>
+                  <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:bg-white hover:text-signal-red-orange" disabled={deleteConditionMutation.isPending} onClick={() => handleDeleteCondition(condition.id)} aria-label={`Remove ${condition.condition}`}><Trash2 className="h-4 w-4" /></Button>
                 </div>
               ))}
               {(!conditions || conditions.length === 0) && <p className="text-sm text-muted-foreground">No medical conditions added</p>}
@@ -205,31 +258,52 @@ export default function Profile() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Medications</CardTitle>
-            <CardDescription>Current and past medications</CardDescription>
+            <SectionTitle icon={<Pill className="h-5 w-5 text-iris" />} title="Medications" description="Current and past medications" />
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-3 gap-2">
-              <Input placeholder="Medication name" value={newMedication.name} onChange={(e) => setNewMedication({ ...newMedication, name: e.target.value })} />
-              <Input placeholder="Dosage (optional)" value={newMedication.dosage} onChange={(e) => setNewMedication({ ...newMedication, dosage: e.target.value })} />
-              <Button onClick={handleAddMedication}><Plus className="h-4 w-4 mr-2" />Add</Button>
-            </div>
+            <form
+              className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleAddMedication();
+              }}
+            >
+              <Input placeholder="Medication name" aria-label="Medication name" value={newMedication.name} onChange={(e) => setNewMedication({ ...newMedication, name: e.target.value })} maxLength={255} />
+              <Input placeholder="Dosage (optional)" aria-label="Dosage" maxLength={100} value={newMedication.dosage} onChange={(e) => setNewMedication({ ...newMedication, dosage: e.target.value })} />
+              <Button type="submit" variant="dark" disabled={addMedicationMutation.isPending || !newMedication.name.trim()}><Plus className="h-4 w-4" />Add</Button>
+            </form>
             <div className="space-y-2">
               {medications?.map((med) => (
-                <div key={med.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <div>
-                    <p className="font-medium">{med.name}</p>
+                <div key={med.id} className="flex items-center justify-between gap-3 rounded-2xl bg-fog py-3 pl-4 pr-1.5">
+                  <div className="min-w-0 space-y-1">
+                    <p className="break-words font-bold text-graphite">{med.name}</p>
                     {med.dosage && <p className="text-sm text-muted-foreground">{med.dosage}</p>}
-                    <p className="text-xs text-muted-foreground">{med.isCurrent ? "Current" : "Past"}</p>
+                    <StatusTag tone={med.isCurrent ? "positive" : "neutral"} onWhite>{med.isCurrent ? "Current" : "Past"}</StatusTag>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => handleDeleteMedication(med.id)}><Trash2 className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:bg-white hover:text-signal-red-orange" disabled={deleteMedicationMutation.isPending} onClick={() => handleDeleteMedication(med.id)} aria-label={`Remove ${med.name}`}><Trash2 className="h-4 w-4" /></Button>
                 </div>
               ))}
               {(!medications || medications.length === 0) && <p className="text-sm text-muted-foreground">No medications added</p>}
             </div>
           </CardContent>
         </Card>
+
+        <WhatsAppCard />
       </div>
     </DashboardLayout>
+  );
+}
+
+function SectionTitle({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
+  return (
+    <div className="flex items-start gap-4">
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-fog" aria-hidden="true">
+        {icon}
+      </span>
+      <div className="min-w-0 space-y-1">
+        <CardTitle className="fn-heading-sm">{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </div>
+    </div>
   );
 }

@@ -5,8 +5,12 @@ import time
 import uuid
 import sqlite3
 import base64
+import re
+import numpy as np
+from contextlib import closing
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageOps
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -18,7 +22,10 @@ import torch.nn as nn
 from torchvision.models import efficientnet_b0
 from torchvision import transforms
 from flask import Flask, request, jsonify, render_template, send_from_directory
+from werkzeug.exceptions import HTTPException
 from flask_cors import CORS
+
+import ood
 
 # --- App Configuration ---
 BASE_DIR = Path(__file__).resolve().parent
@@ -27,6 +34,8 @@ MODEL_PATH = MODELS_DIR / "efficientnet_b0_freshguard_multitask.pt"
 UPLOAD_FOLDER = BASE_DIR / "static" / "uploads"
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 DB_PATH = BASE_DIR / "freshguard.db"
+SAMPLES_DIR = BASE_DIR / "static" / "samples"
+ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 CORS(app)
@@ -72,99 +81,48 @@ def init_db():
 
 init_db()
 
-# --- Fruit Knowledge Base ---
-FRUIT_INFO = {
-    "apple": {
-        "kr": "사과",
-        "emoji": "🍎",
-        "shelf_life_days": {"fresh": 14, "normal": 4, "rotten": 0},
-        "storage": "냉장 보관(0~4°C). 에틸렌 가스를 방출하므로 다른 과일과 분리하여 비닐팩에 밀봉 보관하세요.",
-        "cooking_fresh": "생과일 섭취, 샐러드, 생과일 주스",
-        "cooking_normal": "사과잼, 사과조림, 애플파이, 스무디",
-        "cooking_rotten": "섭취 불가 (음식물 쓰레기로 폐기)"
-    },
-    "banana": {
-        "kr": "바나나",
-        "emoji": "🍌",
-        "shelf_life_days": {"fresh": 5, "normal": 2, "rotten": 0},
-        "storage": "상온 보관(13~16°C). 꼭지 부분을 랩으로 감싸면 에틸렌 방출을 억제해 보관 기간을 늘릴 수 있습니다.",
-        "cooking_fresh": "생과일 섭취, 요거트 토핑",
-        "cooking_normal": "바나나 팬케이크, 바나나 브레드, 냉동 후 스무디",
-        "cooking_rotten": "섭취 불가 (과육 변색 및 부패 시 폐기)"
-    },
-    "bell_pepper": {
-        "kr": "파프리카/피망",
-        "emoji": "🫑",
-        "shelf_life_days": {"fresh": 10, "normal": 3, "rotten": 0},
-        "storage": "물기를 닦고 키친타월로 감싸 지퍼백에 넣어 냉장 채소칸(4~7°C)에 보관하세요.",
-        "cooking_fresh": "신선 샐러드, 생채, 쌈채소",
-        "cooking_normal": "파프리카 볶음, 파스타 토핑, 볶음밥",
-        "cooking_rotten": "섭취 불가 (무름병 발생 시 폐기)"
-    },
-    "carrot": {
-        "kr": "당근",
-        "emoji": "🥕",
-        "shelf_life_days": {"fresh": 21, "normal": 5, "rotten": 0},
-        "storage": "흙을 털고 키친타월로 싼 후 비닐백에 담아 세워서 냉장 보관하세요.",
-        "cooking_fresh": "당근 라페, 생당근 스틱, 주스",
-        "cooking_normal": "카레, 찌개 고명, 조림, 당근전",
-        "cooking_rotten": "섭취 불가 (검은 반점 및 악취 시 폐기)"
-    },
-    "cucumber": {
-        "kr": "오이",
-        "emoji": "🥒",
-        "shelf_life_days": {"fresh": 7, "normal": 2, "rotten": 0},
-        "storage": "물기를 제거하고 키친타월로 하나씩 감싼 후 비닐백에 넣어 냉장(7~10°C) 보관하세요.",
-        "cooking_fresh": "오이 샐러드, 냉국, 생오이 무침",
-        "cooking_normal": "오이 볶음, 피클, 비빔국수 토핑",
-        "cooking_rotten": "섭취 불가 (표면 진물림 시 폐기)"
-    },
-    "mango": {
-        "kr": "망고",
-        "emoji": "🥭",
-        "shelf_life_days": {"fresh": 6, "normal": 2, "rotten": 0},
-        "storage": "후숙 전에는 상온 보관, 완숙 후에는 신문지에 싸서 냉장 보관하세요.",
-        "cooking_fresh": "생망고 디저트, 망고 빙수",
-        "cooking_normal": "망고 라씨, 망고 퓨레, 스무디",
-        "cooking_rotten": "섭취 불가 (알코올 냄새 또는 곰팡이 발생 시 폐기)"
-    },
-    "orange": {
-        "kr": "오렌지",
-        "emoji": "🍊",
-        "shelf_life_days": {"fresh": 14, "normal": 4, "rotten": 0},
-        "storage": "통풍이 잘되는 서늘한 곳에 보관하거나, 개별 랩핑하여 냉장 보관하세요.",
-        "cooking_fresh": "생과일 섭취, 착즙 주스",
-        "cooking_normal": "오렌지 마멀레이드 잼, 과일청, 샹그리아",
-        "cooking_rotten": "섭취 불가 (곰팡이 발생 시 즉시 폐기)"
-    },
-    "potato": {
-        "kr": "감자",
-        "emoji": "🥔",
-        "shelf_life_days": {"fresh": 28, "normal": 7, "rotten": 0},
-        "storage": "햇빛이 들지 않는 통풍 잘되는 어둡고 서늘한 상온 보관. 사과를 한 개 같이 두면 싹이 트는 것을 방지합니다.",
-        "cooking_fresh": "감자 샐러드, 구운 감자, 웨지 감자",
-        "cooking_normal": "감자 조림, 감자전, 찌개",
-        "cooking_rotten": "섭취 불가 (초록색 변색 부위는 솔라닌 독성 주의)"
-    },
-    "strawberry": {
-        "kr": "딸기",
-        "emoji": "🍓",
-        "shelf_life_days": {"fresh": 4, "normal": 1, "rotten": 0},
-        "storage": "씻지 않은 상태로 키친타월을 깐 밀폐용기에 꼭지를 아래로 하여 냉장 보관하세요.",
-        "cooking_fresh": "생딸기 섭취, 생과일 케이크 토핑",
-        "cooking_normal": "딸기청, 수제 딸기잼, 딸기 스무디",
-        "cooking_rotten": "섭취 불가 (흰 곰팡이 발생 시 즉시 폐기)"
-    },
-    "tomato": {
-        "kr": "토마토",
-        "emoji": "🍅",
-        "shelf_life_days": {"fresh": 8, "normal": 3, "rotten": 0},
-        "storage": "꼭지를 아래로 하여 상온 그늘진 곳에 보관. 완숙된 토마토는 냉장 보관하세요.",
-        "cooking_fresh": "토마토 카프레제, 생과일 샐러드",
-        "cooking_normal": "토마토 파스타 소스, 토마토 수프, 에그인헬",
-        "cooking_rotten": "섭취 불가 (시큼한 악취 또는 무름 시 폐기)"
-    }
-}
+UPLOAD_MAX_AGE_DAYS = 7
+
+
+def _port_from_env(default: int = 5000) -> int:
+    try:
+        port = int(os.environ.get("FRESHGUARD_PORT", "").strip() or default)
+    except ValueError:
+        return default
+    return port if 1 <= port <= 65535 else default
+
+
+FRESHGUARD_PORT = _port_from_env()
+
+def prune_uploads(max_age_days: int = UPLOAD_MAX_AGE_DAYS):
+    """Delete old uploaded scan images that no inventory item or history row references."""
+    try:
+        with closing(sqlite3.connect(DB_PATH)) as conn:
+            referenced = set()
+            for table in ("inventory", "scan_history"):
+                for (url,) in conn.execute(f"SELECT image_url FROM {table} WHERE image_url IS NOT NULL"):
+                    referenced.add(os.path.basename(str(url)))
+        cutoff = time.time() - max_age_days * 86400
+        removed = 0
+        for f in UPLOAD_FOLDER.iterdir():
+            if f.is_file() and f.name != ".gitkeep" and f.name not in referenced and f.stat().st_mtime < cutoff:
+                f.unlink()
+                removed += 1
+        return removed
+    except Exception as e:
+        print(f"[!] Upload cleanup skipped: {e}")
+        return 0
+
+prune_uploads()
+
+# --- Fruit Knowledge Base (see fruit_info.py) ---
+from fruit_info import (  # noqa: E402
+    FRUIT_INFO,
+    DEFAULT_COOKING_TIP,
+    DEFAULT_SHELF_LIFE_DAYS,
+    DEFAULT_STORAGE_TIP,
+    evaluate_freshness,
+)
 
 # --- PyTorch MultiTask Architecture ---
 class MultiTaskEffB0(nn.Module):
@@ -185,7 +143,11 @@ class MultiTaskEffB0(nn.Module):
 
 # --- Model Loader ---
 print(f"[*] Loading FreshGuard model on device: {DEVICE}...")
-checkpoint = torch.load(MODEL_PATH, map_location=DEVICE, weights_only=False)
+try:
+    checkpoint = torch.load(MODEL_PATH, map_location=DEVICE, weights_only=True)
+except Exception:
+    # Fallback for checkpoints that pickle non-tensor objects (trusted local file)
+    checkpoint = torch.load(MODEL_PATH, map_location=DEVICE, weights_only=False)
 FRUIT_NAMES = checkpoint["fruit_names"]
 FRESH_LABELS = checkpoint["fresh_labels"]
 FRESH_IDX = FRESH_LABELS.index("fresh")
@@ -204,39 +166,33 @@ inference_transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-def evaluate_freshness(p_fresh: float):
-    # FreshGuard rule:
-    # p_fresh >= 0.7 -> fresh
-    # p_fresh <= 0.3 -> rotten
-    # otherwise      -> normal
-    if p_fresh >= 0.7:
-        return {
-            "status": "fresh",
-            "status_kr": "신선함 (Fresh)",
-            "badge_color": "emerald",
-            "message": "식재료가 매우 신선한 최상의 상태입니다."
-        }
-    elif p_fresh <= 0.3:
-        return {
-            "status": "rotten",
-            "status_kr": "상함/부패 (Rotten)",
-            "badge_color": "rose",
-            "message": "부패가 진행되었거나 상한 상태입니다. 섭취를 삼가고 폐기하세요."
-        }
-    else:
-        return {
-            "status": "normal",
-            "status_kr": "보통 (Normal)",
-            "badge_color": "amber",
-            "message": "소비 적정기입니다. 빠른 시일 내에 조리하여 섭취하세요."
-        }
+# evaluate_freshness lives in fruit_info.py (shared with the in-browser inference).
+
+def to_rgb(image: Image.Image) -> Image.Image:
+    """EXIF-upright RGB copy. Pillow's convert("RGB") clips 16-bit/int/float grayscale (modes I;16, I, F)
+    to 0..255, which turns a 16-bit PNG almost entirely white; scale those modes to 8 bit first."""
+    image = ImageOps.exif_transpose(image)
+    if image.mode.startswith("I") or image.mode == "F":
+        arr = np.asarray(image, dtype=np.float64)
+        top = float(arr.max()) if arr.size else 0.0
+        if image.mode == "F" and top <= 1.0:
+            arr = arr * 255.0
+        elif top > 65535.0:
+            low = float(arr.min())
+            arr = (arr - low) * (255.0 / max(top - low, 1.0))
+        elif top > 255.0:
+            arr = arr / 257.0
+        image = Image.fromarray(np.rint(np.clip(arr, 0, 255)).astype(np.uint8))
+    return image.convert("RGB")
+
 
 def run_inference(image: Image.Image):
-    image = image.convert("RGB")
+    image = to_rgb(image)
     tensor = inference_transform(image).unsqueeze(0).to(DEVICE)
 
     with torch.no_grad():
         pf, pb = model(tensor)
+        fruit_logits = pf[0].cpu().numpy()
         fruit_probs = torch.softmax(pf, dim=1)[0].cpu().numpy()
         fresh_probs = torch.softmax(pb, dim=1)[0].cpu().numpy()
 
@@ -251,7 +207,6 @@ def run_inference(image: Image.Image):
         all_fruits.append({
             "code": fname,
             "name_kr": FRUIT_INFO.get(fname, {}).get("kr", fname),
-            "emoji": FRUIT_INFO.get(fname, {}).get("emoji", "🍏"),
             "probability": round(float(prob) * 100, 1)
         })
     all_fruits.sort(key=lambda x: x["probability"], reverse=True)
@@ -260,13 +215,12 @@ def run_inference(image: Image.Image):
     fruit_meta = FRUIT_INFO.get(fruit_code, {})
     status_key = status_data["status"]
 
-    shelf_days = fruit_meta.get("shelf_life_days", {}).get(status_key, 3)
-    cooking_guide = fruit_meta.get(f"cooking_{status_key}", "조리 후 섭취 권장")
+    shelf_days = fruit_meta.get("shelf_life_days", {}).get(status_key, DEFAULT_SHELF_LIFE_DAYS)
+    cooking_guide = fruit_meta.get(f"cooking_{status_key}", DEFAULT_COOKING_TIP)
 
     return {
         "fruit": fruit_code,
         "fruit_kr": fruit_meta.get("kr", fruit_code),
-        "emoji": fruit_meta.get("emoji", "🍎"),
         "confidence": round(confidence * 100, 1),
         "p_fresh": round(p_fresh * 100, 1),
         "freshness_status": status_key,
@@ -274,139 +228,411 @@ def run_inference(image: Image.Image):
         "badge_color": status_data["badge_color"],
         "status_message": status_data["message"],
         "shelf_life_days": shelf_days,
-        "storage_tips": fruit_meta.get("storage", "서늘한 곳에 보관하세요."),
+        "storage_tips": fruit_meta.get("storage", DEFAULT_STORAGE_TIP),
         "cooking_tips": cooking_guide,
-        "top_candidates": all_fruits[:4]
+        "top_candidates": all_fruits[:4],
+        # Out-of-distribution verdict (see ood.py, docs/non-produce-rejection.md). Additive fields: the fruit
+        # above is still the closed-set argmax even when is_produce is false.
+        **ood.assess(fruit_logits),
     }
+
+
+# --- English-only display helpers (see legacy_text.py) ---
+from legacy_text import LEGACY_KO_TO_EN, englishify, _HANGUL_RE  # noqa: F401
+
+
+def _englishify_row(row):
+    for key in ("name", "fruit_name_kr", "freshness_kr"):
+        if key in row:
+            row[key] = englishify(row[key])
+    if "storage_tip" in row and isinstance(row["storage_tip"], str) and _HANGUL_RE.search(row["storage_tip"]):
+        info = FRUIT_INFO.get(row.get("fruit_type") or "", {})
+        row["storage_tip"] = info.get("storage", "Store in a cool place.")
+    return row
 
 # --- Routes ---
 @app.route("/")
 def index():
     return render_template("index.html")
 
+def _bad_request(msg, code=400):
+    return jsonify({"error": msg}), code
+
+@app.errorhandler(HTTPException)
+def handle_http_exception(e):
+    # Always answer with JSON so the frontend can show e.error (e.g. 413 too large)
+    return jsonify({"error": e.description or e.name}), e.code
+
+@app.errorhandler(Exception)
+def handle_unexpected_exception(e):
+    # Any other failure (for example a sqlite error) must also be JSON, never Flask's HTML 500 page
+    if app.testing or app.debug:
+        raise e
+    print(f"[!] Unhandled error on {request.path}: {e!r}")
+    return jsonify({"error": "Internal server error"}), 500
+
+
 @app.route("/api/predict", methods=["POST"])
 def predict():
+    saved_path = None
     try:
-        image_data = None
-        saved_filename = None
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            body = {}
 
         if "file" in request.files and request.files["file"].filename != "":
             file = request.files["file"]
-            ext = os.path.splitext(file.filename)[1] or ".jpg"
+            ext = os.path.splitext(file.filename)[1].lower()
+            if ext not in ALLOWED_EXTS:
+                ext = ".jpg"
             saved_filename = f"{uuid.uuid4().hex}{ext}"
-            file_path = UPLOAD_FOLDER / saved_filename
-            file.save(file_path)
-            image = Image.open(file_path)
+            saved_path = UPLOAD_FOLDER / saved_filename
+            file.save(saved_path)
+            try:
+                with Image.open(saved_path) as img:
+                    img.load()
+                    image = img.copy()
+            except Exception:
+                saved_path.unlink(missing_ok=True)
+                return _bad_request("Invalid or unsupported image file.")
             image_url = f"/static/uploads/{saved_filename}"
 
-        elif request.is_json and "image" in request.json:
-            raw_b64 = request.json["image"]
-            if "," in raw_b64:
-                raw_b64 = raw_b64.split(",")[1]
-            img_bytes = base64.b64decode(raw_b64)
-            image = Image.open(io.BytesIO(img_bytes))
+        elif isinstance(body.get("image"), str) and body["image"]:
+            raw_b64 = body["image"]
+            if raw_b64.startswith("data:") and "," in raw_b64:
+                raw_b64 = raw_b64.split(",", 1)[1]
+            try:
+                img_bytes = base64.b64decode(raw_b64, validate=False)
+                with Image.open(io.BytesIO(img_bytes)) as img:
+                    img.load()
+                    image = img.copy()
+            except Exception:
+                return _bad_request("Invalid base64 image data.")
             saved_filename = f"{uuid.uuid4().hex}.jpg"
-            file_path = UPLOAD_FOLDER / saved_filename
-            image.save(file_path, "JPEG")
+            saved_path = UPLOAD_FOLDER / saved_filename
+            to_rgb(image).save(saved_path, "JPEG")
             image_url = f"/static/uploads/{saved_filename}"
 
-        elif "sample" in request.args or (request.is_json and "sample" in request.json):
-            sample_name = request.args.get("sample") or request.json.get("sample")
-            sample_path = BASE_DIR / "static" / "samples" / sample_name
-            if not sample_path.exists():
+        elif request.args.get("sample") or body.get("sample"):
+            sample_name = request.args.get("sample") or body.get("sample")
+            if not isinstance(sample_name, str):
+                return _bad_request("Invalid sample name.")
+            # Only plain file names inside static/samples are allowed (no traversal)
+            sample_name = os.path.basename(sample_name.replace("\\", "/"))
+            sample_path = SAMPLES_DIR / sample_name
+            if not sample_name or not sample_path.is_file():
                 return jsonify({"error": "Sample image not found"}), 404
-            image = Image.open(sample_path)
+            try:
+                with Image.open(sample_path) as img:
+                    img.load()
+                    image = img.copy()
+            except Exception:
+                return _bad_request("Invalid sample image.")
             image_url = f"/static/samples/{sample_name}"
 
         else:
-            return jsonify({"error": "No image provided. Upload a file, send base64, or specify sample."}), 400
+            return _bad_request("No image provided. Upload a file, send base64, or specify sample.")
 
         result = run_inference(image)
         result["image_url"] = image_url
 
-        # Save to scan history
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO scan_history (fruit_type, fruit_name_kr, freshness, freshness_kr, p_fresh, confidence, image_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            result["fruit"],
-            result["fruit_kr"],
-            result["freshness_status"],
-            result["freshness_kr"],
-            result["p_fresh"],
-            result["confidence"],
-            result["image_url"]
-        ))
-        conn.commit()
-        conn.close()
+        # Save to this service's own scan history, used only by the standalone page.
+        # The IngreScan web app sends persist=0 and stores history per user in MySQL instead.
+        # A photo flagged as not produce is not written to the standalone history (the response still carries it).
+        if request.args.get("persist", "1") != "0" and result["is_produce"]:
+            with closing(sqlite3.connect(DB_PATH)) as conn:
+                conn.execute("""
+                    INSERT INTO scan_history (fruit_type, fruit_name_kr, freshness, freshness_kr, p_fresh, confidence, image_url)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    result["fruit"],
+                    result["fruit_kr"],
+                    result["freshness_status"],
+                    result["freshness_kr"],
+                    result["p_fresh"],
+                    result["confidence"],
+                    result["image_url"]
+                ))
+                conn.commit()
 
         return jsonify(result)
 
+    except HTTPException:
+        raise  # e.g. 413; handled by the JSON error handler
     except Exception as e:
+        if saved_path is not None:
+            saved_path.unlink(missing_ok=True)
         return jsonify({"error": str(e)}), 500
+
+_detector = None
+# Decided from tools/eval_shelf.py numbers, see docs/multi-item-detection.md
+SHELF_SECOND_PASS_DEFAULT = False
+
+
+def get_detector():
+    global _detector
+    if _detector is None:
+        import detector as det
+        _detector = det.Detector()
+    return _detector
+
+
+def _load_request_image():
+    """Image from a multipart 'file' or a JSON {"image": base64}. Returns (image, error_response)."""
+    if "file" in request.files and request.files["file"].filename != "":
+        try:
+            with Image.open(request.files["file"].stream) as img:
+                img.load()
+                return img.copy(), None
+        except Exception:
+            return None, _bad_request("Invalid or unsupported image file.")
+    body = request.get_json(silent=True)
+    if isinstance(body, dict) and isinstance(body.get("image"), str) and body["image"]:
+        raw_b64 = body["image"]
+        if raw_b64.startswith("data:") and "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        try:
+            with Image.open(io.BytesIO(base64.b64decode(raw_b64, validate=False))) as img:
+                img.load()
+                return img.copy(), None
+        except Exception:
+            return None, _bad_request("Invalid base64 image data.")
+    return None, _bad_request("No image provided. Upload a file or send base64.")
+
+
+def _env_flag(name, default):
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _batch_fruit_logits(crops):
+    """Fruit logits (N, n_fruit) for several PIL crops in one forward pass (second pass only)."""
+    batch = torch.stack([inference_transform(c.convert("RGB")) for c in crops]).to(DEVICE)
+    with torch.no_grad():
+        pf, _ = model(batch)
+    return pf.cpu().numpy()
+
+
+def _second_pass(image, existing_boxes):
+    """Sliding-window proposals scored by the classifier with a much stricter bar than the detector path.
+
+    Returns (boxes, stats). Boxes are xyxy ints, best first, already NMS'd and de-duplicated against
+    `existing_boxes`. Every returned box is later classified like any other crop and marked second_pass.
+    """
+    import detector as det
+    width, height = image.size
+    windows = det.propose_windows(width, height)
+    stats = {"windows": len(windows), "passed_bar": 0, "added": 0}
+    if not windows:
+        return [], stats
+    logits = np.concatenate([_batch_fruit_logits([image.crop(w) for w in windows[i:i + 32]])
+                             for i in range(0, len(windows), 32)])
+    min_l = ood.env_float("SHELF_SECOND_PASS_MIN_LIKELIHOOD", ood.DEFAULT_SECOND_PASS_MIN_LIKELIHOOD)
+    min_c = det.SECOND_PASS_MIN_CONFIDENCE
+    boxes, scores = [], []
+    for w, lg in zip(windows, logits):
+        e = ood.energy_score(lg)
+        conf = ood.max_softmax(lg) * 100
+        if ood.likelihood_from_energy(e) >= min_l and conf >= min_c:
+            boxes.append(w)
+            scores.append(e)
+    stats["passed_bar"] = len(boxes)
+    if not boxes:
+        return [], stats
+    keep = det.select_extra(np.array(boxes, dtype=np.float32), np.array(scores), existing_boxes)
+    stats["added"] = len(keep)
+    return [boxes[i] for i in keep], stats
+
+
+@app.route("/api/detect", methods=["POST"])
+def detect_items():
+    """Find several fruit/vegetables in one photo and classify each crop with the FreshGuard model.
+
+    The COCO detector only localises; labels and freshness always come from the classifier, and a
+    detection is kept only if the classifier is at least MIN_CLASSIFIER_CONFIDENCE percent sure and the
+    crop does not look like a non-produce image (out-of-distribution score, PRODUCE_MIN_LIKELIHOOD).
+    Kept items can carry needs_check / check_reasons; the web app leaves those unticked.
+
+    Environment (read per request): PRODUCE_MIN_LIKELIHOOD (0 disables the OOD gate),
+    SHELF_CHECKS (default 1), SHELF_SECOND_PASS (default per docs/multi-item-detection.md),
+    SHELF_SURE_LIKELIHOOD (default 0.8).
+    """
+    import detector as det
+    detector = get_detector()
+    ok, why = detector.is_available()
+    if not ok:
+        return jsonify({"error": "Detector not installed. " + why, "code": "detector_not_installed"}), 503
+
+    image, err = _load_request_image()
+    if err is not None:
+        return err
+    image = to_rgb(image)
+    width, height = image.size
+
+    min_likelihood = ood.min_likelihood()
+    sure_likelihood = max(min_likelihood, ood.env_float("SHELF_SURE_LIKELIHOOD", ood.DEFAULT_SHELF_SURE_LIKELIHOOD))
+    checks_on = _env_flag("SHELF_CHECKS", True)
+    second_pass_on = _env_flag("SHELF_SECOND_PASS", SHELF_SECOND_PASS_DEFAULT)
+
+    saved = []
+    try:
+        try:
+            found = detector.detect(image)
+        except det.DetectorUnavailable as e:
+            return jsonify({"error": "Detector not installed. " + str(e), "code": "detector_not_installed"}), 503
+
+        items, rejected = [], []
+        pass_stats = None
+
+        def handle(box, label, score, second_pass):
+            left, top, right, bottom = det.pad_box(box, width, height)
+            crop = image.crop((left, top, right, bottom))
+            result = run_inference(crop)
+            x1, y1, x2, y2 = box
+            base = {
+                "box": {"x": round(float(x1), 1), "y": round(float(y1), 1),
+                        "w": round(float(x2 - x1), 1), "h": round(float(y2 - y1), 1)},
+                "detector_label": label,
+                "detector_score": round(score * 100, 1) if score is not None else None,
+                "source": "second_pass" if second_pass else "detector",
+            }
+            if min_likelihood > 0 and result["produce_likelihood"] < min_likelihood:
+                rejected.append({**base, "fruit": result["fruit"], "confidence": result["confidence"],
+                                 "produce_likelihood": result["produce_likelihood"], "reason": "not_produce"})
+                return
+            if result["confidence"] < det.MIN_CLASSIFIER_CONFIDENCE:
+                rejected.append({**base, "fruit": result["fruit"], "confidence": result["confidence"],
+                                 "produce_likelihood": result["produce_likelihood"],
+                                 "reason": "low_classifier_confidence"})
+                return
+            reasons = []
+            if checks_on:
+                reasons = det.check_reasons(
+                    detector_label=label, fruit=result["fruit"], confidence=result["confidence"],
+                    top_candidates=result["top_candidates"],
+                    produce_likelihood=result["produce_likelihood"] if min_likelihood > 0 else None,
+                    sure_likelihood=sure_likelihood, second_pass=second_pass)
+            thumb = crop.copy()
+            thumb.thumbnail((256, 256))
+            name = f"{uuid.uuid4().hex}.jpg"
+            path = UPLOAD_FOLDER / name
+            thumb.save(path, "JPEG", quality=85)
+            saved.append(path)
+            items.append({**base, **result, "image_url": f"/static/uploads/{name}",
+                          "needs_check": bool(reasons), "check_reasons": reasons})
+
+        for d in found:
+            handle(d["box"], d["label"], d["score"], False)
+
+        if second_pass_on:
+            existing = [d["box"] for d in found]
+            extra, pass_stats = _second_pass(image, existing)
+            for box in extra:
+                handle([float(v) for v in box], None, None, True)
+
+        # reading order for the review list: top-to-bottom bands, then left-to-right
+        items.sort(key=lambda it: (round(it["box"]["y"] / 40), it["box"]["x"]))
+
+        return jsonify({
+            "items": items,
+            "rejected": rejected,
+            "image": {"width": width, "height": height},
+            "min_confidence": det.MIN_CLASSIFIER_CONFIDENCE,
+            "ood": {"method": ood.METHOD, "min_likelihood": min_likelihood, "sure_likelihood": sure_likelihood},
+            "second_pass": {"enabled": second_pass_on, **(pass_stats or {})},
+            "detector": {"model": det.MODEL_NAME, "license": det.MODEL_LICENSE,
+                         "classes": sorted(set(det.COCO_PRODUCE.values()))},
+            "note": "The detector only knows apple, banana, orange and carrot as produce; other items "
+                    "(mango, bell pepper, potato, tomato, cucumber, strawberry) are often missed.",
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        for p in saved:
+            p.unlink(missing_ok=True)
+        return jsonify({"error": str(e)}), 500
+
+
+def _to_float(value, default):
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    return f if f == f and f not in (float("inf"), float("-inf")) else default
+
+def _days_until(expiry_date):
+    """Whole days from today until expiry_date (YYYY-MM-DD); None if unparsable."""
+    try:
+        return (datetime.strptime(str(expiry_date)[:10], "%Y-%m-%d").date() - date.today()).days
+    except ValueError:
+        return None
 
 @app.route("/api/inventory", methods=["GET", "POST"])
 def inventory():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
     if request.method == "POST":
-        data = request.json or {}
-        name = data.get("name") or data.get("fruit_kr") or "식재료"
-        fruit_type = data.get("fruit", "apple")
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return _bad_request("JSON object body required.")
+        name = englishify(str(data.get("name") or data.get("fruit_kr") or "Produce"))
+        fruit_type = str(data.get("fruit") or "apple")
         freshness = data.get("freshness_status", "fresh")
-        p_fresh = data.get("p_fresh", 90.0)
-        confidence = data.get("confidence", 95.0)
-        image_url = data.get("image_url", "")
-        days_left = data.get("shelf_life_days", 5)
-        storage_tip = data.get("storage_tips", "")
-        expiry_date = data.get("expiry_date", "")
+        if freshness not in ("fresh", "normal", "rotten"):
+            return _bad_request("freshness_status must be fresh, normal or rotten.")
+        p_fresh = min(max(_to_float(data.get("p_fresh"), 90.0), 0.0), 100.0)
+        confidence = min(max(_to_float(data.get("confidence"), 95.0), 0.0), 100.0)
+        image_url = str(data.get("image_url") or "")
+        storage_tip = str(data.get("storage_tips") or "")
 
-        cursor.execute("""
-            INSERT INTO inventory (name, fruit_type, freshness, p_fresh, confidence, image_url, expiry_date, days_left, storage_tip)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (name, fruit_type, freshness, p_fresh, confidence, image_url, expiry_date, days_left, storage_tip))
-        conn.commit()
-        new_id = cursor.lastrowid
-        conn.close()
+        expiry_date = str(data.get("expiry_date") or "")[:10]
+        days_left = _days_until(expiry_date) if expiry_date else None
+        if days_left is None:
+            days_left = int(min(max(_to_float(data.get("shelf_life_days"), 5), 0.0), 36500.0))
+            expiry_date = (date.today() + timedelta(days=max(days_left, 0))).isoformat()
+        days_left = max(days_left, 0)
+
+        with closing(sqlite3.connect(DB_PATH)) as conn:
+            cursor = conn.execute("""
+                INSERT INTO inventory (name, fruit_type, freshness, p_fresh, confidence, image_url, expiry_date, days_left, storage_tip)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (name, fruit_type, freshness, p_fresh, confidence, image_url, expiry_date, days_left, storage_tip))
+            conn.commit()
+            new_id = cursor.lastrowid
         return jsonify({"success": True, "id": new_id})
 
     # GET inventory
-    cursor.execute("SELECT * FROM inventory ORDER BY id DESC")
-    rows = cursor.fetchall()
-    items = [dict(row) for row in rows]
-    conn.close()
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM inventory ORDER BY id DESC").fetchall()
+    items = [_englishify_row(dict(row)) for row in rows]
+    for item in items:
+        # days_left was a snapshot at save time; recompute from the expiry date
+        remaining = _days_until(item["expiry_date"]) if item.get("expiry_date") else None
+        if remaining is not None:
+            item["days_left"] = max(remaining, 0)
     return jsonify(items)
 
 @app.route("/api/inventory/<int:item_id>", methods=["DELETE"])
 def delete_inventory_item(item_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM inventory WHERE id = ?", (item_id,))
-    conn.commit()
-    conn.close()
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        cur = conn.execute("DELETE FROM inventory WHERE id = ?", (item_id,))
+        conn.commit()
+        deleted = cur.rowcount
+    if not deleted:
+        return jsonify({"error": "Item not found"}), 404
     return jsonify({"success": True})
 
 @app.route("/api/history", methods=["GET", "DELETE"])
 def history():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    if request.method == "DELETE":
-        cursor.execute("DELETE FROM scan_history")
-        conn.commit()
-        conn.close()
-        return jsonify({"success": True})
-
-    cursor.execute("SELECT * FROM scan_history ORDER BY id DESC LIMIT 50")
-    rows = cursor.fetchall()
-    items = [dict(row) for row in rows]
-    conn.close()
-    return jsonify(items)
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.row_factory = sqlite3.Row
+        if request.method == "DELETE":
+            conn.execute("DELETE FROM scan_history")
+            conn.commit()
+            return jsonify({"success": True})
+        rows = conn.execute("SELECT * FROM scan_history ORDER BY id DESC LIMIT 50").fetchall()
+    return jsonify([_englishify_row(dict(row)) for row in rows])
 
 @app.route("/api/fruits", methods=["GET"])
 def get_fruits():
@@ -415,7 +641,6 @@ def get_fruits():
         result.append({
             "code": code,
             "name_kr": info["kr"],
-            "emoji": info["emoji"],
             "storage": info["storage"],
             "shelf_life_days": info["shelf_life_days"]
         })
@@ -426,19 +651,19 @@ def get_samples():
     samples_dir = BASE_DIR / "static" / "samples"
     files = []
     if samples_dir.exists():
-        for f in samples_dir.glob("*.jpg"):
+        for f in sorted(samples_dir.glob("*.jpg")):
             fruit_key = f.stem.split("_")[0]
             info = FRUIT_INFO.get(fruit_key, {})
             files.append({
                 "filename": f.name,
-                "label": f"{info.get('emoji', '🍎')} {info.get('kr', f.stem).capitalize()}",
+                "label": info.get("kr", f.stem.replace("_", " ").title()),
                 "url": f"/static/samples/{f.name}"
             })
     return jsonify(files)
 
 if __name__ == "__main__":
     print("\n" + "="*50)
-    print(" FreshGuard (식재료 신선도 판별 AI 서비스)")
-    print(" Running on http://127.0.0.1:5000")
+    print(" FreshGuard (produce freshness AI service)")
+    print(f" Running on http://127.0.0.1:{FRESHGUARD_PORT}")
     print("="*50 + "\n")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="127.0.0.1", port=FRESHGUARD_PORT, debug=False)
