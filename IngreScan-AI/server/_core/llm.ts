@@ -209,21 +209,25 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const getApiKey = () =>
-  ENV.forgeApiKey || process.env.OPENAI_API_KEY || "";
-
-const resolveApiUrl = () => {
-  if (ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0) {
-    return `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`;
+/**
+ * The API key and the endpoint it is sent to must come from the same provider: a Forge key only ever goes to the
+ * Forge URL (default forge.manus.im), an OpenAI key only to OPENAI_BASE_URL / api.openai.com. Mixing them (for
+ * example BUILT_IN_FORGE_API_URL set without its key while OPENAI_API_KEY is set) would leak one provider's
+ * credential to the other's server.
+ */
+const resolveProvider = (): { apiKey: string; url: string } => {
+  if (ENV.forgeApiKey) {
+    const base = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0 ? ENV.forgeApiUrl.replace(/\/$/, "") : "https://forge.manus.im";
+    return { apiKey: ENV.forgeApiKey, url: `${base}/v1/chat/completions` };
   }
+  const apiKey = process.env.OPENAI_API_KEY || "";
   if (process.env.OPENAI_BASE_URL) {
-    return `${process.env.OPENAI_BASE_URL.replace(/\/$/, "")}/chat/completions`;
+    return { apiKey, url: `${process.env.OPENAI_BASE_URL.replace(/\/$/, "")}/chat/completions` };
   }
-  if (process.env.OPENAI_API_KEY) {
-    return "https://api.openai.com/v1/chat/completions";
-  }
-  return "https://forge.manus.im/v1/chat/completions";
+  return { apiKey, url: "https://api.openai.com/v1/chat/completions" };
 };
+
+const getApiKey = () => resolveProvider().apiKey;
 
 const normalizeResponseFormat = ({
   responseFormat,
@@ -486,7 +490,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
   } = params;
 
-  const isForge = Boolean(ENV.forgeApiKey && ENV.forgeApiUrl);
+  const isForge = Boolean(ENV.forgeApiKey);
 
   const payload: Record<string, unknown> = {
     model: isForge ? "gemini-2.5-flash" : (process.env.OPENAI_MODEL || "gpt-4o-mini"),
@@ -525,7 +529,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   let response: Response;
   try {
-    response = await fetch(resolveApiUrl(), {
+    response = await fetch(resolveProvider().url, {
       method: "POST",
       headers: {
         "content-type": "application/json",

@@ -386,8 +386,9 @@ export class TtlLru<T> {
   }
 }
 
-function cacheDefaults() {
-  const ttl = Number(process.env.ALT_MARKET_CACHE_TTL_SECONDS);
+export function cacheDefaults() {
+  const rawTtl = (process.env.ALT_MARKET_CACHE_TTL_SECONDS ?? "").trim();
+  const ttl = rawTtl === "" ? NaN : Number(rawTtl); // an empty variable is "unset", not 0 (which would disable the cache)
   return {
     // Same switch as the OFF barcode cache; also off under vitest so tests never see stale entries.
     enabled: process.env.OFF_CACHE_DISABLED !== "true" && process.env.NODE_ENV !== "test",

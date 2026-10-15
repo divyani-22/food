@@ -32,7 +32,7 @@ describe("softmax", () => {
 describe("rounding helpers", () => {
   it("round1 behaves like Python round(x, 1)", () => {
     expect(round1(12.25)).toBe(12.2); // tie -> even, like Python
-    expect(round1(12.35)).toBe(12.4);
+    expect(round1(12.35)).toBe(12.3); // 12.35 is really 12.3499..., Python gives 12.3
     expect(round1(99.96)).toBe(100);
     expect(round1(0.04)).toBe(0);
   });

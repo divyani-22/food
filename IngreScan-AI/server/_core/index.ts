@@ -8,6 +8,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { sdk } from "./sdk";
 import { serveStatic, setupVite } from "./vite";
 import { registerWhatsappRoutes, startReminderScheduler } from "../whatsappRuntime";
 import { createRateLimiter } from "./rateLimit";
@@ -85,6 +86,25 @@ async function startServer() {
   const apiLimiter = createRateLimiter({ windowMs: 60_000, max: Number(process.env.RATE_LIMIT_API_PER_MIN) || 600 });
   const authLimiter = createRateLimiter({ windowMs: 60_000, max: Number(process.env.RATE_LIMIT_AUTH_PER_MIN) || 60 });
   const uploadsLimiter = createRateLimiter({ windowMs: 60_000, max: Number(process.env.RATE_LIMIT_UPLOADS_PER_MIN) || 600 });
+  // Per-user budget for LLM-backed / third-party-backed procedures (the per-IP limiter above is shared by NAT users and
+  // bypassable by rotating addresses). Keyed on the signed session's openId; falls back to the IP when anonymous.
+  const EXPENSIVE = /(^|[/,])(chat\.sendMessage|analysis\.[A-Za-z]+|scanner\.processOCR|receipt\.parse|rescue\.recipes|openFoodFacts\.[A-Za-z]+)(?=[,?]|$)/;
+  const expensiveLimiter = createRateLimiter({
+    windowMs: 60_000,
+    max: Number(process.env.RATE_LIMIT_LLM_PER_MIN) || 30,
+    keyFn: req => (req as any).__rlUser ?? null,
+  });
+  app.use("/api/trpc", async (req, res, next) => {
+    if (!EXPENSIVE.test(req.path)) return next();
+    try {
+      const m = /(?:^|;\s*)app_session_id=([^;]+)/.exec(req.headers.cookie ?? "");
+      const session = m ? await sdk.verifySession(decodeURIComponent(m[1])) : null; // signature-checked: cannot be forged for fresh buckets
+      if (session) (req as any).__rlUser = "u:" + session.openId;
+    } catch {
+      /* anonymous: IP key */
+    }
+    expensiveLimiter(req, res, next);
+  });
   // OAuth callback under /api/oauth/callback
   app.use("/api/oauth", authLimiter);
   registerOAuthRoutes(app);
@@ -141,6 +161,8 @@ async function startServer() {
       const options: RequestInit = {
         method: req.method,
         headers,
+        // Never let a hung Flask worker pin the request (and its buffered body) forever.
+        signal: AbortSignal.timeout(Number(process.env.FRESHGUARD_TIMEOUT_MS) || 60_000),
       };
 
       if (req.method !== "GET" && req.method !== "HEAD") {
@@ -160,6 +182,10 @@ async function startServer() {
       res.send(data);
     } catch (err: any) {
       console.error("[FreshGuard Proxy Error]:", err.message);
+      if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+        res.status(504).json({ error: "FreshGuard AI backend timed out." });
+        return;
+      }
       res.status(502).json({ error: "FreshGuard AI backend is unavailable.", details: err.message });
     }
   });

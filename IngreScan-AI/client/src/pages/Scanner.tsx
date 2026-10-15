@@ -188,11 +188,17 @@ export default function Scanner() {
     setForceOcr(false);
   };
 
+  const [dragOver, setDragOver] = useState(false);
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.target;
     const file = input.files?.[0];
     input.value = ""; // allow re-selecting the same file
-    if (file) {
+    acceptImageFile(file);
+  };
+
+  const acceptImageFile = (file: File | undefined) => {
+    if (file && !isProcessing) {
       if (!file.type.startsWith("image/")) {
         toast.error("Please select an image file");
         return;
@@ -450,9 +456,28 @@ export default function Scanner() {
                   </div>
                 ) : (
                   <div>
+                    {/* Visually hidden but focusable (not display:none) so keyboard users can reach the picker. */}
+                    <input
+                      id="imageUpload"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      className="peer sr-only"
+                      disabled={isProcessing}
+                    />
                     <Label
                       htmlFor="imageUpload"
-                      className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-[#dcdcdc] bg-fog px-6 py-10 text-center transition-colors hover:border-ember-orange sm:py-14"
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragOver(true);
+                      }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragOver(false);
+                        acceptImageFile(e.dataTransfer.files?.[0]);
+                      }}
+                      className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed bg-fog px-6 py-10 text-center transition-colors hover:border-ember-orange peer-focus-visible:border-ember-orange peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring/50 sm:py-14 ${dragOver ? "border-ember-orange" : "border-[#dcdcdc]"}`}
                     >
                       <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white" aria-hidden="true">
                         <Upload className="h-6 w-6 text-ember-orange" />
@@ -460,14 +485,6 @@ export default function Scanner() {
                       <span className="text-base font-bold text-graphite">Click to upload or drag and drop</span>
                       <span className="text-sm font-medium text-muted-foreground">PNG, JPG up to 16MB</span>
                     </Label>
-                    <Input
-                      id="imageUpload"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageChange}
-                      className="hidden"
-                      disabled={isProcessing}
-                    />
                   </div>
                 )}
 

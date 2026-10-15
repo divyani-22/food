@@ -6,7 +6,7 @@ reference, the security model, limits, and what has NOT been verified.
 
 The core is provider-neutral and I/O-free. It talks to the outside world only through three
 injected interfaces (`Store`, `Services`, `Sender`, defined in `server/whatsapp/types.ts`).
-The Express routes, DB-backed `Store`, and tRPC/Flask-backed `Services` are wired separately.
+The Express routes, the DB-backed `Store` and the tRPC/Flask-backed `Services` are wired in `IngreScan-AI/server/whatsappRuntime.ts` (`registerWhatsappRoutes`, `startReminderScheduler`); environment variables are read in `server/whatsappConfig.ts`.
 
 ## 1. Architecture
 
@@ -26,7 +26,7 @@ The Express routes, DB-backed `Store`, and tRPC/Flask-backed `Services` are wire
                                                   |
                           Express route:  deliver(sender, outbound)   (Sender.sendText)
 
- Scheduler (cron every 15 min) --> runReminders({store, sender, config})
+ Scheduler (timer, every 10 min by default) --> runReminders({store, sender, config})
                                      computeDueReminders -> session text OR template
 ```
 
@@ -76,7 +76,7 @@ Any `Services` or `Store` method may throw; the orchestrator turns that into a g
 
 ## 3. What the Express layer must do
 
-Routes to mount: `POST /api/whatsapp/twilio`, `POST /api/whatsapp/meta`, `GET /api/whatsapp/meta`.
+`registerWhatsappRoutes` in `server/whatsappRuntime.ts` implements this section. Routes to mount: `POST /api/whatsapp/twilio`, `POST /api/whatsapp/meta`, `GET /api/whatsapp/meta`.
 
 1. Trust proxy: `app.set("trust proxy", 1)` when behind ngrok or a load balancer.
 2. Raw body for Meta: signature verification is over the exact bytes. Mount with `express.raw({ type: "application/json" })` on the Meta route BEFORE any `express.json()`, and pass `req.body` (a Buffer) as `rawBody`. Never re-serialise parsed JSON.
@@ -262,5 +262,5 @@ Output style: no emoji anywhere. Styling is WhatsApp bold (`*TITLE*`), uppercase
 - Template approval, Twilio Content SID mapping, and real 24-hour window behaviour are untested.
 - The orchestrator is tested with in-memory fakes of `Store`, `Services` and `Sender`. They test the bot logic, not the real DB, Flask service, Open Food Facts, or tRPC wiring.
 - The DST and half-hour timezone tests rely on the ICU timezone data of the Node runtime.
-- Express wiring (raw body capture, trust proxy, public URL) is described but not implemented or exercised here.
-- Barcode decoding from images and OCR of labels are an interface (`classifyOrExtract`) only.
+- The Express wiring (raw body capture, trust proxy, public URL) is implemented in `server/whatsappRuntime.ts` and exercised by `e2e/whatsapp.mjs` against local stubs only, never against live Twilio or Meta.
+- `classifyOrExtract` in `server/whatsappRuntime.ts` decodes barcodes from images and reads label text through the configured vision LLM; without a real LLM key it returns `unknown`. Label reading was not verified against a live model.

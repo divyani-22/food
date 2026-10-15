@@ -14,6 +14,13 @@ export function parseTimestampInput(value: string | Date | null | undefined): Da
   return d;
 }
 
+/** True only for a real calendar date written YYYY-MM-DD (rejects 2026-02-31, which Date would roll over to March). */
+export function isValidYmd(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+
 export type InventoryStatus = "fresh" | "expiring_soon" | "expired";
 
 /** Whole days until expiry (rounded up, never -0, 0 for invalid dates) and derived status. */

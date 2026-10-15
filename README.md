@@ -48,20 +48,20 @@ An all-in-one AI-powered food intelligence platform combining **Fresh Produce In
 - **Express 4 & Node.js** (API Gateway, reverse proxy, and web server)
 - **Flask (Python 3)** (AI Inference Microservice)
 - **tRPC 11** (Type-safe API layer)
-- **SQLite** (Fridge inventory and history storage)
+- **SQLite** (embedded, zero-config default) or **MySQL/MariaDB** (selected with `DATABASE_URL`) for scans, profile, fridge and history
 
 ### AI & Machine Learning
 - **PyTorch** & **Torchvision** (EfficientNet-B0 Multi-task neural network)
-- **Tesseract / OCR & LLM Analysis**
+- **Vision-LLM label reading (OCR) and LLM analysis** (OpenAI-compatible API; no Tesseract is used)
 
 ---
 
 ## Quick Start
 
 ### 1. Requirements
-- Node.js (v18+)
-- Python (3.9+): `pip install -r requirements.txt` (torch, torchvision, flask, flask-cors, pillow)
-- MySQL or MariaDB for the IngreScan web app (scans, profile, fridge, chat)
+- Node.js 22 (the version CI uses; Vite 7 needs 20.19+ or 22.12+) and pnpm
+- Python 3.9+ (CI runs 3.12): `pip install -r requirements.txt` (flask, flask-cors, pillow, torch, torchvision, numpy, onnxruntime, pytest)
+- Optional: MySQL or MariaDB for the IngreScan web app. Without `DATABASE_URL` it uses an embedded SQLite file and needs no database setup (see `docs/database.md`).
 
 ### 2. Run with One Click (Windows)
 Double click or execute:
@@ -80,7 +80,7 @@ This automatically boots:
 python app.py
 ```
 
-**Create the database (first run only):**
+**Create the database (first run only; skip this to use the embedded SQLite default and just run `pnpm install && pnpm dev` in `IngreScan-AI`):**
 ```bash
 mysql -u root -e "CREATE DATABASE ingrescan; CREATE USER 'ingrescan'@'localhost' IDENTIFIED BY 'devpass'; GRANT ALL ON ingrescan.* TO 'ingrescan'@'localhost';"
 cd IngreScan-AI
@@ -100,7 +100,7 @@ In development you are signed in automatically as a local user. Production
 ### 4. How the two parts fit together
 This is one website: the IngreScan web app on port 3000. Its **Fresh Produce AI** page sends photos to the
 FreshGuard service (port 5000) through an authenticated proxy, and the service only identifies the produce.
-Everything you save (pantry items and scan history) is stored **per user in MySQL**, next to your scans and
+Everything you save (pantry items and scan history) is stored **per user in the web app's database** (embedded SQLite by default, or MySQL), next to your scans and
 profile. The proxy only forwards the classification routes, so users can never read each other's data.
 
 `http://127.0.0.1:5000` also serves the original standalone FreshGuard page. It is a single-user demo with its own

@@ -52,6 +52,8 @@ export class OnDeviceEngine {
   private ort: OrtModule | null = null;
   private info: EngineInfo | null = null;
   private loading: Promise<EngineInfo> | null = null;
+  /** Tail of the run queue: one onnxruntime session must not be entered by two run() calls at once. */
+  private runQueue: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly baseUrl: string,
@@ -98,10 +100,14 @@ export class OnDeviceEngine {
         phase: "download",
       });
     const [model, wasm] = await Promise.all([
-      cachedFetch(`${this.url(MODEL_PATH)}?sha=${meta.model_sha256.slice(0, 16)}`, (l, t) => {
-        progress.model = [l, t || meta.model_bytes];
-        emit();
-      }),
+      cachedFetch(
+        `${this.url(MODEL_PATH)}?sha=${meta.model_sha256.slice(0, 16)}`,
+        (l, t) => {
+          progress.model = [l, t || meta.model_bytes];
+          emit();
+        },
+        meta.model_bytes,
+      ),
       cachedFetch(`${this.url("ort/" + wasmName)}?v=${ortVersion}`, (l, t) => {
         progress.wasm = [l, t];
         emit();
@@ -163,7 +169,13 @@ export class OnDeviceEngine {
   }
 
   /** Decode (EXIF-aware), preprocess exactly like PIL/torchvision and run the network. */
-  async run(blob: Blob): Promise<RunOutput> {
+  run(blob: Blob): Promise<RunOutput> {
+    const job = this.runQueue.then(() => this.runOnce(blob));
+    this.runQueue = job.catch(() => undefined);
+    return job;
+  }
+
+  private async runOnce(blob: Blob): Promise<RunOutput> {
     const info = await this.load();
     if (!this.session || !this.ort) throw new Error("On-device model is not loaded.");
     const { meta } = info;
@@ -299,37 +311,61 @@ async function cachePut(url: string, res: Response): Promise<void> {
   }
 }
 
+async function cacheDelete(url: string): Promise<void> {
+  try {
+    const c = await openCache();
+    if (c) await c.delete(url);
+  } catch {
+    /* ignore */
+  }
+}
+
 async function cachedFetch(
   url: string,
   onProgress: (loaded: number, total: number) => void,
+  expectedBytes?: number,
 ): Promise<{ bytes: Uint8Array; fromCache: boolean }> {
   const hit = await cacheGet(url);
   if (hit) {
     const buf = new Uint8Array(await hit.arrayBuffer());
-    onProgress(buf.byteLength, buf.byteLength);
-    return { bytes: buf, fromCache: true };
+    if (expectedBytes === undefined || buf.byteLength === expectedBytes) {
+      onProgress(buf.byteLength, buf.byteLength);
+      return { bytes: buf, fromCache: true };
+    }
+    // A truncated or foreign entry would make every later start fail the same way: drop it and download again.
+    await cacheDelete(url);
   }
   const res = await fetch(url);
-  if (!res.ok || !res.body) throw new Error(`Download failed (${res.status}) for ${url.split("?")[0]}`);
+  if (!res.ok) throw new Error(`Download failed (${res.status}) for ${url.split("?")[0]}`);
   const total = Number(res.headers.get("content-length")) || 0;
   onProgress(0, total);
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let loaded = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    loaded += value.byteLength;
-    onProgress(loaded, total || loaded);
+  let bytes: Uint8Array<ArrayBuffer>;
+  if (res.body) {
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let loaded = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.byteLength;
+      onProgress(loaded, total || loaded);
+    }
+    bytes = new Uint8Array(loaded);
+    let off = 0;
+    for (const c of chunks) {
+      bytes.set(c, off);
+      off += c.byteLength;
+    }
+    if (total && loaded !== total && !res.headers.get("content-encoding")) throw new Error(`Incomplete download for ${url.split("?")[0]} (${loaded}/${total} bytes)`);
+  } else {
+    // No streaming body (very old engines): read it in one go, without per-chunk progress.
+    bytes = new Uint8Array(await res.arrayBuffer());
+    onProgress(bytes.byteLength, bytes.byteLength);
   }
-  const bytes = new Uint8Array(loaded);
-  let off = 0;
-  for (const c of chunks) {
-    bytes.set(c, off);
-    off += c.byteLength;
+  if (expectedBytes !== undefined && bytes.byteLength !== expectedBytes) {
+    throw new Error(`Downloaded file has the wrong size for ${url.split("?")[0]} (${bytes.byteLength}/${expectedBytes} bytes)`);
   }
-  if (total && loaded !== total && !res.headers.get("content-encoding")) throw new Error(`Incomplete download for ${url.split("?")[0]} (${loaded}/${total} bytes)`);
   await cachePut(url, new Response(bytes, { headers: { "content-type": res.headers.get("content-type") ?? "application/octet-stream" } }));
   return { bytes, fromCache: false };
 }

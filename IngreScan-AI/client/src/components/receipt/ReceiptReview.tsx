@@ -55,11 +55,17 @@ const CONF: Record<ReviewRow["confidence"], { label: string; tone: Tone }> = {
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/** Accepts a decimal comma ("1,5") as well as a point. Empty or garbage gives NaN. */
+export function parseQuantity(v: string): number {
+  const t = v.trim().replace(",", ".");
+  return t === "" ? NaN : Number(t);
+}
+
 /** Validates one row for import; returns undefined entries for valid fields. */
 export function validateRow(r: ReviewRow): RowErrors {
   const e: RowErrors = {};
   if (!r.name.trim()) e.name = "Name is required";
-  const q = Number(r.quantity);
+  const q = parseQuantity(r.quantity);
   if (r.quantity.trim() === "" || !Number.isFinite(q) || q <= 0) e.quantity = "Enter a quantity above 0";
   else if (q > 100000) e.quantity = "Quantity is too large";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(r.expiry)) e.expiry = "Choose an expiry date";

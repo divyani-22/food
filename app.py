@@ -82,7 +82,17 @@ def init_db():
 init_db()
 
 UPLOAD_MAX_AGE_DAYS = 7
-FRESHGUARD_PORT = int(os.environ.get("FRESHGUARD_PORT", "5000"))
+
+
+def _port_from_env(default: int = 5000) -> int:
+    try:
+        port = int(os.environ.get("FRESHGUARD_PORT", "").strip() or default)
+    except ValueError:
+        return default
+    return port if 1 <= port <= 65535 else default
+
+
+FRESHGUARD_PORT = _port_from_env()
 
 def prune_uploads(max_age_days: int = UPLOAD_MAX_AGE_DAYS):
     """Delete old uploaded scan images that no inventory item or history row references."""
@@ -158,9 +168,26 @@ inference_transform = transforms.Compose([
 
 # evaluate_freshness lives in fruit_info.py (shared with the in-browser inference).
 
-def run_inference(image: Image.Image):
+def to_rgb(image: Image.Image) -> Image.Image:
+    """EXIF-upright RGB copy. Pillow's convert("RGB") clips 16-bit/int/float grayscale (modes I;16, I, F)
+    to 0..255, which turns a 16-bit PNG almost entirely white; scale those modes to 8 bit first."""
     image = ImageOps.exif_transpose(image)
-    image = image.convert("RGB")
+    if image.mode.startswith("I") or image.mode == "F":
+        arr = np.asarray(image, dtype=np.float64)
+        top = float(arr.max()) if arr.size else 0.0
+        if image.mode == "F" and top <= 1.0:
+            arr = arr * 255.0
+        elif top > 65535.0:
+            low = float(arr.min())
+            arr = (arr - low) * (255.0 / max(top - low, 1.0))
+        elif top > 255.0:
+            arr = arr / 257.0
+        image = Image.fromarray(np.rint(np.clip(arr, 0, 255)).astype(np.uint8))
+    return image.convert("RGB")
+
+
+def run_inference(image: Image.Image):
+    image = to_rgb(image)
     tensor = inference_transform(image).unsqueeze(0).to(DEVICE)
 
     with torch.no_grad():
@@ -236,6 +263,15 @@ def handle_http_exception(e):
     # Always answer with JSON so the frontend can show e.error (e.g. 413 too large)
     return jsonify({"error": e.description or e.name}), e.code
 
+@app.errorhandler(Exception)
+def handle_unexpected_exception(e):
+    # Any other failure (for example a sqlite error) must also be JSON, never Flask's HTML 500 page
+    if app.testing or app.debug:
+        raise e
+    print(f"[!] Unhandled error on {request.path}: {e!r}")
+    return jsonify({"error": "Internal server error"}), 500
+
+
 @app.route("/api/predict", methods=["POST"])
 def predict():
     saved_path = None
@@ -274,7 +310,7 @@ def predict():
                 return _bad_request("Invalid base64 image data.")
             saved_filename = f"{uuid.uuid4().hex}.jpg"
             saved_path = UPLOAD_FOLDER / saved_filename
-            ImageOps.exif_transpose(image).convert("RGB").save(saved_path, "JPEG")
+            to_rgb(image).save(saved_path, "JPEG")
             image_url = f"/static/uploads/{saved_filename}"
 
         elif request.args.get("sample") or body.get("sample"):
@@ -432,7 +468,7 @@ def detect_items():
     image, err = _load_request_image()
     if err is not None:
         return err
-    image = ImageOps.exif_transpose(image).convert("RGB")
+    image = to_rgb(image)
     width, height = image.size
 
     min_likelihood = ood.min_likelihood()
@@ -552,7 +588,7 @@ def inventory():
         expiry_date = str(data.get("expiry_date") or "")[:10]
         days_left = _days_until(expiry_date) if expiry_date else None
         if days_left is None:
-            days_left = int(_to_float(data.get("shelf_life_days"), 5))
+            days_left = int(min(max(_to_float(data.get("shelf_life_days"), 5), 0.0), 36500.0))
             expiry_date = (date.today() + timedelta(days=max(days_left, 0))).isoformat()
         days_left = max(days_left, 0)
 

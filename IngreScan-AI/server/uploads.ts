@@ -118,7 +118,7 @@ export function registerUploadRoutes(app: Express, deps: UploadDeps) {
       if (!file) return notFound();
 
       res.setHeader("Content-Type", contentTypeForName(name));
-      res.setHeader("Content-Disposition", "inline");
+      res.setHeader("Content-Disposition", contentTypeForName(name) === "application/octet-stream" ? "attachment" : "inline");
       // Defence in depth if a non-image ever slips through: nothing may execute or load from this response.
       res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
       res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
@@ -149,19 +149,36 @@ export function registerUploadRoutes(app: Express, deps: UploadDeps) {
  */
 export function registerSignedInStaticUploads(app: Express, mounts: string[], dir: string, getUserId: UploadDeps["getUserId"]) {
   for (const mount of mounts) {
-    const base = `${mount}/uploads`;
-    app.use(base, async (req: Request, res: Response) => {
+    // Mounted at the static root (not at <mount>/uploads) and matched on the DECODED, normalised path: express.static
+    // decodes %XX and collapses "//", "/./" and "/x/../", so "/static//uploads/f", "/static/%75ploads/f" or
+    // "/static/samples/../uploads/f" would otherwise skip a router-level "/static/uploads" match and be served unauthenticated.
+    app.use(mount, async (req: Request, res: Response, next) => {
+      let decoded: string;
+      try {
+        decoded = decodeURIComponent(req.path);
+      } catch {
+        return next(); // malformed escape: express.static answers 400
+      }
+      if (decoded.includes("\0")) return next();
+      const parts: string[] = [];
+      for (const seg of decoded.split("/")) {
+        if (seg === "" || seg === ".") continue;
+        if (seg === "..") parts.pop();
+        else parts.push(seg);
+      }
+      if (parts.length === 0 || parts[0].toLowerCase() !== "uploads") return next();
+
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Cache-Control", "private, max-age=0, must-revalidate");
       if (req.method !== "GET" && req.method !== "HEAD") return void res.status(405).type("text/plain").send("Method not allowed");
       try {
         const userId = await getUserId(req, res);
         if (userId == null) return void res.status(401).type("text/plain").send("Authentication required");
-        const name = validateUploadName(decodeURIComponent(req.path.replace(/^\/+/, "")));
+        const name = parts.length === 2 ? validateUploadName(parts[1]) : null;
         const file = name ? await resolveUploadFile(dir, name) : null;
         if (!file || !name) return void res.status(404).type("text/plain").send("Not found");
         res.setHeader("Content-Type", contentTypeForName(name));
-        res.setHeader("Content-Disposition", "inline");
+        res.setHeader("Content-Disposition", contentTypeForName(name) === "application/octet-stream" ? "attachment" : "inline");
         res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
         res.sendFile(file, { dotfiles: "deny", cacheControl: false }, err => {
           if (err && !res.headersSent) res.status(404).type("text/plain").send("Not found");

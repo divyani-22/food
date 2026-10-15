@@ -117,14 +117,18 @@ export default function OpenFoodFactsExplorer() {
   };
 
   // 1-Click Bridge to IngreScan-AI
+  // True from the first click until the report page opens, so no second click can create a duplicate scan.
+  const [bridging, setBridging] = useState(false);
+
   const handleAnalyzeWithAI = async () => {
-    if (!product) return;
+    if (!product || bridging) return;
     if (!product.ingredientsText) {
       toast.error("No ingredients text available for this product on Open Food Facts.");
       return;
     }
 
     const toastId = toast.loading("Launching IngreScan-AI ingredient analysis...");
+    setBridging(true);
     try {
       const scanRes = await createScanMutation.mutateAsync({
         productName: `${product.brand ? product.brand + " " : ""}${product.productName}`,
@@ -142,6 +146,8 @@ export default function OpenFoodFactsExplorer() {
       setLocation(`/scan/${scanRes.scanId}`);
     } catch (err: any) {
       toast.error(err.message || "Failed to analyze ingredients", { id: toastId });
+    } finally {
+      setBridging(false);
     }
   };
 
@@ -257,8 +263,8 @@ export default function OpenFoodFactsExplorer() {
                 </div>
               </div>
 
-              <form onSubmit={handleBarcodeSubmit} className="flex flex-col gap-3 sm:flex-row">
-                <div className="relative flex-1">
+              <form onSubmit={handleBarcodeSubmit} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <div className="relative flex-1 sm:min-w-[14rem]">
                   <Barcode className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     placeholder="e.g., 8901030895470"
@@ -373,7 +379,7 @@ export default function OpenFoodFactsExplorer() {
                     <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto lg:shrink-0">
                       <Button
                         onClick={handleAnalyzeWithAI}
-                        disabled={createScanMutation.isPending || analyzeMutation.isPending}
+                        disabled={bridging}
                       >
                         <Sparkles className="h-4 w-4" />
                         Analyze with IngreScan-AI
@@ -525,6 +531,7 @@ export default function OpenFoodFactsExplorer() {
                       <Button
                         variant="link"
                         className="h-11 px-0 text-sm"
+                        disabled={bridging}
                         onClick={handleAnalyzeWithAI}
                       >
                         Deep AI Analysis <ArrowRight className="h-4 w-4" />
@@ -684,8 +691,11 @@ export default function OpenFoodFactsExplorer() {
                         <Button
                           variant="dark"
                           className="px-4"
+                          disabled={bridging}
                           onClick={async () => {
+                            if (bridging) return;
                             const toastId = toast.loading("Analyzing with IngreScan-AI...");
+                            setBridging(true);
                             try {
                               const scanRes = await createScanMutation.mutateAsync({
                                 productName: `${item.brand ? item.brand + " " : ""}${item.productName}`,
@@ -701,6 +711,8 @@ export default function OpenFoodFactsExplorer() {
                               setLocation(`/scan/${scanRes.scanId}`);
                             } catch (e: any) {
                               toast.error(e.message, { id: toastId });
+                            } finally {
+                              setBridging(false);
                             }
                           }}
                         >

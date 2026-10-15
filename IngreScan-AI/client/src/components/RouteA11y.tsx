@@ -23,7 +23,8 @@ const TITLES: Array<[RegExp, string]> = [
 ];
 
 export function titleForPath(path: string): string {
-  const hit = TITLES.find(([re]) => re.test(path));
+  const clean = path.length > 1 ? path.replace(/\/+$/, "") : path;
+  const hit = TITLES.find(([re]) => re.test(clean));
   return hit ? hit[1] : "Page not found";
 }
 
@@ -33,9 +34,23 @@ export function titleForPath(path: string): string {
  * "Skip to main content" link, the first Tab stop on every page (WCAG 2.4.1).
  */
 export function RouteA11y() {
-  const [path] = useLocation();
+  const [path, navigate] = useLocation();
   const [announcement, setAnnouncement] = useState("");
   const first = useRef(true);
+
+  // "/scanner/" is the same page as "/scanner": normalise instead of showing the 404 page.
+  useEffect(() => {
+    if (path.length > 1 && path.endsWith("/")) {
+      navigate(`${path.replace(/\/+$/, "") || "/"}${window.location.search}${window.location.hash}`, { replace: true });
+    }
+  }, [path, navigate]);
+
+  // A client-side navigation keeps the previous page's scroll offset; start every new page at the top (a #hash link
+  // scrolls to its target instead).
+  useEffect(() => {
+    if (first.current || window.location.hash) return;
+    window.scrollTo(0, 0);
+  }, [path]);
 
   useEffect(() => {
     const name = titleForPath(path);

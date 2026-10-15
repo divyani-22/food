@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Trash2, Plus, UserRound, HeartPulse, Pill, Activity } from "lucide-react";
 import { PageHeader } from "@/components/brand/PageHeader";
@@ -55,14 +55,15 @@ export default function Profile() {
   }, [profile]);
 
   const handleSaveProfile = async () => {
+    if (upsertProfileMutation.isPending) return;
     try {
       await upsertProfileMutation.mutateAsync({
-        age: toInt(age),
-        gender: (gender || undefined) as any,
-        height: toInt(height),
-        weight: toInt(weight),
-        exerciseFrequency: (exerciseFrequency || undefined) as any,
-        dietType: (dietType || undefined) as any,
+        age: toInt(age) ?? null,
+        gender: (gender || null) as any,
+        height: toInt(height) ?? null,
+        weight: toInt(weight) ?? null,
+        exerciseFrequency: (exerciseFrequency || null) as any,
+        dietType: (dietType || null) as any,
         region: region.trim(),
       });
       toast.success("Profile updated successfully");
@@ -72,8 +73,13 @@ export default function Profile() {
     }
   };
 
+  // Ref guards: mutation.isPending reaches React a tick late, so a fast double click would otherwise get through.
+  const addingCondition = useRef(false);
+  const addingMedication = useRef(false);
+
   const handleAddCondition = async () => {
-    if (!newCondition.trim()) return;
+    if (!newCondition.trim() || addingCondition.current) return;
+    addingCondition.current = true;
     try {
       await addConditionMutation.mutateAsync({ condition: newCondition.trim() });
       toast.success("Medical condition added");
@@ -81,6 +87,8 @@ export default function Profile() {
       refetchConditions();
     } catch (error: any) {
       toast.error(error.message || "Failed to add condition");
+    } finally {
+      addingCondition.current = false;
     }
   };
 
@@ -95,7 +103,8 @@ export default function Profile() {
   };
 
   const handleAddMedication = async () => {
-    if (!newMedication.name.trim()) return;
+    if (!newMedication.name.trim() || addingMedication.current) return;
+    addingMedication.current = true;
     try {
       await addMedicationMutation.mutateAsync({
         name: newMedication.name.trim(),
@@ -107,6 +116,8 @@ export default function Profile() {
       refetchMedications();
     } catch (error: any) {
       toast.error(error.message || "Failed to add medication");
+    } finally {
+      addingMedication.current = false;
     }
   };
 
@@ -211,7 +222,9 @@ export default function Profile() {
               </div>
             </div>
             <div className="flex justify-end border-t border-border pt-6">
-              <Button onClick={handleSaveProfile} className="w-full sm:w-auto">Save Profile</Button>
+              <Button onClick={handleSaveProfile} disabled={upsertProfileMutation.isPending} className="w-full sm:w-auto">
+                {upsertProfileMutation.isPending ? "Saving..." : "Save Profile"}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -221,15 +234,21 @@ export default function Profile() {
             <SectionTitle icon={<HeartPulse className="h-5 w-5 text-signal-red-orange" />} title="Medical Conditions" description="Track conditions that may affect food choices" />
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <Input placeholder="e.g., Diabetes, Hypertension" aria-label="Medical condition" value={newCondition} onChange={(e) => setNewCondition(e.target.value)} className="min-w-0 flex-1" />
-              <Button variant="dark" size="icon" onClick={handleAddCondition} aria-label="Add condition"><Plus className="h-4 w-4" /></Button>
-            </div>
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleAddCondition();
+              }}
+            >
+              <Input placeholder="e.g., Diabetes, Hypertension" aria-label="Medical condition" value={newCondition} onChange={(e) => setNewCondition(e.target.value)} maxLength={2000} className="min-w-0 flex-1" />
+              <Button type="submit" variant="dark" size="icon" disabled={addConditionMutation.isPending || !newCondition.trim()} aria-label="Add condition"><Plus className="h-4 w-4" /></Button>
+            </form>
             <div className="space-y-2">
               {conditions?.map((condition) => (
                 <div key={condition.id} className="flex items-center justify-between gap-3 rounded-2xl bg-fog py-1.5 pl-4 pr-1.5">
                   <span className="min-w-0 break-words font-bold text-graphite">{condition.condition}</span>
-                  <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:bg-white hover:text-signal-red-orange" onClick={() => handleDeleteCondition(condition.id)} aria-label={`Remove ${condition.condition}`}><Trash2 className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:bg-white hover:text-signal-red-orange" disabled={deleteConditionMutation.isPending} onClick={() => handleDeleteCondition(condition.id)} aria-label={`Remove ${condition.condition}`}><Trash2 className="h-4 w-4" /></Button>
                 </div>
               ))}
               {(!conditions || conditions.length === 0) && <p className="text-sm text-muted-foreground">No medical conditions added</p>}
@@ -242,11 +261,17 @@ export default function Profile() {
             <SectionTitle icon={<Pill className="h-5 w-5 text-iris" />} title="Medications" description="Current and past medications" />
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-              <Input placeholder="Medication name" aria-label="Medication name" value={newMedication.name} onChange={(e) => setNewMedication({ ...newMedication, name: e.target.value })} />
-              <Input placeholder="Dosage (optional)" aria-label="Dosage" value={newMedication.dosage} onChange={(e) => setNewMedication({ ...newMedication, dosage: e.target.value })} />
-              <Button variant="dark" onClick={handleAddMedication}><Plus className="h-4 w-4" />Add</Button>
-            </div>
+            <form
+              className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleAddMedication();
+              }}
+            >
+              <Input placeholder="Medication name" aria-label="Medication name" value={newMedication.name} onChange={(e) => setNewMedication({ ...newMedication, name: e.target.value })} maxLength={255} />
+              <Input placeholder="Dosage (optional)" aria-label="Dosage" maxLength={100} value={newMedication.dosage} onChange={(e) => setNewMedication({ ...newMedication, dosage: e.target.value })} />
+              <Button type="submit" variant="dark" disabled={addMedicationMutation.isPending || !newMedication.name.trim()}><Plus className="h-4 w-4" />Add</Button>
+            </form>
             <div className="space-y-2">
               {medications?.map((med) => (
                 <div key={med.id} className="flex items-center justify-between gap-3 rounded-2xl bg-fog py-3 pl-4 pr-1.5">
@@ -255,7 +280,7 @@ export default function Profile() {
                     {med.dosage && <p className="text-sm text-muted-foreground">{med.dosage}</p>}
                     <StatusTag tone={med.isCurrent ? "positive" : "neutral"} onWhite>{med.isCurrent ? "Current" : "Past"}</StatusTag>
                   </div>
-                  <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:bg-white hover:text-signal-red-orange" onClick={() => handleDeleteMedication(med.id)} aria-label={`Remove ${med.name}`}><Trash2 className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:bg-white hover:text-signal-red-orange" disabled={deleteMedicationMutation.isPending} onClick={() => handleDeleteMedication(med.id)} aria-label={`Remove ${med.name}`}><Trash2 className="h-4 w-4" /></Button>
                 </div>
               ))}
               {(!medications || medications.length === 0) && <p className="text-sm text-muted-foreground">No medications added</p>}
