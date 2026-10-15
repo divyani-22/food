@@ -17,7 +17,8 @@ export type HealthAppliesToKind = "condition" | "allergy" | "medication" | "diet
 export const HEALTH_DISCLAIMER =
   "This is general information based on ingredient and label matching, not medical advice. " +
   "It cannot see your full history, doses or product recipe changes. " +
-  "Please check with your doctor, pharmacist or registered dietitian before changing your diet or medication.";
+  "Please check with your doctor, pharmacist or registered dietitian before changing your diet or medication. " +
+  "Do not stop, skip or change a prescribed medicine because of this alert.";
 
 export interface HealthAlert {
   id: string;
@@ -259,8 +260,8 @@ const SEV_RANK: Record<HealthSeverity, number> = { info: 0, caution: 1, warning:
 type CondKey =
   | "diabetes" | "prediabetes" | "hypertension" | "celiac" | "gluten_sens" | "wheat_allergy" | "lactose"
   | "dairy_allergy" | "peanut" | "tree_nut" | "soy" | "egg" | "shellfish" | "fish" | "pregnancy" | "ckd"
-  | "cholesterol" | "gout";
-type MedKey = "warfarin" | "statin_strong" | "statin_atorva" | "raas" | "maoi" | "levothyroxine";
+  | "cholesterol" | "gout" | "sesame";
+type MedKey = "warfarin" | "statin_strong" | "statin_atorva" | "ccb_felodipine" | "raas" | "maoi" | "levothyroxine";
 type DietKey = "vegan" | "veg";
 type Key = CondKey | MedKey | DietKey;
 
@@ -283,6 +284,8 @@ const LABEL: Record<Key, string> = {
   ckd: "chronic kidney disease",
   cholesterol: "high cholesterol / heart health",
   gout: "gout",
+  sesame: "sesame allergy",
+  ccb_felodipine: "felodipine/nifedipine",
   warfarin: "warfarin-type anticoagulant",
   statin_strong: "simvastatin/lovastatin",
   statin_atorva: "atorvastatin",
@@ -312,6 +315,7 @@ const COND_PATTERNS: Array<[CondKey, RegExp]> = [
   ["ckd", /(\bckd\b|chronic kidney|kidney (disease|failure|impairment)|renal (disease|failure|impairment|insufficiency)|\besrd\b|dialysis|nephropathy)/],
   ["cholesterol", /(cholesterol|hyperlipid|dyslipid|\bldl\b|triglycerid|heart disease|coronary|\bcad\b|cardiovascular|\bcvd\b)/],
   ["gout", /(\bgout|hyperuric|uric acid)/],
+  ["sesame", /(\bsesame|\btahini|\bgingelly)/],
 ];
 
 export function detectConditions(conditions: unknown): Set<CondKey> {
@@ -339,7 +343,8 @@ export function detectConditions(conditions: unknown): Set<CondKey> {
 
 const MED_NAMES: Array<[MedKey, string[]]> = [
   ["warfarin", ["warfarin", "coumadin", "jantoven", "marevan", "acenocoumarol", "sintrom", "nicoumalone", "acitrom", "phenprocoumon", "marcoumar"]],
-  ["statin_strong", ["simvastatin", "zocor", "lovastatin", "mevacor", "altoprev"]],
+  ["statin_strong", ["simvastatin", "zocor", "lovastatin", "mevacor", "altoprev", "vytorin"]],
+  ["ccb_felodipine", ["felodipine", "plendil", "nifedipine", "adalat", "procardia"]],
   ["statin_atorva", ["atorvastatin", "lipitor"]],
   ["raas", [
     "lisinopril", "zestril", "prinivil", "enalapril", "vasotec", "ramipril", "altace", "tritace", "captopril", "perindopril",
@@ -387,6 +392,7 @@ const GLUTEN_GROUPS: Group[] = [
   { terms: ["wheat", "barley", "rye", "malt", "malted", "semolina", "suji", "sooji", "durum", "spelt", "triticale", "farro", "kamut", "einkorn", "bulgur", "couscous", "seitan", "gluten", "atta", "maida", "graham", "wheat starch"], sev: "warning" },
   { terms: ["oat", "oats", "oatmeal", "rolled oats"], sev: "caution", note: "Oats are often cross-contaminated with gluten during growing or processing; only oats labelled gluten-free are generally recommended for celiac disease." },
   { terms: ["flour"], sev: "caution", note: "Unspecified flour is often wheat.", unless: GLUTEN_FLOUR_QUAL },
+  { terms: ["soy sauce", "soya sauce", "teriyaki", "beer", "lager", "stout", "ale"], sev: "caution", note: "Soy sauce is usually brewed with wheat and beer is usually made from barley, so they are normally not gluten free unless labelled gluten free (Coeliac UK).", unless: ["ginger", "root", "alcohol", "nonalcoholic"] },
   { terms: ["bread", "breadcrumb", "bun", "pav", "roti", "chapati", "naan", "paratha", "pita", "pasta", "noodle", "spaghetti", "macaroni", "biscuit", "cracker"], sev: "caution", note: "Bread, pasta and baked goods are usually made with wheat unless labelled gluten-free.", unless: ["rice", "gluten", "corn", "gram", "lentil", "chickpea", "glass", "buckwheat", "millet", "ragi", "jowar", "bajra"] },
 ];
 
@@ -502,7 +508,10 @@ const RULES: Rule[] = [
     reason: "Listed ingredient matches wheat or a wheat-derived ingredient.",
     source: "FDA (major food allergens)",
     tags: ["wheat", "gluten"], tagSev: "warning",
-    groups: [{ terms: ["wheat", "semolina", "suji", "sooji", "durum", "spelt", "atta", "maida", "bulgur", "couscous", "seitan", "graham", "triticale", "kamut", "einkorn", "farro"], sev: "warning" }],
+    groups: [
+      { terms: ["wheat", "semolina", "suji", "sooji", "durum", "spelt", "atta", "maida", "bulgur", "couscous", "seitan", "graham", "triticale", "kamut", "einkorn", "farro"], sev: "warning" },
+      { terms: ["soy sauce", "soya sauce", "teriyaki"], sev: "caution", note: "Soy sauce is usually brewed with wheat." },
+    ],
   }),
   // ----- Dairy -----
   rule({
@@ -562,6 +571,15 @@ const RULES: Rule[] = [
       { terms: ["soy", "soya", "soybean", "soyabean", "edamame", "tofu", "tempeh", "miso", "natto", "shoyu", "tamari"], sev: "warning" },
       { terms: ["lecithin", "e322", "textured vegetable protein", "tvp"], sev: "caution", note: "Lecithin and textured vegetable protein are often, but not always, soy-derived." },
     ],
+  }),
+  rule({
+    id: "allergy.sesame", keys: ["sesame"], kind: "allergy",
+    title: "Sesame-containing ingredient",
+    message: "This product lists sesame or a sesame-derived ingredient. Sesame is a major allergen; please check the label and your allergy plan.",
+    reason: "Listed ingredient matches sesame, tahini, gingelly/til or a sesame-based product such as halva.",
+    source: "FDA (FASTER Act: sesame is the ninth major food allergen); NHS (food allergy)",
+    tags: ["sesame-seeds", "sesame"], tagSev: "warning",
+    groups: [{ terms: ["sesame", "tahini", "gingelly", "til", "benne", "gomashio", "halva", "halvah"], sev: "warning" }],
   }),
   rule({
     id: "allergy.egg", keys: ["egg"], kind: "allergy",
@@ -701,6 +719,24 @@ const RULES: Rule[] = [
     groups: [{ terms: ["spinach", "kale", "collard", "collard green", "turnip green", "mustard green", "parsley", "chard", "swiss chard", "broccoli", "brussels sprout", "endive", "natto", "vitamin k", "vitamin k1", "vitamin k2", "phylloquinone", "menaquinone"], sev: "caution" }],
   }),
   rule({
+    id: "med.warfarin.drinks",
+    keys: ["warfarin"], kind: "medication",
+    title: "Cranberry or grapefruit",
+    message: "This product lists cranberry or grapefruit. NHS warfarin guidance advises not drinking cranberry or grapefruit juice because they can increase the effect of warfarin. Please check with your anticoagulation clinic, doctor or pharmacist.",
+    reason: "Cranberry and grapefruit products can increase the effect of warfarin and the risk of bleeding.",
+    source: "NHS warfarin: advice about food and drink",
+    groups: [{ terms: ["cranberry", "cranberries", "grapefruit"], sev: "caution" }],
+  }),
+  rule({
+    id: "med.ccb.grapefruit",
+    keys: ["ccb_felodipine"], kind: "medication",
+    title: "Grapefruit and related citrus",
+    message: "This product lists grapefruit or a related citrus. Grapefruit can raise blood levels of felodipine and, to a lesser extent, nifedipine. Consider asking your pharmacist or doctor.",
+    reason: "Compounds in grapefruit, pomelo and Seville (bitter) orange inhibit an intestinal enzyme (CYP3A4) that breaks down these medicines.",
+    source: "FDA (Grapefruit juice and some drugs may not mix)",
+    groups: [{ terms: ["grapefruit", "pomelo", "pummelo", "seville orange", "bitter orange"], sev: "caution" }],
+  }),
+  rule({
     id: "med.statin.grapefruit", keys: ["statin_strong"], kind: "medication",
     title: "Grapefruit and related citrus",
     message: "This product lists grapefruit or a related citrus. Grapefruit can raise blood levels of simvastatin and lovastatin; some labels advise avoiding large amounts. Consider asking your pharmacist.",
@@ -738,10 +774,10 @@ const RULES: Rule[] = [
   rule({
     id: "med.levothyroxine.absorption", keys: ["levothyroxine"], kind: "medication",
     title: "May affect levothyroxine absorption",
-    message: "This product lists soy or a calcium or iron source. These can reduce absorption of levothyroxine if taken close together. Keep a consistent routine and consider asking your pharmacist about timing.",
-    reason: "Soy, calcium and iron can bind levothyroxine or reduce its absorption.",
+    message: "This product lists soy, a calcium or iron source, coffee, walnuts or a fibre supplement. These can reduce absorption of levothyroxine if taken close together. Keep a consistent routine and consider asking your pharmacist about timing.",
+    reason: "Soy, calcium, iron, coffee, walnuts and fibre can bind levothyroxine or reduce its absorption.",
     source: "American Thyroid Association (levothyroxine patient information)",
-    groups: [{ terms: ["soy", "soya", "soybean", "calcium carbonate", "calcium citrate", "ferrous sulfate", "ferrous sulphate", "ferrous fumarate", "iron"], sev: "info" }],
+    groups: [{ terms: ["soy", "soya", "soybean", "calcium carbonate", "calcium citrate", "ferrous sulfate", "ferrous sulphate", "ferrous fumarate", "iron", "calcium", "coffee", "walnut", "psyllium", "cottonseed meal"], sev: "info" }],
   }),
   // ----- Diet type (informational) -----
   rule({
@@ -943,6 +979,7 @@ export function describeDietaryConstraints(conditions: unknown, dietType?: strin
   add("peanut", "No peanuts or peanut-derived ingredients.");
   add("tree_nut", "No tree nuts or ingredients that may contain them.");
   add("soy", "No soy products (tofu, soy sauce, miso, tempeh, edamame).");
+  add("sesame", "No sesame, tahini or sesame oil.");
   add("egg", "No eggs or egg-derived ingredients.");
   add("shellfish", "No shellfish.");
   add("fish", "No fish or fish sauce.");

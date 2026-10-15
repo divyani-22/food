@@ -258,3 +258,43 @@ describe("isFoodItem / classifyFoodItem", () => {
     expect(isFoodItem("")).toBe(true);
   });
 });
+
+describe("safety review corrections", () => {
+  it("never tells the user that look or smell proves food is fine", () => {
+    const e = estimateShelfLife("tomato", { now: NOW })!;
+    expect(e.note).toMatch(/not a reliable safety test/i);
+    expect(e.note).not.toMatch(/use your judgement/i);
+  });
+  it("uses a 2.5 cm (1 inch) margin for mould on hard cheese", () => {
+    const e = estimateShelfLife("cheddar", { now: NOW })!;
+    expect(e.note).toMatch(/2\.5 cm/);
+    expect(e.note).not.toMatch(/at least 1 cm/);
+  });
+  it("cooked-food note gives the 2 hour / 1 hour (above 32 C) rule and a 74 C reheat", () => {
+    const e = estimateShelfLife("leftover curry", { now: NOW })!;
+    expect(e.note).toMatch(/within 2 hours/);
+    expect(e.note).toMatch(/32 C/);
+    expect(e.note).toMatch(/74 C/);
+  });
+  it("does not allow cooked roti to be stored at room temperature for a day", () => {
+    const e = estimateShelfLife("roti", { now: NOW })!;
+    expect(e.location).toBe("fridge");
+    expect(estimateShelfLife("roti", { now: NOW, location: "pantry" })!.days).toBe(0);
+  });
+  it("treats raita as a prepared dish, not as plain curd", () => {
+    const e = estimateShelfLife("raita", { now: NOW })!;
+    expect(e.matchedKey).toBe("deli_salad");
+    expect(e.days).toBeLessThanOrEqual(3);
+  });
+  it("keeps paneer short (loose paneer is common)", () => {
+    expect(estimateShelfLife("paneer", { now: NOW })!.days).toBeLessThanOrEqual(3);
+  });
+  it("cut melon note requires refrigeration within 2 hours", () => {
+    expect(estimateShelfLife("watermelon", { now: NOW, opened: true })!.note).toMatch(/within 2 hours/);
+  });
+  it("warns pregnant and vulnerable people on soft cheese, deli meat and fresh juice", () => {
+    expect(estimateShelfLife("brie", { now: NOW })!.note).toMatch(/Pregnant/);
+    expect(estimateShelfLife("ham", { now: NOW })!.note).toMatch(/Pregnant/);
+    expect(estimateShelfLife("cold pressed juice", { now: NOW })!.note).toMatch(/pregnant/i);
+  });
+});

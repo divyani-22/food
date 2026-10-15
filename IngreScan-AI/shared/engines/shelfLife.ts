@@ -104,7 +104,7 @@ function E(
 }
 
 const COOKED_TEXT =
-  "Cooked food: cool quickly, refrigerate within 1-2 hours, reheat until steaming hot (above 70 C) and reheat only once.";
+  "Cooked food: cool quickly and refrigerate within 2 hours (within 1 hour if the room is hotter than 32 C / 90 F), reheat until steaming hot all the way through (74 C / 165 F) and reheat only once. Do not eat cooked food that has been left out for more than 2 hours.";
 
 export const SHELF_LIFE_TABLE: readonly ShelfLifeEntry[] = [
   /* ---------------- Produce: fruit ---------------- */
@@ -133,7 +133,7 @@ export const SHELF_LIFE_TABLE: readonly ShelfLifeEntry[] = [
   }),
   E("watermelon", "Produce", "pantry", "medium", { pantry: 7, fridge: 14 }, ["watermelon", "tarbooz"], {
     opened: { fridge: 3, pantry: 0 },
-    note: "Cut melon must be refrigerated.",
+    note: "Cut melon must be refrigerated within 2 hours of cutting; throw it away if it was left out longer.",
   }),
   E("muskmelon", "Produce", "fridge", "medium", { fridge: 5, pantry: 3 }, ["muskmelon", "cantaloupe", "melon", "kharbuja"], {
     opened: { fridge: 3, pantry: 0 },
@@ -238,20 +238,20 @@ export const SHELF_LIFE_TABLE: readonly ShelfLifeEntry[] = [
     opened: { fridge: 3, pantry: 0 },
     note: "Unopened shelf-stable milk is fine at room temperature until the printed date; refrigerate once opened.",
   }),
-  E("curd", "Dairy", "fridge", "high", { fridge: 7, freezer: 60, pantry: 0 }, ["curd", "dahi", "yogurt", "yoghurt", "greek yogurt", "greek yoghurt", "curd cup", "set curd", "probiotic curd", "raita"], {
+  E("curd", "Dairy", "fridge", "high", { fridge: 7, freezer: 60, pantry: 0 }, ["curd", "dahi", "yogurt", "yoghurt", "greek yogurt", "greek yoghurt", "curd cup", "set curd", "probiotic curd"], {
     opened: { fridge: 4 },
     note: "Homemade curd turns sour in a few days; discard if mould or off smell appears.",
   }),
   E("buttermilk", "Dairy", "fridge", "medium", { fridge: 4, pantry: 0 }, ["buttermilk", "butter milk", "chaas", "chaach", "lassi", "mattha", "chhaas"], {
     opened: { fridge: 2 },
   }),
-  E("paneer", "Dairy", "fridge", "medium", { fridge: 5, freezer: 60, pantry: 0 }, ["paneer", "cottage cheese indian", "chhena"], {
-    opened: { fridge: 3 },
+  E("paneer", "Dairy", "fridge", "medium", { fridge: 3, freezer: 60, pantry: 0 }, ["paneer", "cottage cheese indian", "chhena"], {
+    opened: { fridge: 2 },
     note: "Fresh unpackaged paneer: use within 2 days. Keep covered, ideally submerged in clean water, and refrigerated.",
   }),
   E("hard_cheese", "Dairy", "fridge", "high", { fridge: 60, freezer: 90, pantry: 0 }, ["cheddar", "parmesan", "gouda", "swiss cheese", "emmental", "edam", "gruyere", "hard cheese", "cheese block", "pecorino", "manchego", "cheese"], {
     opened: { fridge: 21 },
-    note: "Mould on hard cheese can be cut off with a margin of at least 1 cm; soft cheeses must be discarded.",
+    note: "Mould on hard cheese can be cut off with a margin of at least 2.5 cm (1 inch) around and below the mould, keeping the knife out of the mould; soft, shredded or crumbled cheeses with mould must be discarded.",
   }),
   E("processed_cheese", "Dairy", "fridge", "high", { fridge: 60, freezer: 0, pantry: 0 }, ["processed cheese", "cheese slice", "cheese spread", "cheese cube", "cheese tin", "cheese singles"], {
     opened: { fridge: 21 },
@@ -267,7 +267,7 @@ export const SHELF_LIFE_TABLE: readonly ShelfLifeEntry[] = [
   }),
   E("soft_cheese", "Dairy", "fridge", "medium", { fridge: 14, freezer: 0, pantry: 0 }, ["feta", "brie", "camembert", "goat cheese", "blue cheese", "soft cheese", "halloumi"], {
     opened: { fridge: 5 },
-    note: "Soft and blue cheeses are higher risk for Listeria; pregnant, elderly and immunocompromised people should follow local advice.",
+    note: "Soft and blue cheeses are higher risk for Listeria. Pregnant, elderly and immunocompromised people should avoid unpasteurised and mould-ripened soft cheeses (or eat them only when cooked until steaming hot) and follow local advice.",
   }),
   E("butter", "Dairy", "fridge", "high", { fridge: 60, freezer: 180, pantry: 0 }, ["butter", "makhan", "salted butter", "unsalted butter", "white butter", "table butter"], {
     opened: { fridge: 30 },
@@ -278,7 +278,7 @@ export const SHELF_LIFE_TABLE: readonly ShelfLifeEntry[] = [
   }),
   E("eggs", "Dairy", "fridge", "high", { fridge: 21, pantry: 0, freezer: 0 }, ["egg", "anda", "eggs", "dozen eggs", "farm eggs", "brown egg", "white egg", "free range egg"], {
     cooked: { key: "boiled_egg", markers: ["boiled", "hard", "cooked", "hardboiled"] },
-    note: "Keep refrigerated; discard cracked eggs. Do not freeze in the shell.",
+    note: "Keep refrigerated; discard cracked eggs. Do not freeze in the shell. Cook eggs until the white and yolk are firm for babies, pregnant, elderly and immunocompromised people.",
   }),
   E("boiled_egg", "Dairy", "fridge", "high", { fridge: 7, pantry: 0, freezer: 0 }, ["boiled egg", "hard boiled egg", "hardboiled egg", "egg boiled", "hard boil egg"], {
     note: "Hard-boiled eggs: refrigerate within 2 hours and use within a week.",
@@ -347,7 +347,7 @@ export const SHELF_LIFE_TABLE: readonly ShelfLifeEntry[] = [
   }),
   E("prawns", "Meat", "fridge", "high", { fridge: 1, freezer: 90, pantry: 0 }, ["prawn", "shrimp", "jhinga", "crab", "lobster", "squid", "calamari", "shellfish", "seafood", "mussel", "oyster", "clam"], {
     cooked: { key: "cooked_fish" },
-    note: "Raw shellfish: use within 1-2 days. Discard if smell is strong or shells of live shellfish stay open.",
+    note: "Raw shellfish: use within 1-2 days. Discard if the smell is strong or the shells of live shellfish stay open; a normal smell does not prove it is safe.",
   }),
   E("canned_fish", "Meat", "pantry", "medium", { pantry: 365, fridge: 0 }, ["canned tuna", "tuna can", "canned sardine", "canned salmon", "canned fish", "tuna tin", "sardine tin", "tinned tuna", "tinned fish"], {
     opened: { fridge: 3, pantry: 0 },
@@ -355,7 +355,7 @@ export const SHELF_LIFE_TABLE: readonly ShelfLifeEntry[] = [
   }),
   E("deli_meat", "Meat", "fridge", "high", { fridge: 14, freezer: 60, pantry: 0 }, ["deli meat", "cold cut", "ham", "salami", "pepperoni", "luncheon meat", "sliced turkey", "sliced chicken", "cold cuts", "pastrami", "mortadella", "chicken slices", "chicken ham"], {
     opened: { fridge: 4 },
-    note: "Sliced deli meat is a Listeria risk: once opened keep very cold and use within 3-5 days.",
+    note: "Sliced deli meat is a Listeria risk: once opened keep very cold and use within 3-5 days. Pregnant, elderly and immunocompromised people should follow local advice (commonly: eat only if cooked until steaming hot).",
   }),
   E("cooked_meat", "Meat", "fridge", "high", { fridge: 3, freezer: 60, pantry: 0 }, ["cooked chicken", "cooked meat", "roast chicken", "grilled chicken", "fried chicken", "tandoori chicken", "cooked mutton", "cooked beef", "cooked lamb", "leftover chicken", "rotisserie chicken", "roasted chicken", "cooked pork", "kebab", "tikka"], {
     note: COOKED_TEXT,
@@ -383,25 +383,26 @@ export const SHELF_LIFE_TABLE: readonly ShelfLifeEntry[] = [
   E("batter", "Other", "fridge", "low", { fridge: 3, freezer: 0, pantry: 0 }, ["dosa batter", "idli batter", "batter", "dosa idli batter", "uttapam batter"], {
     note: "Fermented batter keeps its quality for a few days; discard if it smells sharply sour or shows pink or black spots.",
   }),
-  E("deli_salad", "Other", "fridge", "medium", { fridge: 3, freezer: 0, pantry: 0 }, ["coleslaw", "potato salad", "egg salad", "tuna salad", "chicken salad", "pasta salad", "deli salad", "fruit salad", "cut fruit", "fruit cup"], {
+  E("deli_salad", "Other", "fridge", "medium", { fridge: 3, freezer: 0, pantry: 0 }, ["raita", "coleslaw", "potato salad", "egg salad", "tuna salad", "chicken salad", "pasta salad", "deli salad", "fruit salad", "cut fruit", "fruit cup"], {
     note: "Prepared salads and cut fruit: keep cold and use within 3 days (cut fruit sooner).",
   }),
   E("hummus", "Other", "fridge", "medium", { fridge: 14, freezer: 0, pantry: 0 }, ["hummus", "dip", "guacamole", "salsa fresh", "tzatziki", "baba ganoush"], {
     opened: { fridge: 4 },
+    note: "Figures are for sealed shop-bought dips (follow the use-by date). Freshly made dips keep only 1-2 days refrigerated.",
   }),
 
   /* ---------------- Bakery & grains ---------------- */
   E("bread", "Grains", "pantry", "high", { pantry: 4, fridge: 7, freezer: 90 }, ["bread", "loaf", "sliced bread", "pav", "bun", "brown bread", "white bread", "sandwich bread", "multigrain bread", "milk bread", "toast bread", "sourdough", "baguette", "bagel", "burger bun", "hot dog bun", "dinner roll", "bread roll", "bread loaf"], {
     note: "Discard the whole loaf if any mould is visible: it spreads invisibly through soft bread.",
   }),
-  E("roti", "Grains", "pantry", "medium", { pantry: 1, fridge: 3, freezer: 30 }, ["roti", "chapati", "chapatti", "phulka", "fulka", "tandoori roti", "rumali roti", "khakhra fresh"], {
-    note: "Cooked rotis: use the same day at room temperature, or refrigerate and reheat once.",
+  E("roti", "Grains", "fridge", "medium", { pantry: 0, fridge: 3, freezer: 30 }, ["roti", "chapati", "chapatti", "phulka", "fulka", "tandoori roti", "rumali roti", "khakhra fresh"], {
+    note: "Cooked rotis: eat within a few hours at room temperature (no more than 2 hours), otherwise refrigerate and reheat once until steaming hot.",
   }),
   E("naan", "Grains", "pantry", "medium", { pantry: 2, fridge: 5, freezer: 90 }, ["naan", "paratha", "kulcha", "parantha", "thepla", "puri", "poori", "bhatura", "tortilla", "wrap", "pita", "flatbread", "lachha paratha", "malabar paratha", "roomali"], {
-    note: "Frozen packaged parathas: keep frozen and cook from frozen as per pack. Fresh or chilled: follow the use-by date.",
+    note: "Frozen packaged parathas: keep frozen and cook from frozen as per pack. Fresh or chilled: follow the use-by date. Freshly cooked puri, bhatura or paratha should not stay at room temperature for more than 2 hours.",
   }),
   E("cake", "Grains", "fridge", "low", { fridge: 3, pantry: 2, freezer: 60 }, ["cake", "pastry", "muffin", "cupcake", "brownie", "doughnut", "donut", "croissant", "cream cake", "pastries", "eclair", "danish"], {
-    note: "Fresh bakery items, especially cream or custard cakes, should be refrigerated and eaten within 2-3 days. Shelf-stable packaged cakes: follow the pack date.",
+    note: "Fresh bakery items, especially cream or custard cakes, should be refrigerated and eaten within 2-3 days. Shelf-stable packaged cakes: follow the pack date. Never leave cream or custard cakes at room temperature for more than 2 hours.",
   }),
   E("biscuit", "Snacks", "pantry", "medium", { pantry: 60, fridge: 0 }, ["biscuit", "cookie", "cracker", "cream cracker", "rusk", "wafer", "digestive", "bikis", "marie", "glucose biscuit", "+oreo", "+hide and seek", "+bourbon", "+parle g", "+monaco", "+jim jam", "+krackjack", "+marie gold", "khari", "toast", "nankhatai", "biscotti", "cream biscuit", "cookie pack"], {
     opened: { pantry: 21 },
@@ -516,7 +517,7 @@ export const SHELF_LIFE_TABLE: readonly ShelfLifeEntry[] = [
     note: "Assumes chilled juice; a sealed shelf-stable carton can be kept in the pantry until its printed date. Keep about 3-5 days once opened.",
   }),
   E("fresh_juice", "Beverages", "fridge", "medium", { fridge: 2, pantry: 0, freezer: 0 }, ["fresh juice", "cold coffee", "iced coffee", "frappe", "cold pressed juice", "cold pressed", "sugarcane juice", "sugar cane juice", "fresh orange juice", "fresh lime soda", "freshly squeezed juice", "chilled juice", "ganne ka ras", "nariyal pani fresh", "tender coconut", "smoothie", "milkshake", "shake", "coconut water fresh"], {
-    note: "Unpasteurised or freshly pressed juice is a higher-risk food: keep cold and drink within a day or two.",
+    note: "Unpasteurised or freshly pressed juice is a higher-risk food: keep cold and drink within 1-2 days. Young children, pregnant, elderly and immunocompromised people should avoid unpasteurised juice.",
   }),
   E("soft_drink", "Beverages", "pantry", "medium", { pantry: 90 }, ["soft drink", "cola", "soda", "coke", "coca cola", "pepsi", "sprite", "fanta", "thums up", "limca", "7up", "mountain dew", "mirinda", "tonic water", "ginger ale", "energy drink", "red bull", "monster", "sparkling water", "club soda", "carbonated drink", "cold drink", "soda water", "diet coke", "lemonade", "ice tea", "iced tea", "sting", "gatorade", "electrolyte drink", "sports drink"], {
     opened: { fridge: 3, pantry: 1 },
@@ -1105,7 +1106,7 @@ export function estimateShelfLife(name: string, options: ShelfLifeOptions = {}):
   const entry = m.entry;
   const opened = options.opened === true || (options.opened === undefined && m.openedHint && !m.cookedMarker);
   const table = effectiveTable(entry, opened);
-  const notes: string[] = ["Estimate only: check any date printed on the pack and use your judgement (look, smell, texture)."];
+  const notes: string[] = ["Estimate only: a date printed on the pack always wins. Look and smell are not a reliable safety test because harmful bacteria can be present without any change, so when in doubt throw it out."];
   let fallback = false;
 
   // Choose location.

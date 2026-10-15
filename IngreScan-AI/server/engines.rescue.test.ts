@@ -554,3 +554,28 @@ describe("processRescueResponse", () => {
     expect(JSON.stringify(r.recipes).toLowerCase()).not.toContain("peanut");
   });
 });
+
+describe("safety review corrections", () => {
+  it("inspection note does not treat look or smell as proof of safety", () => {
+    expect(INSPECTION_NOTE).toMatch(/not a reliable safety test/i);
+    expect(INSPECTION_NOTE).toMatch(/meat, poultry, fish, dairy, eggs/);
+    expect(INSPECTION_NOTE).not.toMatch(/Look and smell before deciding/);
+  });
+  it("recipe safety note includes the 74 C reheat and the hot-room 1 hour rule", () => {
+    const [r] = fallbackRescueRecipes(sel([item("Spinach", "2026-03-11")]));
+    expect(r.safetyNote).toMatch(/74 C/);
+    expect(r.safetyNote).toMatch(/1 hour/);
+  });
+  it("LLM prompt forbids raw eggs and medicine advice", () => {
+    const p = buildRescuePrompt(sel([item("Spinach", "2026-03-11")]));
+    const sys = p.messages[0].content;
+    expect(sys).toMatch(/never suggest raw or lightly cooked eggs/);
+    expect(sys).toMatch(/Never tell the user to stop, skip or change a medicine/);
+  });
+  it("warm milk recipe relies on the use-by date, not on smell", () => {
+    const [r] = fallbackRescueRecipes(sel([item("Milk", "2026-03-11")]));
+    const milk = fallbackRescueRecipes(sel([item("Milk", "2026-03-11")])).find((x) => x.title === "Warm spiced milk");
+    const text = JSON.stringify(milk ?? r);
+    expect(text).not.toMatch(/smells and looks normal|smells fresh/);
+  });
+});
