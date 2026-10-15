@@ -64,19 +64,19 @@ IngreScan-AI empowers Indian consumers to make informed, healthy food choices by
 - **Express 4** - Web framework
 - **tRPC 11** - Type-safe API layer
 - **Drizzle ORM** - Database toolkit
-- **MySQL/TiDB** - Database
+- **SQLite (embedded, default) or MySQL/MariaDB** - Database, chosen by `DATABASE_URL` (see `docs/database.md` in the repository root)
 
 ### AI & Services
 - **LLM Integration** - AI-powered analysis and chatbot
-- **OCR** - Image text extraction
-- **S3 Storage** - File storage
+- **OCR** - Ingredient label text extracted by a vision-capable LLM
+- **File storage** - Local `uploads/` directory, or the Forge storage proxy when `BUILT_IN_FORGE_API_URL` and `BUILT_IN_FORGE_API_KEY` are set
 
 ## Installation
 
 ### Prerequisites
 - Node.js 22.x or higher
 - pnpm package manager
-- MySQL/TiDB database
+- Optional: a MySQL/MariaDB database (without `DATABASE_URL` the app uses an embedded SQLite file)
 
 ### Setup
 
@@ -97,10 +97,11 @@ cp .env.example .env
 # Edit .env with your configuration
 ```
 
-4. **Run database migrations**
+4. **Run database migrations (MySQL only)**
 ```bash
-pnpm db:push
+DATABASE_URL=mysql://user:pass@127.0.0.1:3306/ingrescan pnpm db:push
 ```
+Skip this step for the embedded SQLite default: its migrations are applied automatically on server start.
 
 5. **Start development server**
 ```bash
@@ -166,7 +167,7 @@ The platform uses AI to analyze ingredients against:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the `license` field in `package.json` (MIT).
 
 ## Contributing
 
@@ -193,7 +194,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## Links
 
 - **Live Demo**: https://foodriskanaly-yjkguatc.manus.space/
-- **Documentation**: [Coming Soon]
+- **Documentation**: the `docs/` folder in the repository root
 - **Label Padhega India**: Learn more about the movement
 
 ---
