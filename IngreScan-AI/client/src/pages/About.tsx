@@ -13,7 +13,7 @@ export function PublicTopBar() {
         <Link
           href="/"
           aria-label="Home"
-          className="min-w-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex h-11 min-w-0 items-center rounded-xl"
         >
           <BrandMark />
         </Link>
@@ -37,7 +37,7 @@ export function PublicFooter() {
           <Link
             href="/"
             aria-label="Home"
-            className="inline-flex rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex min-h-11 items-center rounded-xl"
           >
             <BrandMark size="sm" />
           </Link>
@@ -70,7 +70,7 @@ export function PublicPage({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-[100dvh] flex-col bg-white text-graphite">
       <PublicTopBar />
-      <main className="flex-1">
+      <main id="main-content" tabIndex={-1} className="flex-1">
         <div className="mx-auto w-full max-w-3xl px-4 pb-20 pt-12 sm:px-6 md:pb-24 md:pt-16">{children}</div>
       </main>
       <PublicFooter />

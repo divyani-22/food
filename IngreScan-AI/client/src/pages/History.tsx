@@ -26,7 +26,7 @@ export default function History() {
         />
 
         {isLoading ? (
-          <div className="space-y-3">
+          <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading scan history">
             <Skeleton className="h-28 w-full rounded-3xl bg-white" />
             <Skeleton className="h-28 w-full rounded-3xl bg-white" />
             <Skeleton className="h-28 w-full rounded-3xl bg-white" />

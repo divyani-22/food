@@ -724,7 +724,7 @@ export default function ProduceScanner() {
                         </div>
                       </div>
                       <div>
-                        <h3 className="text-lg font-bold text-graphite">AI Inspecting Freshness...</h3>
+                        <h2 className="text-lg font-bold text-graphite">AI Inspecting Freshness...</h2>
                         <p className="text-sm text-muted-foreground">
                           {wantsDevice && deviceState.kind === "loading"
                             ? `Downloading the on-device model (${deviceState.percent}%)`
@@ -888,7 +888,7 @@ export default function ProduceScanner() {
                       <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-fog">
                         <Salad className="h-7 w-7 text-verdant-green" />
                       </span>
-                      <h3 className="fn-heading-sm text-graphite">Ready for Inspection</h3>
+                      <h2 className="fn-heading-sm text-graphite">Ready for Inspection</h2>
                       <p className="text-sm leading-relaxed text-muted-foreground">
                         Upload or snap a photo of any supported fruit or vegetable on the left to see instant freshness analysis, shelf life advice, and storage recommendations.
                       </p>
@@ -899,9 +899,9 @@ export default function ProduceScanner() {
               <div className="lg:col-span-5">
                 {/* Supported Fruits Guide */}
                 <section className="rounded-3xl bg-white p-5 md:p-7">
-                  <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-graphite">
+                  <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-graphite">
                     <Info className="h-4 w-4 text-muted-foreground" /> Supported Produce (10 Types)
-                  </h3>
+                  </h2>
                   <div className="flex flex-wrap gap-2">
                     {supportedProduce.map((p) => (
                       <span
@@ -922,7 +922,7 @@ export default function ProduceScanner() {
           <TabsContent value="inventory" className="space-y-5">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div className="min-w-0">
-                <h3 className="fn-heading-sm text-graphite">Current Fridge Pantry</h3>
+                <h2 className="fn-heading-sm text-graphite">Current Fridge Pantry</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Track perishables to reduce food waste and eat fresh.
                 </p>
@@ -1004,7 +1004,7 @@ export default function ProduceScanner() {
           <TabsContent value="history" className="space-y-5">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div className="min-w-0">
-                <h3 className="fn-heading-sm text-graphite">Produce Scan History</h3>
+                <h2 className="fn-heading-sm text-graphite">Produce Scan History</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   History of recent freshness inspections recorded by FreshGuard AI.
                 </p>

@@ -30,17 +30,17 @@ type OffProductView = {
 };
 
 const GRADE_COLORS: Record<string, string> = {
-  A: "bg-verdant-green",
-  B: "bg-sky-blue",
+  A: "bg-verdant-ink",
+  B: "bg-sky-ink",
   C: "bg-amber-ink",
-  D: "bg-ember-orange",
-  E: "bg-alert-red",
+  D: "bg-ember-deep",
+  E: "bg-alert-ink",
 };
 const NOVA_COLORS: Record<number, string> = {
-  1: "bg-verdant-green",
-  2: "bg-sky-blue",
+  1: "bg-verdant-ink",
+  2: "bg-sky-ink",
   3: "bg-amber-ink",
-  4: "bg-signal-red-orange",
+  4: "bg-negative-ink",
 };
 
 /** "Brand Product" without the placeholder brand the server uses when OFF has none. */

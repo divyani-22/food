@@ -333,9 +333,9 @@ export default function FridgeTracker() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label>Category</Label>
+                          <Label htmlFor="item-category">Category</Label>
                           <Select value={category} onValueChange={setCategory}>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="item-category" className="w-full">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -353,12 +353,12 @@ export default function FridgeTracker() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label>Storage Location</Label>
+                          <Label htmlFor="item-storage">Storage Location</Label>
                           <Select
                             value={storageLocation}
                             onValueChange={(val: any) => setStorageLocation(val)}
                           >
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="item-storage" className="w-full">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -470,16 +470,16 @@ export default function FridgeTracker() {
             className="w-full lg:w-auto"
           >
             <TabsList className="grid w-full grid-cols-4 lg:w-auto">
-              <TabsTrigger value="all" className="px-1.5 text-[13px] sm:px-3 sm:text-sm">
+              <TabsTrigger value="all" aria-controls={undefined} className="px-1.5 text-[13px] sm:px-3 sm:text-sm">
                 All Storage
               </TabsTrigger>
-              <TabsTrigger value="fridge" className="px-1.5 text-[13px] sm:px-3 sm:text-sm">
+              <TabsTrigger value="fridge" aria-controls={undefined} className="px-1.5 text-[13px] sm:px-3 sm:text-sm">
                 <Refrigerator className="hidden h-4 w-4 sm:block" /> Fridge
               </TabsTrigger>
-              <TabsTrigger value="freezer" className="px-1.5 text-[13px] sm:px-3 sm:text-sm">
+              <TabsTrigger value="freezer" aria-controls={undefined} className="px-1.5 text-[13px] sm:px-3 sm:text-sm">
                 <Snowflake className="hidden h-4 w-4 sm:block" /> Freezer
               </TabsTrigger>
-              <TabsTrigger value="pantry" className="px-1.5 text-[13px] sm:px-3 sm:text-sm">
+              <TabsTrigger value="pantry" aria-controls={undefined} className="px-1.5 text-[13px] sm:px-3 sm:text-sm">
                 <Package className="hidden h-4 w-4 sm:block" /> Pantry
               </TabsTrigger>
             </TabsList>
@@ -520,7 +520,7 @@ export default function FridgeTracker() {
 
         {/* Food Items List */}
         {isLoading ? (
-          <div className="rounded-3xl bg-white py-16 text-center text-muted-foreground">
+          <div role="status" className="rounded-3xl bg-white py-16 text-center text-muted-foreground">
             Loading food inventory...
           </div>
         ) : filteredItems.length === 0 ? (

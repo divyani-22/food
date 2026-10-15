@@ -106,14 +106,14 @@ export const ReceiptRow = memo(function ReceiptRow({
 
         <div className="space-y-1">
           <Label htmlFor={`${id}-name`} className={lbl}>Name</Label>
-          <Input id={`${id}-name`} value={row.name} maxLength={255} aria-invalid={!!errors?.name} onChange={(e) => onChange(row.key, { name: e.target.value })} />
-          {errors?.name && <p className="text-xs font-medium text-signal-red-orange">{errors.name}</p>}
+          <Input id={`${id}-name`} value={row.name} maxLength={255} aria-invalid={!!errors?.name} aria-describedby={errors?.name ? `${id}-name-err` : undefined} onChange={(e) => onChange(row.key, { name: e.target.value })} />
+          {errors?.name && <p id={`${id}-name-err`} className="text-xs font-medium text-signal-red-orange">{errors.name}</p>}
         </div>
 
         <div className="space-y-1">
           <Label htmlFor={`${id}-qty`} className={lbl}>Qty</Label>
-          <Input id={`${id}-qty`} inputMode="decimal" value={row.quantity} aria-invalid={!!errors?.quantity} onChange={(e) => onChange(row.key, { quantity: e.target.value })} />
-          {errors?.quantity && <p className="text-xs font-medium text-signal-red-orange">{errors.quantity}</p>}
+          <Input id={`${id}-qty`} inputMode="decimal" value={row.quantity} aria-invalid={!!errors?.quantity} aria-describedby={errors?.quantity ? `${id}-qty-err` : undefined} onChange={(e) => onChange(row.key, { quantity: e.target.value })} />
+          {errors?.quantity && <p id={`${id}-qty-err`} className="text-xs font-medium text-signal-red-orange">{errors.quantity}</p>}
         </div>
 
         <div className="space-y-1">
@@ -148,8 +148,8 @@ export const ReceiptRow = memo(function ReceiptRow({
 
         <div className="space-y-1">
           <Label htmlFor={`${id}-exp`} className={lbl}>Expiry date</Label>
-          <Input id={`${id}-exp`} type="date" value={row.expiry} aria-invalid={needsDate || !!errors?.expiry} onChange={(e) => onChange(row.key, { expiry: e.target.value })} />
-          {(errors?.expiry || needsDate) && <p className="text-xs font-medium text-graphite">{errors?.expiry ?? "No estimate for this item. Choose an expiry date."}</p>}
+          <Input id={`${id}-exp`} type="date" value={row.expiry} aria-invalid={needsDate || !!errors?.expiry} aria-describedby={errors?.expiry || needsDate ? `${id}-exp-err` : undefined} onChange={(e) => onChange(row.key, { expiry: e.target.value })} />
+          {(errors?.expiry || needsDate) && <p id={`${id}-exp-err`} className="text-xs font-medium text-graphite">{errors?.expiry ?? "No estimate for this item. Choose an expiry date."}</p>}
         </div>
       </div>
 

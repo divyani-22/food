@@ -71,7 +71,7 @@ export function ManusDialog({
           {/* Login button */}
           <Button
             onClick={onLogin}
-            className="w-full h-11 bg-ember-orange hover:bg-[#ec4a00] text-white rounded-3xl text-[15px] font-bold"
+            className="w-full h-11 bg-primary hover:bg-[#a83500] text-primary-foreground rounded-3xl text-[15px] font-bold"
           >
             Login with Manus
           </Button>

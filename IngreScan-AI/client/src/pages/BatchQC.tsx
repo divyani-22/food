@@ -501,7 +501,7 @@ export default function BatchQC() {
                                 type="button"
                                 onClick={() => removePhoto(p.id)}
                                 aria-label={`Remove ${p.file.name}`}
-                                className="absolute right-1 top-1 grid h-8 w-8 place-items-center rounded-full bg-white text-graphite focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                className="absolute right-1 top-1 grid h-8 w-8 place-items-center rounded-full bg-white text-graphite max-md:h-11 max-md:w-11"
                               >
                                 <X className="h-4 w-4" />
                               </button>
