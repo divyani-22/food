@@ -124,7 +124,8 @@ def _containment(inner: np.ndarray, outer: np.ndarray) -> float:
 
 def dedupe(boxes: np.ndarray, scores: np.ndarray, iou_threshold: float = CROSS_CLASS_IOU,
            containment: float = CONTAINMENT, max_items: int = MAX_ITEMS) -> list[int]:
-    """Class-agnostic de-duplication: drop a box that overlaps or is mostly inside a better one; cap the count."""
+    """Class-agnostic de-duplication: drop a box that overlaps or is mostly inside a better one, or that
+    contains two or more better boxes (a group box around a pile); cap the count."""
     boxes = np.asarray(boxes, dtype=np.float32).reshape(-1, 4)
     scores = np.asarray(scores, dtype=np.float32)
     keep: list[int] = []
@@ -136,6 +137,10 @@ def dedupe(boxes: np.ndarray, scores: np.ndarray, iou_threshold: float = CROSS_C
                     _containment(boxes[i], boxes[k]) > containment:
                 dup = True
                 break
+        if not dup:
+            # a lower-scoring box that swallows two or more better boxes is a group box (a whole pile), not an item
+            inside = sum(1 for k in keep if _containment(boxes[k], boxes[i]) > containment)
+            dup = inside >= 2
         if not dup:
             keep.append(i)
         if len(keep) >= max_items:

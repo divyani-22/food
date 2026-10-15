@@ -80,6 +80,14 @@ def test_dedupe_removes_overlap_and_contained_boxes_and_caps():
     assert len(d.dedupe(grid, np.linspace(1, 0.5, 30), max_items=3)) == 3
 
 
+def test_dedupe_drops_group_box_around_several_better_boxes():
+    boxes = np.array([[0, 0, 100, 100], [110, 0, 210, 100], [0, 0, 400, 300], [500, 0, 600, 100]], dtype=np.float32)
+    scores = np.array([0.9, 0.8, 0.6, 0.5])
+    assert d.dedupe(boxes, scores) == [0, 1, 3]
+    # a larger box around ONE better box is still kept (not a group)
+    assert d.dedupe(boxes[[0, 2]], scores[[0, 2]]) == [0, 1]
+
+
 def test_unletterbox_scales_and_clips():
     out = d.unletterbox(np.array([[0, 0, 700, 320]]), 0.5, 1280, 640)
     assert out[0].tolist() == [0, 0, 1280, 640]

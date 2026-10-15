@@ -474,3 +474,51 @@ def test_detect_second_pass_flag_uses_stricter_bar(client, appmod, monkeypatch):
     monkeypatch.delenv("SHELF_SECOND_PASS")
     d = client.post("/api/detect", data={"file": (io.BytesIO(buf.getvalue()), "x.png")}).get_json()
     assert d["second_pass"]["enabled"] is False
+
+
+# ---- bug-hunt regressions ----
+def _png16(value, w=8, h=8):
+    buf = io.BytesIO()
+    Image.fromarray(np.full((h, w), value, dtype=np.uint16)).save(buf, "PNG")
+    return buf.getvalue()
+
+
+def test_to_rgb_scales_16bit_grayscale_instead_of_saturating(appmod):
+    with Image.open(io.BytesIO(_png16(30000))) as im:
+        im.load()
+        assert im.mode.startswith("I")
+        px = appmod.to_rgb(im).getpixel((0, 0))
+    # 30000 / 257 ~= 117; Pillow's own convert("RGB") would give (255, 255, 255)
+    assert px == (117, 117, 117)
+
+
+def test_predict_16bit_png_is_not_stored_as_white(client):
+    b64 = base64.b64encode(_png16(10000)).decode()
+    r = client.post("/api/predict", json={"image": b64})
+    assert r.status_code == 200, r.get_json()
+    saved = next(client.up.iterdir())
+    with Image.open(saved) as im:
+        assert im.getpixel((0, 0))[0] < 100
+
+
+@pytest.mark.parametrize("days", [1e9, 1e300, 10 ** 30, -1e300])
+def test_inventory_absurd_shelf_life_does_not_crash(client, days):
+    r = client.post("/api/inventory", json={"name": "A", "shelf_life_days": days})
+    assert r.status_code == 200, r.get_data()
+    assert client.get("/api/inventory").status_code == 200
+
+
+def test_unexpected_error_is_json_not_html(client, appmod, monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("db exploded")
+    monkeypatch.setattr(appmod.sqlite3, "connect", boom)
+    monkeypatch.setattr(appmod.app, "testing", False)
+    r = client.get("/api/inventory")
+    assert r.status_code == 500 and r.is_json and "error" in r.get_json()
+    assert "db exploded" not in r.get_data(as_text=True)
+
+
+@pytest.mark.parametrize("raw,expected", [("abc", 5000), ("", 5000), ("0", 5000), ("70000", 5000), (" 5533 ", 5533)])
+def test_port_env_parsing(appmod, monkeypatch, raw, expected):
+    monkeypatch.setenv("FRESHGUARD_PORT", raw)
+    assert appmod._port_from_env() == expected
